@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -90,13 +91,36 @@ func (u *Unpacker) ExtractFilelist(r io.ReadSeeker, fileList []structures.FileIn
 		return
 	}
 
+	// regexp to get rid of packs/<GUID>
+	//var GUIDS map[string]int
+
+	pathRegex := regexp.MustCompile(`^[\w\-. ]+[\\/]packs[\\/]([\w\-. ]+)((\.json$)|([\\/]))`)
+
 	for _, packedFile := range fileList {
-		path := filepath.Join(outDirPath, filepath.Dir(packedFile.Path))
+
+		path := strings.Replace(string(packedFile.Path), "res://", u.name+"/", 1)
+		match := pathRegex.FindStringSubmatch(path)
+
+		//strings.Replace(string(pathBytes), "res://", u.name+"/", 1)
+
+		path = filepath.Join(outDirPath, filepath.Dir(path))
+
+		if match != nil {
+			guid := strings.TrimSpace(match[1])
+			ending := strings.TrimSpace(match[2])
+
+			if ending == ".json" {
+				continue
+			}
+
+			path = strings.Replace(path, filepath.Join("packs", guid), "", 1)
+		}
+
 		fileNameFull := filepath.Base(packedFile.Path)
 		fileExt := filepath.Ext(fileNameFull)
 		fileName := strings.TrimSuffix(fileNameFull, fileExt)
 
-		l := u.log.WithField("packedFile", packedFile.Path).WithField("offset", packedFile.Offset)
+		l := u.log.WithField("packedPath", packedFile.Path).WithField("offset", packedFile.Offset)
 
 		err = os.MkdirAll(path, 0777)
 		if err != nil {
@@ -189,13 +213,15 @@ func (u *Unpacker) isValidPackage(r io.ReadSeeker) (bool, error) {
 	}
 
 	if bytes.Equal(magicBuf, magic) {
-		u.log.Infof("%v looks like a pck archive", u.name)
+		u.log.Infof("looks like a pck archive")
 		_, err = r.Seek(0, io.SeekStart) // back to start
 		if !checkErrorSeek(u.log, err) {
 			return false, err
 		}
 	} else {
-		u.log.Infof("Failed to read GDPC pck Magic: read [%v] expected [%v]", magicBuf, magic)
+		u.log.
+			WithField("magic", magicBuf).
+			WithField("expectedMagic", magic).Info("Failed to read GDPC pck Magic")
 
 		_, err = r.Seek(-4, io.SeekEnd) // 4 bytes from end
 		if !checkErrorSeek(u.log, err) {
@@ -208,7 +234,7 @@ func (u *Unpacker) isValidPackage(r io.ReadSeeker) (bool, error) {
 		}
 
 		if !bytes.Equal(magicBuf, magic) {
-			u.log.Infof("%v looks like a self-contained exe", u.name)
+			u.log.Info("looks like a self-contained exe", u.name)
 
 			_, err = r.Seek(-12, io.SeekEnd) // 12 bytes from end
 			if !checkErrorSeek(u.log, err) {
@@ -219,7 +245,8 @@ func (u *Unpacker) isValidPackage(r io.ReadSeeker) (bool, error) {
 			err = binary.Read(r, binary.LittleEndian, &mainOffset)
 
 			if err != nil {
-				u.log.WithError(err).Error("Could not read main offset of data in self-contained exe")
+				u.log.
+					WithError(err).Error("Could not read main offset of data in self-contained exe")
 				return false, err
 			}
 
@@ -232,7 +259,9 @@ func (u *Unpacker) isValidPackage(r io.ReadSeeker) (bool, error) {
 			_, err = r.Seek(curPos-mainOffset-8, io.SeekStart)
 
 		} else {
-			u.log.Errorf("Failed to read GDPC self-contained exe Magic: read [%v] expected [%v]", magicBuf, magic)
+			u.log.
+				WithField("magic", magicBuf).
+				WithField("expectedMagic", magic).Error("Failed to read GDPC self-contained exe Magic")
 			return false, nil
 		}
 	}
@@ -249,7 +278,7 @@ func (u *Unpacker) getFileList(r io.ReadSeeker) (fileList []structures.FileInfo,
 		return
 	}
 
-	u.log.Infof("%v info: %v", u.name, headers)
+	u.log.WithField("headers", headers).Info("info")
 
 	fileCount := headers.FileCount
 
@@ -257,7 +286,9 @@ func (u *Unpacker) getFileList(r io.ReadSeeker) (fileList []structures.FileInfo,
 		var filePathLength int32
 		err = binary.Read(r, binary.LittleEndian, &filePathLength)
 		if err != nil {
-			u.log.WithError(err).WithField("FileNum", fileNum).Errorf("Could not read file path length for file [%v]", fileNum)
+			u.log.
+				WithError(err).
+				WithField("FileNum", fileNum).Error("could not read file path length")
 			return
 		}
 
@@ -265,18 +296,22 @@ func (u *Unpacker) getFileList(r io.ReadSeeker) (fileList []structures.FileInfo,
 		pathBytes := make([]byte, filePathLength)
 		err = binary.Read(r, binary.LittleEndian, &pathBytes)
 		if err != nil {
-			u.log.WithError(err).WithField("FileNum", fileNum).Errorf("Could not read file path for file [%v]", fileNum)
+			u.log.
+				WithError(err).
+				WithField("FileNum", fileNum).Error("could not read file path")
 			return
 		}
 
 		err = binary.Read(r, binary.LittleEndian, &infoBytes)
 		if err != nil {
-			u.log.WithError(err).WithField("FileNum", fileNum).Errorf("Could not read file info for file [%v]", fileNum)
+			u.log.
+				WithError(err).
+				WithField("FileNum", fileNum).Error("could not read file info")
 			return
 		}
 
 		info := structures.FileInfo{
-			Path:   strings.Replace(string(pathBytes), "res://", u.name+"/", 1),
+			Path:   string(pathBytes),
 			Offset: int64(infoBytes.Offset),
 			Size:   int64(infoBytes.Size),
 			Md5:    hex.EncodeToString(infoBytes.Md5[:]),

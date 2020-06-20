@@ -15,7 +15,6 @@ const usageText = `Extracts the contesnts of a .dungeondraft_pack file
 Usage:
 	dungeondraft-unpack [args] <.dungeondraft_pack file> <output folder>
 Arguments:
-	-debug
 `
 
 func main() {
@@ -23,7 +22,7 @@ func main() {
 	// args go here
 
 	debugPtr := flag.Bool("debug", false, "output debug info level log messages?")
-	flag.BoolVar(debugPtr, "v", false, "output debug info level log messages?")
+	flag.BoolVar(debugPtr, "v", false, "alias of -debug")
 
 	flag.Parse()
 
