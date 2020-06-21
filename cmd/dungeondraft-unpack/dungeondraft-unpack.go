@@ -11,9 +11,10 @@ import (
 	"gitlab.com/ryexandrite/dungeondraft-gopackager/pkg/unpack"
 )
 
-const usageText = `Extracts the contesnts of a .dungeondraft_pack file
+const usageText = `Desc:
+	Extracts the contesnts of a .dungeondraft_pack file
 Usage:
-	dungeondraft-unpack [args] <.dungeondraft_pack file> <output folder>
+	dungeondraft-unpack [args] <.dungeondraft_pack file> <dest folder>
 Arguments:
 `
 
@@ -24,9 +25,17 @@ func main() {
 	debugPtr := flag.Bool("debug", false, "output debug info level log messages?")
 	flag.BoolVar(debugPtr, "v", false, "alias of -debug")
 
+	overwritePtr := flag.Bool("overwrite", false, "overwrite outputfiles at dest")
+	flag.BoolVar(overwritePtr, "O", false, "alias of -overwrite")
+
+	ripPtr := flag.Bool("riptex", false, "convert .tex files int he package to normal image formats (probably never needed)")
+	flag.BoolVar(ripPtr, "R", false, "alias of -riptex")
+
 	flag.Parse()
 
 	debug := *debugPtr
+	overwrite := *overwritePtr
+	ripTex := *ripPtr
 
 	if flag.NArg() < 1 {
 		fmt.Println("Error: Must provide a pack file")
@@ -52,20 +61,32 @@ func main() {
 		log.SetLevel(log.InfoLevel)
 	}
 
+	outDirPath, err := filepath.Abs(flag.Arg(1))
+	if err != nil {
+		return
+	}
+
 	logger := log.WithFields(log.Fields{
 		"filename": packFileName,
+		"outPath":  outDirPath,
 	})
 
 	unpacker := unpack.NewUnpacker(logger, packName)
 
+	unpacker.Overwrite = overwrite
+	unpacker.RipTextures = ripTex
+
 	file, fileErr := os.Open(packFilePath)
 	if fileErr != nil {
-		log.WithField("path", packFilePath).WithError(fileErr).Fatal("Could not open file for reading.")
+		log.WithField("path", packFilePath).WithError(fileErr).Fatal("could not open file for reading.")
 	}
 
 	defer file.Close()
 
-	unpacker.ExtractPackage(file, flag.Arg(1))
+	err = unpacker.ExtractPackage(file, outDirPath)
+	if err != nil {
+		logger.WithError(err).Fatal("failed to extract package")
+	}
 }
 
 func usage() {

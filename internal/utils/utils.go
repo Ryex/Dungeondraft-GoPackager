@@ -5,18 +5,26 @@ import (
 	"encoding/binary"
 	"errors"
 	"os"
+
+	"github.com/sirupsen/logrus"
 )
 
-// DirExists tests if a Directyory exists
-func DirExists(path string) (bool, error) {
-	_, err := os.Stat(path)
-	if err == nil {
-		return true, nil
-	}
+// FileExists tests if a file  exists and is not a Directory
+func FileExists(filename string) bool {
+	info, err := os.Stat(filename)
 	if os.IsNotExist(err) {
-		return false, nil
+		return false
 	}
-	return false, err
+	return !info.IsDir()
+}
+
+// DirExists tests if a Directyory exists and is a Directory
+func DirExists(filename string) bool {
+	info, err := os.Stat(filename)
+	if os.IsNotExist(err) {
+		return false
+	}
+	return info.IsDir()
 }
 
 // RipTexture detects and pulls image data from texture bytes
@@ -63,4 +71,47 @@ func RipTexture(data []byte) (fileExt string, fileData []byte, err error) {
 
 	err = errors.New("no valid image data found")
 	return
+}
+
+// StringInSlice tests inclusion of a string in a slice
+func StringInSlice(a string, list []string) bool {
+	for _, b := range list {
+		if b == a {
+			return true
+		}
+	}
+	return false
+}
+
+// CheckErrorRead checks and logs a read error
+func CheckErrorRead(log logrus.FieldLogger, err error, n int, expected int) bool {
+	if err != nil {
+		log.WithError(err).Error("read error")
+		return false
+	} else if n < expected {
+		log.WithField("readBytes", n).
+			WithField("expectedBytes", expected).
+			Error("wrong number of bytes read")
+		return false
+	}
+	return true
+}
+
+// CheckErrorWrite checks and logs a read error
+func CheckErrorWrite(log logrus.FieldLogger, err error) bool {
+	if err != nil {
+		log.WithError(err).Error("write error")
+		return false
+	}
+	return true
+}
+
+// CheckErrorSeek checks and looks a seek error
+func CheckErrorSeek(log logrus.FieldLogger, err error) bool {
+	if err != nil {
+		log.WithError(err).Error("seek failure")
+		return false
+	}
+	return true
+
 }

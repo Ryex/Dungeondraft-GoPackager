@@ -16,11 +16,14 @@ import (
 	"gitlab.com/ryexandrite/dungeondraft-gopackager/internal/utils"
 )
 
-// Unpacker dungeondraft_pack files in the pck arcive format
+// Unpacker unpacks dungeondraft_pack files in the pck arcive format
+// set the RipTexture field if you with .tex files to be extracted to image formats
+// set the Overwrite field if you wish overwrite operations to overwrite an exsiting file
 type Unpacker struct {
 	log         logrus.FieldLogger
 	name        string
 	RipTextures bool
+	Overwrite   bool
 }
 
 // NewUnpacker builds a new Unpacker
@@ -29,27 +32,6 @@ func NewUnpacker(log logrus.FieldLogger, name string) *Unpacker {
 		log:  log,
 		name: name,
 	}
-}
-
-func checkErrorRead(log logrus.FieldLogger, err error, n int, expected int) bool {
-	if err != nil {
-		log.Error(err)
-		return false
-	} else if n < expected {
-		log.Errorf("Read Failed: attempted to read [%v] bytes, only read [%v]", expected, n)
-		return false
-	} else {
-		return true
-	}
-}
-
-func checkErrorSeek(log logrus.FieldLogger, err error) bool {
-	if err != nil {
-		log.Error(err)
-		return false
-	}
-	return true
-
 }
 
 // ExtractPackage extracts the package contents to the filesystem
@@ -72,11 +54,12 @@ func (u *Unpacker) ExtractFilelist(r io.ReadSeeker, fileList []structures.FileIn
 		return
 	}
 
-	dirExists, err := utils.DirExists(outDirPath)
-	if err != nil {
+	fileExists := utils.FileExists(outDirPath)
+	if fileExists {
+		err = errors.New("out folder already exists as a file")
 		return
 	}
-
+	dirExists := utils.DirExists(outDirPath)
 	if !dirExists {
 		err = os.MkdirAll(outDirPath, 0777)
 		if err != nil {
@@ -98,7 +81,7 @@ func (u *Unpacker) ExtractFilelist(r io.ReadSeeker, fileList []structures.FileIn
 
 	for _, packedFile := range fileList {
 
-		path := strings.Replace(string(packedFile.Path), "res://", u.name+"/", 1)
+		path := strings.Replace(string(packedFile.Path), "res://", u.name+string(filepath.Separator), 1)
 		match := pathRegex.FindStringSubmatch(path)
 
 		//strings.Replace(string(pathBytes), "res://", u.name+"/", 1)
@@ -139,7 +122,7 @@ func (u *Unpacker) ExtractFilelist(r io.ReadSeeker, fileList []structures.FileIn
 
 		var n int
 		n, err = r.Read(fileData)
-		if !checkErrorRead(l, err, n, int(packedFile.Size)) {
+		if !utils.CheckErrorRead(l, err, n, int(packedFile.Size)) {
 			return
 		}
 
@@ -161,13 +144,29 @@ func (u *Unpacker) ExtractFilelist(r io.ReadSeeker, fileList []structures.FileIn
 
 		l.Info("writing file")
 
+		fileExists := utils.FileExists(filePath)
+		if fileExists {
+			if u.Overwrite {
+				l.Warn("overwriting file")
+			} else {
+				err = errors.New("file exists")
+				l.WithError(err).Error("file already exists at destination and Overwrite not enabled")
+				return
+			}
+		}
+
 		var p *os.File
 		p, err = os.Create(filePath)
 		if err != nil {
 			l.WithError(err).Error("can not open file for writing")
 			return
 		}
-		p.Write(fileData)
+		_, err = p.Write(fileData)
+		if err != nil {
+			l.WithError(err).Error("failed to write file")
+			return
+		}
+
 		err = p.Close()
 		if err != nil {
 			l.WithError(err).Error("failed to close file")
@@ -202,20 +201,20 @@ func (u *Unpacker) isValidPackage(r io.ReadSeeker) (bool, error) {
 	magicBuf := make([]byte, 4)
 
 	_, err := r.Seek(0, io.SeekStart) // back to start
-	if !checkErrorSeek(u.log, err) {
+	if !utils.CheckErrorSeek(u.log, err) {
 		return false, err
 	}
 
 	// find our magic to figure out where to start reading
 	n, err := r.Read(magicBuf) // attempt to read the GDPC Magic from the start of the file
-	if !checkErrorRead(u.log, err, n, 4) {
+	if !utils.CheckErrorRead(u.log, err, n, 4) {
 		return false, err
 	}
 
 	if bytes.Equal(magicBuf, magic) {
 		u.log.Infof("looks like a pck archive")
 		_, err = r.Seek(0, io.SeekStart) // back to start
-		if !checkErrorSeek(u.log, err) {
+		if !utils.CheckErrorSeek(u.log, err) {
 			return false, err
 		}
 	} else {
@@ -224,12 +223,12 @@ func (u *Unpacker) isValidPackage(r io.ReadSeeker) (bool, error) {
 			WithField("expectedMagic", magic).Info("Failed to read GDPC pck Magic")
 
 		_, err = r.Seek(-4, io.SeekEnd) // 4 bytes from end
-		if !checkErrorSeek(u.log, err) {
+		if !utils.CheckErrorSeek(u.log, err) {
 			return false, err
 		}
 
 		n, err = r.Read(magicBuf) // attempt to read the GDPC Magic from the end of the file
-		if !checkErrorRead(u.log, err, n, 4) {
+		if !utils.CheckErrorRead(u.log, err, n, 4) {
 			return false, err
 		}
 
@@ -237,7 +236,7 @@ func (u *Unpacker) isValidPackage(r io.ReadSeeker) (bool, error) {
 			u.log.Info("looks like a self-contained exe", u.name)
 
 			_, err = r.Seek(-12, io.SeekEnd) // 12 bytes from end
-			if !checkErrorSeek(u.log, err) {
+			if !utils.CheckErrorSeek(u.log, err) {
 				return false, err
 			}
 
@@ -252,7 +251,7 @@ func (u *Unpacker) isValidPackage(r io.ReadSeeker) (bool, error) {
 
 			var curPos int64
 			curPos, err = r.Seek(0, io.SeekCurrent) // tell
-			if !checkErrorSeek(u.log, err) {
+			if !utils.CheckErrorSeek(u.log, err) {
 				return false, err
 			}
 
@@ -286,8 +285,7 @@ func (u *Unpacker) getFileList(r io.ReadSeeker) (fileList []structures.FileInfo,
 		var filePathLength int32
 		err = binary.Read(r, binary.LittleEndian, &filePathLength)
 		if err != nil {
-			u.log.
-				WithError(err).
+			u.log.WithError(err).
 				WithField("FileNum", fileNum).Error("could not read file path length")
 			return
 		}
@@ -296,8 +294,8 @@ func (u *Unpacker) getFileList(r io.ReadSeeker) (fileList []structures.FileInfo,
 		pathBytes := make([]byte, filePathLength)
 		err = binary.Read(r, binary.LittleEndian, &pathBytes)
 		if err != nil {
-			u.log.
-				WithError(err).
+			u.log.WithError(err).
+				WithField("filePathLength", filePathLength).
 				WithField("FileNum", fileNum).Error("could not read file path")
 			return
 		}
