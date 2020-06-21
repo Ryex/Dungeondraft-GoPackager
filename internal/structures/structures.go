@@ -73,6 +73,12 @@ type FileInfo struct {
 	ResPathSize int32
 }
 
+// FileInfoPair groups a FileInfo and iot's Bytes equivalent
+type FileInfoPair struct {
+	Info      FileInfo
+	InfoBytes FileInfoBytes
+}
+
 // Package stores package information for the pack.json
 type Package struct {
 	Name    string `json:"name"`
@@ -83,9 +89,8 @@ type Package struct {
 
 // FileInfoList used to calculate the size of the list and properly set offsets in the info
 type FileInfoList struct {
-	FileList      []FileInfo
-	FileBytesList []FileInfoBytes
-	Size          int64
+	FileList []FileInfoPair
+	Size     int64
 }
 
 // NewFileInfoList builds a valid FileInfoList with size information
@@ -101,12 +106,14 @@ func NewFileInfoList(fileList []FileInfo) *FileInfoList {
 		fInfoBytes.Offset = uint64(fInfo.Offset)
 
 		fInfo.ResPathSize = int32(binary.Size([]byte(fInfo.ResPath)))
+		totalSize += int64(binary.Size(fInfo.ResPathSize))
 		totalSize += int64(fInfo.ResPathSize)
 		totalSize += int64(binary.Size(fInfoBytes))
 
-		L.FileList = append(L.FileList, fInfo)
-		L.FileBytesList = append(L.FileBytesList, fInfoBytes)
-
+		L.FileList = append(L.FileList, FileInfoPair{
+			Info:      fInfo,
+			InfoBytes: fInfoBytes,
+		})
 	}
 
 	L.Size = totalSize
@@ -118,27 +125,30 @@ func NewFileInfoList(fileList []FileInfo) *FileInfoList {
 // there are indications that GoDot has the ability to controll alignment of packed file data.
 // this funciton does not handle this
 func (fil *FileInfoList) UpdateOffsets(offset int64) {
-	for i, info := range fil.FileList {
-		infoBytes := fil.FileBytesList[i]
+	var newList []FileInfoPair
+	for _, pair := range fil.FileList {
+		pair.Info.Offset = offset
+		pair.InfoBytes.Offset = uint64(offset)
 
-		info.Offset = offset
-		infoBytes.Offset = uint64(offset)
+		offset += pair.Info.Size
 
-		offset += info.Size
+		newList = append(newList, pair)
 	}
+
+	fil.FileList = newList
 }
 
 // Write out headers and file contents to io
 func (fil *FileInfoList) Write(log logrus.FieldLogger, out io.Writer, offset int64) (err error) {
 
-	log.Info("writing files...")
+	log.Info("updating offsets...")
+	fil.UpdateOffsets(fil.Size + offset)
 
+	log.Info("writing files...")
 	err = fil.WriteHeaders(log, out)
 	if err != nil {
 		return
 	}
-
-	fil.UpdateOffsets(fil.Size + offset)
 
 	err = fil.WriteFiles(log, out)
 
@@ -149,23 +159,22 @@ func (fil *FileInfoList) Write(log logrus.FieldLogger, out io.Writer, offset int
 func (fil *FileInfoList) WriteHeaders(log logrus.FieldLogger, out io.Writer) (err error) {
 
 	log.Info("writing file headers")
-	for i, info := range fil.FileList {
-		infoBytes := fil.FileBytesList[i]
+	for _, pair := range fil.FileList {
 
 		// write path length
-		err = binary.Write(out, binary.LittleEndian, info.ResPathSize)
+		err = binary.Write(out, binary.LittleEndian, pair.Info.ResPathSize)
 		if !utils.CheckErrorWrite(log, err) {
 			return
 		}
 
 		// write filepath
-		err = binary.Write(out, binary.LittleEndian, []byte(info.ResPath))
+		err = binary.Write(out, binary.LittleEndian, []byte(pair.Info.ResPath))
 		if !utils.CheckErrorWrite(log, err) {
 			return
 		}
 
 		// write fileinfo
-		err = infoBytes.Write(out)
+		err = pair.InfoBytes.Write(out)
 		if !utils.CheckErrorWrite(log, err) {
 			return
 		}
@@ -180,8 +189,8 @@ func (fil *FileInfoList) WriteHeaders(log logrus.FieldLogger, out io.Writer) (er
 func (fil *FileInfoList) WriteFiles(log logrus.FieldLogger, out io.Writer) (err error) {
 
 	log.Info("writing file data")
-	for _, info := range fil.FileList {
-		err = fil.writeFile(log.WithField("file", info.Path), out, info)
+	for _, pair := range fil.FileList {
+		err = fil.writeFile(log.WithField("file", pair.Info.Path), out, pair.Info)
 		if err != nil {
 			return
 		}
