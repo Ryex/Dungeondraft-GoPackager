@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/ryex/dungeondraft-gopackager/pkg/unpack"
 	log "github.com/sirupsen/logrus"
-	"gitlab.com/ryexandrite/dungeondraft-gopackager/pkg/unpack"
 )
 
 const usageText = `Desc:
@@ -54,6 +54,9 @@ func main() {
 	packName := strings.TrimSuffix(packFileName, filepath.Ext(packFileName))
 
 	log.SetOutput(os.Stdout)
+	log.SetFormatter(&log.TextFormatter{
+		ForceColors: true,
+	})
 
 	// Only log the warning severity or above.
 	log.SetLevel(log.WarnLevel)

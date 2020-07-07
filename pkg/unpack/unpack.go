@@ -11,9 +11,9 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/ryex/dungeondraft-gopackager/internal/structures"
+	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/sirupsen/logrus"
-	"gitlab.com/ryexandrite/dungeondraft-gopackager/internal/structures"
-	"gitlab.com/ryexandrite/dungeondraft-gopackager/internal/utils"
 )
 
 // Unpacker unpacks dungeondraft_pack files in the pck arcive format

@@ -6,8 +6,8 @@ import (
 	"io"
 	"io/ioutil"
 
+	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/sirupsen/logrus"
-	"gitlab.com/ryexandrite/dungeondraft-gopackager/internal/utils"
 )
 
 // PackageHeadersBytes is a struct used for reading and writing the encoded package headers

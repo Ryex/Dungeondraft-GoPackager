@@ -1,5 +1,7 @@
-module gitlab.com/ryexandrite/dungeondraft-gopackager
+module github.com/ryex/dungeondraft-gopackager
 
 go 1.14
 
-require github.com/sirupsen/logrus v1.6.0
+require (
+	github.com/sirupsen/logrus v1.6.0
+)

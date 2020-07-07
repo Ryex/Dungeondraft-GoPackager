@@ -3,6 +3,7 @@ package pack
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
@@ -10,9 +11,9 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/ryex/dungeondraft-gopackager/internal/structures"
+	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/sirupsen/logrus"
-	"gitlab.com/ryexandrite/dungeondraft-gopackager/internal/structures"
-	"gitlab.com/ryexandrite/dungeondraft-gopackager/internal/utils"
 )
 
 // Packer packs up a folder into a dungeodraft_pack file
@@ -174,7 +175,7 @@ func (p *Packer) BuildFileList() (err error) {
 
 	packJSONPath := filepath.Join(p.path, `pack.json`)
 
-	packJSONRelPath, err := filepath.Rel(p.path, packJSONPath)
+	packJSONRelPath, err := filepath.Rel(p.path, filepath.Join(p.path, fmt.Sprintf(`%s.json`, p.id)))
 	if err != nil {
 		p.log.Error("can not get path relative to package root")
 		return err
