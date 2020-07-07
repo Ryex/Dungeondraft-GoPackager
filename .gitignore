@@ -4,3 +4,5 @@
 *.json
 *.dungeondraft_*
 *.log
+vendor/
+gui/
