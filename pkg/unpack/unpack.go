@@ -43,6 +43,7 @@ func (u *Unpacker) ExtractPackage(r io.ReadSeeker, outDir string) (err error) {
 	}
 
 	err = u.ExtractFilelist(r, fileList, outDir)
+
 	return
 }
 
@@ -175,6 +176,8 @@ func (u *Unpacker) ExtractFilelist(r io.ReadSeeker, fileList []structures.FileIn
 
 	}
 
+	u.log.Info("unpacking complete")
+
 	return
 }
 
@@ -191,7 +194,7 @@ func (u *Unpacker) ReadPackageFilelist(r io.ReadSeeker) (fileList []structures.F
 
 	fileList, err = u.getFileList(r)
 
-	u.log.WithField("fileList", fileList).Info("file list")
+	u.log.WithField("fileList", fileList).Debug("file list")
 
 	return
 }
@@ -212,7 +215,7 @@ func (u *Unpacker) isValidPackage(r io.ReadSeeker) (bool, error) {
 	}
 
 	if bytes.Equal(magicBuf, magic) {
-		u.log.Infof("looks like a pck archive")
+		u.log.Debugf("looks like a pck archive")
 		_, err = r.Seek(0, io.SeekStart) // back to start
 		if !utils.CheckErrorSeek(u.log, err) {
 			return false, err
@@ -220,7 +223,7 @@ func (u *Unpacker) isValidPackage(r io.ReadSeeker) (bool, error) {
 	} else {
 		u.log.
 			WithField("magic", magicBuf).
-			WithField("expectedMagic", magic).Info("Failed to read GDPC pck Magic")
+			WithField("expectedMagic", magic).Debug("Failed to read GDPC pck Magic")
 
 		_, err = r.Seek(-4, io.SeekEnd) // 4 bytes from end
 		if !utils.CheckErrorSeek(u.log, err) {
@@ -233,7 +236,7 @@ func (u *Unpacker) isValidPackage(r io.ReadSeeker) (bool, error) {
 		}
 
 		if !bytes.Equal(magicBuf, magic) {
-			u.log.Info("looks like a self-contained exe", u.name)
+			u.log.Debug("looks like a self-contained exe", u.name)
 
 			_, err = r.Seek(-12, io.SeekEnd) // 12 bytes from end
 			if !utils.CheckErrorSeek(u.log, err) {
@@ -277,7 +280,7 @@ func (u *Unpacker) getFileList(r io.ReadSeeker) (fileList []structures.FileInfo,
 		return
 	}
 
-	u.log.WithField("headers", headers).Info("info")
+	u.log.WithField("headers", headers).Debug("info")
 
 	fileCount := headers.FileCount
 

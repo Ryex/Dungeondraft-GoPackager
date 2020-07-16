@@ -22,10 +22,13 @@ func main() {
 	flag.Usage = usage
 	// args go here
 
-	debugPtr := flag.Bool("debug", false, "output debug info level log messages?")
-	flag.BoolVar(debugPtr, "v", false, "alias of -debug")
+	debugPtr := flag.Bool("debug", false, "output Debug level log messages?")
+	flag.BoolVar(debugPtr, "vv", false, "alias of -debug")
 
-	overwritePtr := flag.Bool("overwrite", false, "overwrite outputfiles at dest")
+	infoPtr := flag.Bool("info", false, "output Info level log messages?")
+	flag.BoolVar(infoPtr, "v", false, "alias of -info")
+
+	overwritePtr := flag.Bool("overwrite", false, "overwrite output files at dest")
 	flag.BoolVar(overwritePtr, "O", false, "alias of -overwrite")
 
 	ripPtr := flag.Bool("riptex", false, "convert .tex files int he package to normal image formats (probably never needed)")
@@ -34,6 +37,7 @@ func main() {
 	flag.Parse()
 
 	debug := *debugPtr
+	info := *infoPtr
 	overwrite := *overwritePtr
 	ripTex := *ripPtr
 
@@ -61,7 +65,11 @@ func main() {
 	// Only log the warning severity or above.
 	log.SetLevel(log.WarnLevel)
 	if debug {
+		log.SetLevel(log.DebugLevel)
+	} else if info {
 		log.SetLevel(log.InfoLevel)
+	} else {
+		log.SetLevel(log.WarnLevel)
 	}
 
 	outDirPath, err := filepath.Abs(flag.Arg(1))

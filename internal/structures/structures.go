@@ -141,10 +141,10 @@ func (fil *FileInfoList) UpdateOffsets(offset int64) {
 // Write out headers and file contents to io
 func (fil *FileInfoList) Write(log logrus.FieldLogger, out io.Writer, offset int64) (err error) {
 
-	log.Info("updating offsets...")
+	log.Debug("updating offsets...")
 	fil.UpdateOffsets(fil.Size + offset)
 
-	log.Info("writing files...")
+	log.Debug("writing files...")
 	err = fil.WriteHeaders(log, out)
 	if err != nil {
 		return
@@ -158,7 +158,7 @@ func (fil *FileInfoList) Write(log logrus.FieldLogger, out io.Writer, offset int
 // WriteHeaders write out the headers to io
 func (fil *FileInfoList) WriteHeaders(log logrus.FieldLogger, out io.Writer) (err error) {
 
-	log.Info("writing file headers")
+	log.Debug("writing file headers")
 	for _, pair := range fil.FileList {
 
 		// write path length
@@ -188,7 +188,7 @@ func (fil *FileInfoList) WriteHeaders(log logrus.FieldLogger, out io.Writer) (er
 // this function does NOT handle padding inbetween filedata. this may be a problem
 func (fil *FileInfoList) WriteFiles(log logrus.FieldLogger, out io.Writer) (err error) {
 
-	log.Info("writing file data")
+	log.Debug("writing file data")
 	for _, pair := range fil.FileList {
 		err = fil.writeFile(log.WithField("file", pair.Info.Path), out, pair.Info)
 		if err != nil {
@@ -201,7 +201,7 @@ func (fil *FileInfoList) WriteFiles(log logrus.FieldLogger, out io.Writer) (err 
 
 func (fil *FileInfoList) writeFile(log logrus.FieldLogger, out io.Writer, info FileInfo) (err error) {
 
-	log.Info("writing")
+	log.Debug("writing")
 
 	data, err := ioutil.ReadFile(info.Path)
 	if err != nil {
