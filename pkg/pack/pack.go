@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/structures"
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
@@ -37,6 +39,84 @@ func DefaultValidExt() []string {
 	}
 }
 
+func GenPackID() string {
+	var seededRand *rand.Rand = rand.New(
+		rand.NewSource(time.Now().UnixNano()))
+
+	charset := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+
+	b := make([]byte, 8)
+
+	for i := range b {
+		b[i] = charset[seededRand.Intn(len(charset))]
+	}
+	return string(b)
+}
+
+// NewPackerFromFolder builds a new Packer from a folder with a valid pack.json
+func NewPackerFolder(log logrus.FieldLogger, folderPath string, name string, author string, version string, overwrite bool) (p *Packer, err error) {
+
+	folderPath, err = filepath.Abs(folderPath)
+	if err != nil {
+		return
+	}
+
+	dirExists := utils.DirExists(folderPath)
+	if !dirExists {
+		err = errors.New("directory does not exists")
+		log.WithError(err).WithField("path", folderPath).Error("can't package a non existent folder")
+		return
+	}
+
+	packJSONPath := filepath.Join(folderPath, `pack.json`)
+
+	packExists := utils.FileExists(packJSONPath)
+	if packExists {
+		if !overwrite {
+			err = errors.New("a pack.json already exists and overwrite is not enabled")
+			log.WithError(err).WithField("path", folderPath).Error("a pack.json already exists")
+			return
+		} else {
+			log.WithField("path", folderPath).Warn("Overwriting pack.json")
+		}
+	}
+
+	if name == "" {
+		err = errors.New("name field can not be empty")
+		log.WithError(err).Error("invalid pack info")
+		return
+	}
+
+	if version == "" {
+		err = errors.New("version field can not be empty")
+		log.WithError(err).Error("invalid pack info")
+		return
+	}
+
+	pack := structures.Package{
+		Name:    name,
+		Author:  author,
+		Version: version,
+		ID:      GenPackID(),
+	}
+
+	packJSONBytes, err := json.MarshalIndent(&pack, "", "  ")
+	if err != nil {
+		log.WithError(err).WithField("path", folderPath).WithField("packJSONPath", packJSONPath).Error("can't create pack.json")
+		return
+	}
+
+	err = ioutil.WriteFile(packJSONPath, packJSONBytes, 0644)
+	if err != nil {
+		log.WithError(err).WithField("path", folderPath).WithField("packJSONPath", packJSONPath).Error("can't write pack.json")
+		return
+	}
+
+	p = NewPacker(log.WithField("path", folderPath).WithField("id", pack.ID).WithField("name", pack.Name), pack.Name, pack.ID, folderPath)
+	return
+
+}
+
 // NewPackerFromFolder builds a new Packer from a folder with a valid pack.json
 func NewPackerFromFolder(log logrus.FieldLogger, folderPath string) (p *Packer, err error) {
 
@@ -48,7 +128,7 @@ func NewPackerFromFolder(log logrus.FieldLogger, folderPath string) (p *Packer, 
 	dirExists := utils.DirExists(folderPath)
 	if !dirExists {
 		err = errors.New("directory does not exists")
-		log.WithError(err).WithField("path", folderPath).Error("can't package a non exsistant folder")
+		log.WithError(err).WithField("path", folderPath).Error("can't package a non existent folder")
 		return
 	}
 
@@ -56,7 +136,7 @@ func NewPackerFromFolder(log logrus.FieldLogger, folderPath string) (p *Packer, 
 
 	packExists := utils.FileExists(packJSONPath)
 	if !packExists {
-		err = errors.New("no pack.json in directory, package with dungeondraft first")
+		err = errors.New("no pack.json in directory, generate one first.")
 		log.WithError(err).WithField("path", folderPath).Error("can't package without a pack.json")
 		return
 	}
