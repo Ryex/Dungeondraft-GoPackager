@@ -140,7 +140,7 @@ func (p *Packer) PackPackage(outDir string) (err error) {
 		}
 	}
 
-	l.Info("writing package")
+	l.Debug("writing package")
 	var out *os.File
 	out, err = os.Create(outPackagePath)
 	if err != nil {
@@ -158,12 +158,14 @@ func (p *Packer) PackPackage(outDir string) (err error) {
 		return
 	}
 
+	l.Info("packing complete")
+
 	return
 }
 
 // BuildFileList builds a list of files at the target directory for inclusion in a .dungeondraft_pack file
 func (p *Packer) BuildFileList() (err error) {
-	p.log.Info("beginning directory traversal to collect file list")
+	p.log.Debug("beginning directory traversal to collect file list")
 
 	err = filepath.Walk(p.path, p.fileListWalkFunc)
 	if err != nil {
@@ -230,9 +232,9 @@ func (p *Packer) fileListWalkFunc(path string, info os.FileInfo, err error) erro
 	}
 
 	if info.IsDir() {
-		l.Info("is directory, decending into...")
+		l.Debug("is directory, decending into...")
 	} else {
-		ext := filepath.Ext(path)
+		ext := strings.ToLower(filepath.Ext(path))
 		if utils.StringInSlice(ext, p.ValidExts) {
 			if info.Mode().IsRegular() {
 
@@ -249,6 +251,8 @@ func (p *Packer) fileListWalkFunc(path string, info os.FileInfo, err error) erro
 				l.Info("including")
 				p.FileList = append(p.FileList, fInfo)
 			}
+		} else {
+			l.WithField("ext", ext).WithField("validExts", p.ValidExts).Debug("Invalid file ext, not including.")
 		}
 	}
 
@@ -262,7 +266,7 @@ func (p *Packer) write(l logrus.FieldLogger, out io.WriteSeeker) (err error) {
 
 	fileInfoList := structures.NewFileInfoList(p.FileList)
 
-	l.Info("writing package headers...")
+	l.Debug("writing package headers...")
 	// write file header
 	err = headers.Write(out)
 	if !utils.CheckErrorWrite(l, err) {
