@@ -12,6 +12,19 @@ A `pack.json` must be created by using the flags to pass in th pack name and ver
 
 Windows executable are provided so you don't have to build it yourself.
 
+### Instation
+
+you can either install the precompiled binaries avalible on the [release page](cmd/dungeondraft-pack)
+
+Or, if you have Go installed you can `go get` them yourself
+
+```shell
+go get github.com/ryex/dungeondraft-gopackager/cmd/dungeondraft-pack
+go get github.com/ryex/dungeondraft-gopackager/cmd/dungeondraft-unpack
+```
+
+and the binaries will be complied and installed to your `$GOBIN` path
+
 ### Usage:
 ```dungeondraft-unpack.exe -h```
 will show the help
