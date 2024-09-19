@@ -13,7 +13,7 @@ import (
 )
 
 const usageText = `Desc:
-	Packs the contents of a directory to a .dungeondraft_pack file, there must be a valid pack.json in the direcotry
+	Packs the contents of a directory to a .dungeondraft_pack file, there must be a valid pack.json in the directory
 Usage:
 	dungeondraft-pack [args] <input folder> <dest folder>
 
@@ -82,7 +82,7 @@ func main() {
 		fmt.Println("Error: Must provide a pack folder")
 		usage()
 	} else if flag.NArg() < 2 {
-		// windows useing `\` as a path seperator is bad , go treats it as an excape of a `"`
+		// windows using `\` as a path separator is bad , go treats it as an escape of a `"`
 		if runtime.GOOS == "windows" && strings.Index(flag.Arg(0), `"`) >= 0 {
 			splits := strings.SplitAfterN(flag.Arg(0), `"`, 2)
 			inDir = strings.TrimSpace(strings.Trim(splits[0], `"`))

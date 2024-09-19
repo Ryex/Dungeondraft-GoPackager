@@ -8,13 +8,13 @@ The pack tool by default does not on its own generate an ID for your package.
 
 So, it must have been pack at least once by Dungeondraft itself and have a valid `pack.json`
 OR
-A `pack.json` must be created by using the flags to pass in th pack name and version with an optional author.
+A `pack.json` must be created by using the flags to pass in the pack name and version with an optional author.
 
 Windows executable are provided so you don't have to build it yourself.
 
 ### Instation
 
-you can either install the precompiled binaries avalible on the [release page](https://github.com/Ryex/Dungeondraft-GoPackager/releases)
+you can either install the precompiled binaries available on the [release page](https://github.com/Ryex/Dungeondraft-GoPackager/releases)
 
 Or, if you have [Go](https://go.dev/) installed you can `go install` them yourself
 
