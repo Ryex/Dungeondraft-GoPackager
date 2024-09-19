@@ -4,16 +4,16 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
-	"io/ioutil"
+	"os"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/sirupsen/logrus"
 )
 
-// PackageHeadersBytes is a struct used for reading and writing the encoded package headers
+// PackageHeaders is a struct used for reading and writing the encoded package headers
 // most of these headers are hard coded and relate to the GoDot enging version that made the pack
 // the defaults will need to be updated to reflect what version dungeondraft is built with
-type PackageHeadersBytes struct {
+type PackageHeaders struct {
 	Magic             uint32     // 1129333831 0x43504447 Godot's packed file magic header ("GDPC" in ASCII).
 	PackFormatVersion uint32     // 1
 	VersionMajor      uint32     // 3
@@ -23,25 +23,35 @@ type PackageHeadersBytes struct {
 	FileCount         uint32
 }
 
-// DefaultPackageHeaderBytes gives the defaults Package Headers you would expect
-func DefaultPackageHeaderBytes() *PackageHeadersBytes {
-	return &PackageHeadersBytes{
-		Magic:             0x43504447,
-		PackFormatVersion: 1, // package format should sta at 1 unless GoDot chages
-		VersionMajor:      3, // latest dungeondraft is built with 3.1.0
-		VersionMinor:      1, // these should update with dungeondraft but no harm should come if they don't (presumably)
-		VersionPatch:      0,
+const (
+	GODOT_PACKAGE_MAGIC uint32 = 0x43504447 // PCK archive Magic
+
+	GODOT_PACKAGE_FORMAT uint32 = 1 // package format should stay at 1 unless GoDot changes
+
+	GODOT_MAJOR uint32 = 3 // latest dungeondraft is built with 3.4.2
+	GODOT_MINOR uint32 = 4 // these should update with dungeondraft but no harm should come if they don't (presumably)
+	GODOT_PATCH uint32 = 2
+)
+
+// DefaultPackageHeader gives the defaults Package Headers you would expect
+func DefaultPackageHeader() *PackageHeaders {
+	return &PackageHeaders{
+		Magic:             GODOT_PACKAGE_MAGIC,
+		PackFormatVersion: GODOT_PACKAGE_FORMAT,
+		VersionMajor:      GODOT_MAJOR,
+		VersionMinor:      GODOT_MINOR,
+		VersionPatch:      GODOT_PATCH,
 	}
 }
 
 // Write out binary bytes to io
-func (ph *PackageHeadersBytes) Write(out io.Writer) (err error) {
+func (ph *PackageHeaders) Write(out io.Writer) (err error) {
 	err = binary.Write(out, binary.LittleEndian, ph)
 	return
 }
 
 // SizeOf the headers in bytes
-func (ph *PackageHeadersBytes) SizeOf() int64 {
+func (ph *PackageHeaders) SizeOf() int64 {
 	return int64(binary.Size(ph))
 }
 
@@ -121,9 +131,9 @@ func NewFileInfoList(fileList []FileInfo) *FileInfoList {
 	return L
 }
 
-// UpdateOffsets updates all offset informaiton to start from the passed point
-// there are indications that GoDot has the ability to controll alignment of packed file data.
-// this funciton does not handle this
+// UpdateOffsets updates all offset information to start from the passed point
+// there are indications that GoDot has the ability to control alignment of packed file data.
+// this function does not handle this
 func (fil *FileInfoList) UpdateOffsets(offset int64) {
 	var newList []FileInfoPair
 	for _, pair := range fil.FileList {
@@ -140,7 +150,6 @@ func (fil *FileInfoList) UpdateOffsets(offset int64) {
 
 // Write out headers and file contents to io
 func (fil *FileInfoList) Write(log logrus.FieldLogger, out io.Writer, offset int64) (err error) {
-
 	log.Debug("updating offsets...")
 	fil.UpdateOffsets(fil.Size + offset)
 
@@ -157,7 +166,6 @@ func (fil *FileInfoList) Write(log logrus.FieldLogger, out io.Writer, offset int
 
 // WriteHeaders write out the headers to io
 func (fil *FileInfoList) WriteHeaders(log logrus.FieldLogger, out io.Writer) (err error) {
-
 	log.Debug("writing file headers")
 	for _, pair := range fil.FileList {
 
@@ -185,9 +193,8 @@ func (fil *FileInfoList) WriteHeaders(log logrus.FieldLogger, out io.Writer) (er
 }
 
 // WriteFiles write the contents of the files in the list to io
-// this function does NOT handle padding inbetween filedata. this may be a problem
+// this function does NOT handle padding in-between filedata. this may be a problem
 func (fil *FileInfoList) WriteFiles(log logrus.FieldLogger, out io.Writer) (err error) {
-
 	log.Debug("writing file data")
 	for _, pair := range fil.FileList {
 		err = fil.writeFile(log.WithField("file", pair.Info.Path), out, pair.Info)
@@ -200,10 +207,9 @@ func (fil *FileInfoList) WriteFiles(log logrus.FieldLogger, out io.Writer) (err 
 }
 
 func (fil *FileInfoList) writeFile(log logrus.FieldLogger, out io.Writer, info FileInfo) (err error) {
-
 	log.Debug("writing")
 
-	data, err := ioutil.ReadFile(info.Path)
+	data, err := os.ReadFile(info.Path)
 	if err != nil {
 		log.WithError(err).Error("error reading file")
 		return
@@ -222,5 +228,4 @@ func (fil *FileInfoList) writeFile(log logrus.FieldLogger, out io.Writer, info F
 	}
 
 	return
-
 }

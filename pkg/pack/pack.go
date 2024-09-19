@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -19,7 +18,7 @@ import (
 )
 
 // Packer packs up a folder into a dungeodraft_pack file
-// set the Overwrite field if you wish pack operations to overwrite an exsisting file
+// set the Overwrite field if you wish pack operations to overwrite an existing file
 type Packer struct {
 	log       logrus.FieldLogger
 	name      string
@@ -30,7 +29,7 @@ type Packer struct {
 	ValidExts []string
 }
 
-// DefaultValidExt returns a slice of valid file extentions for inclusion in a .dungeondraft_pack
+// DefaultValidExt returns a slice of valid file extensions for inclusion in a .dungeondraft_pack
 func DefaultValidExt() []string {
 	return []string{
 		".png", ".jpg", ".webp",
@@ -106,7 +105,7 @@ func NewPackerFolder(log logrus.FieldLogger, folderPath string, name string, aut
 		return
 	}
 
-	err = ioutil.WriteFile(packJSONPath, packJSONBytes, 0644)
+	err = os.WriteFile(packJSONPath, packJSONBytes, 0644)
 	if err != nil {
 		log.WithError(err).WithField("path", folderPath).WithField("packJSONPath", packJSONPath).Error("can't write pack.json")
 		return
@@ -141,7 +140,7 @@ func NewPackerFromFolder(log logrus.FieldLogger, folderPath string) (p *Packer, 
 		return
 	}
 
-	packJSONBytes, err := ioutil.ReadFile(packJSONPath)
+	packJSONBytes, err := os.ReadFile(packJSONPath)
 	if err != nil {
 		log.WithError(err).WithField("path", folderPath).WithField("packJSONPath", packJSONPath).Error("can't read pack.json")
 		return
@@ -172,7 +171,7 @@ func NewPackerFromFolder(log logrus.FieldLogger, folderPath string) (p *Packer, 
 
 }
 
-// NewPacker makes a new Packer, it does no validation so the subsiquent pack operations may fail badly
+// NewPacker makes a new Packer, it does no validation so the subsequent pack operations may fail badly
 func NewPacker(log logrus.FieldLogger, name string, id string, path string) *Packer {
 	return &Packer{
 		log:       log,
@@ -265,7 +264,7 @@ func (p *Packer) BuildFileList() (err error) {
 
 	pathJSONResPath := "res://" + filepath.Join("packs", packJSONRelPath)
 
-	if runtime.GOOS == "windows" { // windows path seperators.....
+	if runtime.GOOS == "windows" { // windows path separators.....
 		pathJSONResPath = strings.ReplaceAll(pathJSONResPath, "\\", "/")
 	}
 
@@ -297,7 +296,7 @@ func (p *Packer) makeResPath(l logrus.FieldLogger, path string) (string, error) 
 
 	resPath := "res://" + filepath.Join("packs", p.id, relPath)
 
-	if runtime.GOOS == "windows" { // windows path seperators.....
+	if runtime.GOOS == "windows" { // windows path separators.....
 		resPath = strings.ReplaceAll(resPath, "\\", "/")
 	}
 
@@ -312,7 +311,7 @@ func (p *Packer) fileListWalkFunc(path string, info os.FileInfo, err error) erro
 	}
 
 	if info.IsDir() {
-		l.Debug("is directory, decending into...")
+		l.Debug("is directory, descending into...")
 	} else {
 		ext := strings.ToLower(filepath.Ext(path))
 		if utils.StringInSlice(ext, p.ValidExts) {
@@ -341,7 +340,7 @@ func (p *Packer) fileListWalkFunc(path string, info os.FileInfo, err error) erro
 
 func (p *Packer) write(l logrus.FieldLogger, out io.WriteSeeker) (err error) {
 
-	headers := structures.DefaultPackageHeaderBytes()
+	headers := structures.DefaultPackageHeader()
 	headers.FileCount = uint32(len(p.FileList))
 
 	fileInfoList := structures.NewFileInfoList(p.FileList)

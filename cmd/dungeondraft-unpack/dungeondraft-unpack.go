@@ -31,8 +31,12 @@ func main() {
 	overwritePtr := flag.Bool("overwrite", false, "overwrite output files at dest")
 	flag.BoolVar(overwritePtr, "O", false, "alias of -overwrite")
 
-	ripPtr := flag.Bool("riptex", false, "convert .tex files int he package to normal image formats (probably never needed)")
+	ripPtr := flag.Bool("riptex", false, "convert .tex files in the package to normal image formats (probably never needed)")
 	flag.BoolVar(ripPtr, "R", false, "alias of -riptex")
+
+
+	ignoreJsonPtr := flag.Bool("ignorejson", true, "ignore and do not extract json files")
+	flag.BoolVar(ignoreJsonPtr, "J", true, "alias of -ignorejson")
 
 	flag.Parse()
 
@@ -40,6 +44,7 @@ func main() {
 	info := *infoPtr
 	overwrite := *overwritePtr
 	ripTex := *ripPtr
+	ignoreJson := *ignoreJsonPtr
 
 	if flag.NArg() < 1 {
 		fmt.Println("Error: Must provide a pack file")
@@ -94,7 +99,7 @@ func main() {
 
 	defer file.Close()
 
-	err = unpacker.ExtractPackage(file, outDirPath)
+	err = unpacker.ExtractPackage(file, outDirPath, ignoreJson)
 	if err != nil {
 		logger.WithError(err).Fatal("failed to extract package")
 	}
