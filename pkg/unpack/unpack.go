@@ -11,7 +11,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/ryex/dungeondraft-gopackager/internal/structures"
+	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/sirupsen/logrus"
 )
@@ -24,6 +24,7 @@ type Unpacker struct {
 	name        string
 	RipTextures bool
 	Overwrite   bool
+	IgnoreJson  bool
 }
 
 // NewUnpacker builds a new Unpacker
@@ -35,21 +36,33 @@ func NewUnpacker(log logrus.FieldLogger, name string) *Unpacker {
 }
 
 // ExtractPackage extracts the package contents to the filesystem
-func (u *Unpacker) ExtractPackage(r io.ReadSeeker, outDir string, ignoreJson bool) (err error) {
+func (u *Unpacker) ExtractPackage(r io.ReadSeeker, outDir string) (err error) {
 	fileList, err := u.ReadPackageFilelist(r)
 	if err != nil {
 		return
 	}
 
-	err = u.ExtractFilelist(r, fileList, outDir, ignoreJson)
+	err = u.ExtractFilelist(r, fileList, outDir)
 
 	return
 }
 
 var resourcePathRegex = regexp.MustCompile(`^[\w\-. ]+[\\/]packs[\\/]([\w\-. ]+)((\.json$)|([\\/]))`)
 
+func (u *Unpacker) NormalizeResourcePath(fileInfo structures.FileInfo) string {
+	path := strings.Replace(string(fileInfo.Path), "res://", u.name+string(filepath.Separator), 1)
+	match := resourcePathRegex.FindStringSubmatch(path)
+	if match != nil {
+		guid := strings.TrimSpace(match[1])
+		clean := filepath.Clean(path)
+		path = filepath.Clean(strings.Replace(clean, filepath.Join("packs", guid)+string(filepath.Separator), "", 1))
+		path = filepath.Clean(strings.Replace(path, filepath.Join("packs", guid)+".json", "pack.json", 1))
+	}
+	return path
+}
+
 // ExtractFilelist takes a slice of FileInfo and extracts the files from the package at the reader
-func (u *Unpacker) ExtractFilelist(r io.ReadSeeker, fileList []structures.FileInfo, outDir string, ignoreJson bool) (err error) {
+func (u *Unpacker) ExtractFilelist(r io.ReadSeeker, fileList []structures.FileInfo, outDir string) (err error) {
 	outDirPath, err := filepath.Abs(outDir)
 	if err != nil {
 		return
@@ -88,7 +101,7 @@ func (u *Unpacker) ExtractFilelist(r io.ReadSeeker, fileList []structures.FileIn
 			guid := strings.TrimSpace(match[1])
 			ending := strings.TrimSpace(match[2])
 
-			if ending == ".json" && ignoreJson {
+			if ending == ".json" && u.IgnoreJson {
 				continue
 			}
 			path = strings.Replace(path, filepath.Join("packs", guid), "", 1)
@@ -203,6 +216,11 @@ func (u *Unpacker) ReadPackageFilelist(r io.ReadSeeker) (fileList []structures.F
 	// reader is in position, start extracting
 
 	fileList, err = u.getFileList(r)
+	if err != nil {
+		u.log.WithError(err).
+			Error("could not read file list")
+		return
+	}
 
 	u.log.WithField("fileList", fileList).Debug("file list")
 
@@ -250,7 +268,7 @@ func (u *Unpacker) isValidPackage(r io.ReadSeeker) (bool, error) {
 	// find our magic to figure out where to start reading
 
 	var magic uint32
-	if err := u.checkedRead(r, magic); err != nil {
+	if err := u.checkedRead(r, &magic); err != nil {
 		return false, err
 	}
 
@@ -267,7 +285,7 @@ func (u *Unpacker) isValidPackage(r io.ReadSeeker) (bool, error) {
 		}
 
 		// attempt to read the GDPC Magic from the end of the file
-		if err := u.checkedRead(r, magic); err != nil {
+		if err := u.checkedRead(r, &magic); err != nil {
 			return false, err
 		}
 
@@ -296,7 +314,7 @@ func (u *Unpacker) isValidPackage(r io.ReadSeeker) (bool, error) {
 			}
 
 			// attempt to read the GDPC Magic at offset
-			if err := u.checkedRead(r, magic); err != nil {
+			if err := u.checkedRead(r, &magic); err != nil {
 				return false, err
 			}
 
@@ -336,9 +354,9 @@ func (u *Unpacker) ReadPackageHeaders(r io.ReadSeeker) (headers structures.Packa
 			WithField("PackFormat", headers.PackFormatVersion).
 			WithField("SupportedPackFormat", structures.GODOT_PACKAGE_FORMAT).
 			Error("Pack version unsupported")
-	} else if headers.VersionMajor >= structures.GODOT_MAJOR ||
+	} else if headers.VersionMajor > structures.GODOT_MAJOR ||
 		(headers.VersionMajor == structures.GODOT_MAJOR &&
-			headers.VersionMinor >= structures.GODOT_MINOR) {
+			headers.VersionMinor > structures.GODOT_MINOR) {
 
 		err = errors.New("unsupported GoDot engine version")
 		u.log.
