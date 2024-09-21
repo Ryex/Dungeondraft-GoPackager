@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ryex/dungeondraft-gopackager/internal/structures"
+	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/sirupsen/logrus"
 )
@@ -52,10 +52,19 @@ func GenPackID() string {
 	return string(b)
 }
 
-// NewPackerFromFolder builds a new Packer from a folder with a valid pack.json
-func NewPackerFolder(log logrus.FieldLogger, folderPath string, name string, author string, version string, overwrite bool) (p *Packer, err error) {
+type NewPackerOptions struct {
+	Path          string
+	Name          string
+	Author        string
+	Version       string
+	Keywords      []string
+	Allow3rdParty bool
+	ColorOverides structures.CustomColorOverrides
+}
 
-	folderPath, err = filepath.Abs(folderPath)
+// NewPackerFromFolder builds a new Packer from a folder with a valid pack.json
+func NewPackerFolder(log logrus.FieldLogger, options NewPackerOptions, overwrite bool) (p *Packer, err error) {
+	folderPath, err := filepath.Abs(options.Path)
 	if err != nil {
 		return
 	}
@@ -80,26 +89,29 @@ func NewPackerFolder(log logrus.FieldLogger, folderPath string, name string, aut
 		}
 	}
 
-	if name == "" {
+	if options.Name == "" {
 		err = errors.New("name field can not be empty")
 		log.WithError(err).Error("invalid pack info")
 		return
 	}
 
-	if version == "" {
+	if options.Version == "" {
 		err = errors.New("version field can not be empty")
 		log.WithError(err).Error("invalid pack info")
 		return
 	}
 
 	pack := structures.Package{
-		Name:    name,
-		Author:  author,
-		Version: version,
-		ID:      GenPackID(),
+		Name:           options.Name,
+		ID:             GenPackID(),
+		Author:         options.Author,
+		Version:        options.Version,
+		Keywords:       options.Keywords,
+		Allow3rdParty:  options.Allow3rdParty,
+		ColorOverrides: options.ColorOverides,
 	}
 
-	packJSONBytes, err := json.MarshalIndent(&pack, "", "  ")
+	packJSONBytes, err := json.MarshalIndent(&pack, "", "\t")
 	if err != nil {
 		log.WithError(err).WithField("path", folderPath).WithField("packJSONPath", packJSONPath).Error("can't create pack.json")
 		return
@@ -113,12 +125,10 @@ func NewPackerFolder(log logrus.FieldLogger, folderPath string, name string, aut
 
 	p = NewPacker(log.WithField("path", folderPath).WithField("id", pack.ID).WithField("name", pack.Name), pack.Name, pack.ID, folderPath)
 	return
-
 }
 
 // NewPackerFromFolder builds a new Packer from a folder with a valid pack.json
 func NewPackerFromFolder(log logrus.FieldLogger, folderPath string) (p *Packer, err error) {
-
 	folderPath, err = filepath.Abs(folderPath)
 	if err != nil {
 		return
@@ -168,7 +178,6 @@ func NewPackerFromFolder(log logrus.FieldLogger, folderPath string) (p *Packer, 
 
 	p = NewPacker(log.WithField("path", folderPath).WithField("id", pack.ID).WithField("name", pack.Name), pack.Name, pack.ID, folderPath)
 	return
-
 }
 
 // NewPacker makes a new Packer, it does no validation so the subsequent pack operations may fail badly
@@ -185,7 +194,6 @@ func NewPacker(log logrus.FieldLogger, name string, id string, path string) *Pac
 // PackPackage packs up a directory into a .dungeondraft_pack file
 // assumes BuildFileList has been called first
 func (p *Packer) PackPackage(outDir string) (err error) {
-
 	outDirPath, err := filepath.Abs(outDir)
 	if err != nil {
 		return
@@ -339,7 +347,6 @@ func (p *Packer) fileListWalkFunc(path string, info os.FileInfo, err error) erro
 }
 
 func (p *Packer) write(l logrus.FieldLogger, out io.WriteSeeker) (err error) {
-
 	headers := structures.DefaultPackageHeader()
 	headers.FileCount = uint32(len(p.FileList))
 
