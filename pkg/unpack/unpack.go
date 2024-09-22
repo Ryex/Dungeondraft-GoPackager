@@ -1,9 +1,12 @@
 package unpack
 
 import (
+	"crypto/md5"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -11,8 +14,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
+	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
 	"github.com/sirupsen/logrus"
 )
 
@@ -22,36 +25,43 @@ import (
 type Unpacker struct {
 	log         logrus.FieldLogger
 	name        string
+	id          string
 	RipTextures bool
 	Overwrite   bool
 	IgnoreJson  bool
+	Thumbnails  bool
+	FileList    []structures.FileInfo
+	Pack        structures.Package
 }
 
 // NewUnpacker builds a new Unpacker
-func NewUnpacker(log logrus.FieldLogger, name string) *Unpacker {
+func NewUnpacker(log logrus.FieldLogger) *Unpacker {
 	return &Unpacker{
-		log:  log,
-		name: name,
+		log: log,
 	}
 }
 
 // ExtractPackage extracts the package contents to the filesystem
 func (u *Unpacker) ExtractPackage(r io.ReadSeeker, outDir string) (err error) {
-	fileList, err := u.ReadPackageFilelist(r)
+	err = u.ReadPackageFilelist(r)
 	if err != nil {
 		return
 	}
 
-	err = u.ExtractFilelist(r, fileList, outDir)
+	err = u.ExtractFilelist(r, outDir)
 
 	return
 }
 
-var resourcePathRegex = regexp.MustCompile(`^[\w\-. ]+[\\/]packs[\\/]([\w\-. ]+)((\.json$)|([\\/]))`)
+var (
+	resourcePathRegex  = regexp.MustCompile(`^res://packs/([\w\-. ]+)((\.json$)|(/))`)
+	thumbnailPathRegex = regexp.MustCompile(`^res://packs/([\w\-. ]+)((\.json$)|(/))`)
+	packJsonPathRegex  = regexp.MustCompile(`^res://packs/([\w\-. ]+).json`)
+)
 
-func (u *Unpacker) NormalizeResourcePath(fileInfo structures.FileInfo) string {
-	path := strings.Replace(string(fileInfo.Path), "res://", u.name+string(filepath.Separator), 1)
-	match := resourcePathRegex.FindStringSubmatch(path)
+func (u *Unpacker) NormalizeResourcePath(resPath string) string {
+	path := strings.Replace(string(resPath), "res://", u.name+"/", 1)
+	match := resourcePathRegex.FindStringSubmatch(resPath)
 	if match != nil {
 		guid := strings.TrimSpace(match[1])
 		clean := filepath.Clean(path)
@@ -61,8 +71,15 @@ func (u *Unpacker) NormalizeResourcePath(fileInfo structures.FileInfo) string {
 	return path
 }
 
+func (u *Unpacker) MapResourcePaths() {
+	for i := 0; i < len(u.FileList); i++ {
+		packedFile := &u.FileList[i]
+		packedFile.Path = u.NormalizeResourcePath(packedFile.ResPath)
+	}
+}
+
 // ExtractFilelist takes a slice of FileInfo and extracts the files from the package at the reader
-func (u *Unpacker) ExtractFilelist(r io.ReadSeeker, fileList []structures.FileInfo, outDir string) (err error) {
+func (u *Unpacker) ExtractFilelist(r io.ReadSeeker, outDir string) (err error) {
 	outDirPath, err := filepath.Abs(outDir)
 	if err != nil {
 		return
@@ -88,25 +105,36 @@ func (u *Unpacker) ExtractFilelist(r io.ReadSeeker, fileList []structures.FileIn
 		return
 	}
 
-	// regexp to get rid of packs/<GUID>
-	// var GUIDS map[string]int
+	err = u.ReadPackJson(r)
+	if err != nil {
+		return
+	}
 
-	for _, packedFile := range fileList {
-		path := strings.Replace(string(packedFile.Path), "res://", u.name+string(filepath.Separator), 1)
-		match := resourcePathRegex.FindStringSubmatch(path)
+	u.MapResourcePaths()
 
-		path = filepath.Join(outDirPath, filepath.Dir(path))
+	thumbnailPrefix := fmt.Sprintf("res://packs/%s/thumbnails/", u.id)
 
-		if match != nil {
-			guid := strings.TrimSpace(match[1])
-			ending := strings.TrimSpace(match[2])
+	extractedPaths := make(map[string]string)
 
-			if ending == ".json" && u.IgnoreJson {
-				continue
-			}
-			path = strings.Replace(path, filepath.Join("packs", guid), "", 1)
+	for i := 0; i < len(u.FileList); i++ {
+		packedFile := &u.FileList[i]
+
+		if strings.HasPrefix(packedFile.ResPath, thumbnailPrefix) && ! u.Thumbnails {
+			continue
 		}
-		fileNameFull := filepath.Base(packedFile.Path)
+
+		if resPath, ok := extractedPaths[packedFile.Path]; ok {
+			u.log.
+				WithField("packedPath", packedFile.ResPath).
+				WithField("duplicateResPath", resPath == packedFile.ResPath).
+				Warnf("ignoring previously extracted path %s", packedFile.Path)
+			continue
+		}
+
+		path := filepath.Join(outDirPath, filepath.Dir(packedFile.Path))
+		u.log.WithField("mappedPath", packedFile.Path).Debugf("%s -> %s", packedFile.ResPath, path)
+
+		fileNameFull := filepath.Base(packedFile.ResPath)
 		fileExt := filepath.Ext(fileNameFull)
 
 		if fileExt == ".tex" && !u.RipTextures {
@@ -114,19 +142,20 @@ func (u *Unpacker) ExtractFilelist(r io.ReadSeeker, fileList []structures.FileIn
 		}
 
 		l := u.log.
-			WithField("packedPath", packedFile.Path).
+			WithField("packedPath", packedFile.ResPath).
 			WithField("offset", packedFile.Offset)
 
 		err = os.MkdirAll(path, 0777)
 		if err != nil {
 			l.WithField("unpackedFile", path).WithError(err).
 				Error("can not make target directory")
-			return
+			return err
 		}
 
-		if err = u.ExtractFile(r, packedFile, path); err != nil {
-			return
+		if _, err = u.ExtractFile(r, *packedFile, path); err != nil {
+			return err
 		}
+		extractedPaths[packedFile.Path] = packedFile.ResPath
 	}
 
 	u.log.Info("unpacking complete")
@@ -134,31 +163,21 @@ func (u *Unpacker) ExtractFilelist(r io.ReadSeeker, fileList []structures.FileIn
 	return
 }
 
-func (u *Unpacker) ExtractFile(r io.ReadSeeker, packedFile structures.FileInfo, outPath string) (err error) {
+func (u *Unpacker) ExtractFile(r io.ReadSeeker, packedFile structures.FileInfo, outPath string) (string, error) {
 	l := u.log.
-		WithField("packedPath", packedFile.Path).
+		WithField("packedPath", packedFile.ResPath).
 		WithField("offset", packedFile.Offset)
-
-	_, err = r.Seek(packedFile.Offset, io.SeekStart)
-	if err != nil {
-		l.WithError(err).
-			Error("can not seek to offset for file data")
-	}
 
 	fileNameFull := filepath.Base(packedFile.Path)
 	fileExt := filepath.Ext(fileNameFull)
 	fileName := strings.TrimSuffix(fileNameFull, fileExt)
 
-	fileData := make([]byte, packedFile.Size)
-	var n int
-	n, err = r.Read(fileData)
-	if !utils.CheckErrorRead(l, err, n, int(packedFile.Size)) {
-		return
+	fileData, err := u.ReadFileFromPackage(r, packedFile)
+	if err != nil {
+		return "", err
 	}
 
-	// if the md5 wasn't blank we would do it here
-
-	if fileExt == ".tex" {
+	if fileExt == ".tex" && u.RipTextures {
 		var ext string
 		var data []byte
 		ext, data, err = utils.RipTexture(fileData)
@@ -169,7 +188,7 @@ func (u *Unpacker) ExtractFile(r io.ReadSeeker, packedFile structures.FileInfo, 
 		}
 	}
 
-	filePath := filepath.Join(outPath, strings.TrimRight(fileNameFull, string([]byte{0})))
+	filePath := filepath.Join(outPath, fileNameFull)
 	l = l.WithField("unpackedFile", filePath)
 
 	l.Info("writing file")
@@ -181,7 +200,7 @@ func (u *Unpacker) ExtractFile(r io.ReadSeeker, packedFile structures.FileInfo, 
 		} else {
 			err = errors.New("file exists")
 			l.WithError(err).Error("file already exists at destination and Overwrite not enabled")
-			return
+			return "", err
 		}
 	}
 
@@ -189,24 +208,60 @@ func (u *Unpacker) ExtractFile(r io.ReadSeeker, packedFile structures.FileInfo, 
 	p, err = os.Create(filePath)
 	if err != nil {
 		l.WithError(err).Error("can not open file for writing")
-		return
+		return "", err
 	}
 	_, err = p.Write(fileData)
 	if err != nil {
 		l.WithError(err).Error("failed to write file")
-		return
+		return "", err
 	}
 
 	err = p.Close()
 	if err != nil {
 		l.WithError(err).Error("failed to close file")
-		return
+		return "", err
 	}
-	return nil
+	return filePath, nil
+}
+
+func (u *Unpacker) ReadFileFromPackage(r io.ReadSeeker, packedFile structures.FileInfo) ([]byte, error) {
+	l := u.log.
+		WithField("packedPath", packedFile.ResPath).
+		WithField("offset", packedFile.Offset)
+
+	_, err := r.Seek(packedFile.Offset, io.SeekStart)
+	if err != nil {
+		l.WithError(err).
+			Error("can not seek to offset for file data")
+		return nil, err
+	}
+
+	fileData := make([]byte, packedFile.Size)
+	var n int
+	n, err = r.Read(fileData)
+	if !utils.CheckErrorRead(l, err, n, int(packedFile.Size)) {
+		return nil, err
+	}
+
+	// if the md5 isn't blank verify
+	if packedFile.Md5 != "00000000000000000000000000000000" {
+		hash := md5.Sum(fileData)
+		md5Hash := hex.EncodeToString(hash[:])
+		if packedFile.Md5 != md5Hash {
+			err = errors.New("md5 hash mismatch")
+			l.WithError(err).
+				WithField("packedDataMd5", md5Hash).
+				WithField("expectedMd5", packedFile.Md5).
+				Error("hash verification failed")
+			return nil, err
+		}
+	}
+
+	return fileData, nil
 }
 
 // ReadPackageFilelist Takes an io.reader and attempts to extract a list of files stored in the package
-func (u *Unpacker) ReadPackageFilelist(r io.ReadSeeker) (fileList []structures.FileInfo, err error) {
+func (u *Unpacker) ReadPackageFilelist(r io.ReadSeeker) (err error) {
 	valid, err := u.isValidPackage(r)
 
 	if !valid {
@@ -215,16 +270,49 @@ func (u *Unpacker) ReadPackageFilelist(r io.ReadSeeker) (fileList []structures.F
 	}
 	// reader is in position, start extracting
 
-	fileList, err = u.getFileList(r)
+	err = u.getFileList(r)
 	if err != nil {
 		u.log.WithError(err).
 			Error("could not read file list")
 		return
 	}
 
-	u.log.WithField("fileList", fileList).Debug("file list")
-
 	return
+}
+
+func (u *Unpacker) ReadPackJson(r io.ReadSeeker) (err error) {
+	if u.FileList == nil {
+		return errors.New("empty file list")
+	}
+	var packJsonInfo *structures.FileInfo
+	for _, packedFile := range u.FileList {
+		match := packJsonPathRegex.MatchString(packedFile.ResPath)
+		if match {
+			packJsonInfo = &packedFile
+			break
+		}
+	}
+
+	if packJsonInfo == nil {
+		return errors.New("can't find pack json in package file list")
+	}
+
+	packJSONBytes, err := u.ReadFileFromPackage(r, *packJsonInfo)
+	if err != nil {
+		u.log.WithError(err).WithField("res", packJsonInfo.ResPath).Error("failed to read pack json")
+		return errors.Join(err, errors.New("failed to read pack json"))
+	}
+
+	err = json.Unmarshal(packJSONBytes, &u.Pack)
+	if err != nil {
+		u.log.WithError(err).WithField("res", packJsonInfo.ResPath).Error("failed to parse pack json")
+		return errors.Join(err, errors.New("failed to parse pack json"))
+	}
+
+	u.id = u.Pack.ID
+	u.name = u.Pack.Name
+
+	return nil
 }
 
 func (u *Unpacker) checkedRead(r io.Reader, data any) error {
@@ -370,7 +458,7 @@ func (u *Unpacker) ReadPackageHeaders(r io.ReadSeeker) (headers structures.Packa
 	return
 }
 
-func (u *Unpacker) getFileList(r io.ReadSeeker) (fileList []structures.FileInfo, err error) {
+func (u *Unpacker) getFileList(r io.ReadSeeker) (err error) {
 	headers, err := u.ReadPackageHeaders(r)
 	if err != nil {
 		return
@@ -408,10 +496,11 @@ func (u *Unpacker) getFileList(r io.ReadSeeker) (fileList []structures.FileInfo,
 		}
 
 		info := structures.FileInfo{
-			Path:   string(pathBytes),
-			Offset: int64(infoBytes.Offset),
-			Size:   int64(infoBytes.Size),
-			Md5:    hex.EncodeToString(infoBytes.Md5[:]),
+			ResPath:     string(pathBytes),
+			ResPathSize: filePathLength,
+			Offset:      int64(infoBytes.Offset),
+			Size:        int64(infoBytes.Size),
+			Md5:         hex.EncodeToString(infoBytes.Md5[:]),
 		}
 
 		u.log.
@@ -419,8 +508,8 @@ func (u *Unpacker) getFileList(r io.ReadSeeker) (fileList []structures.FileInfo,
 			// WithField("FileNum", fileCount).
 			// WithField("FileCount", fileNum).
 			WithField("info", info).
-			Infof("File [%v/%v]", fileNum, fileCount)
-		fileList = append(fileList, info)
+			Infof("found file [%v/%v]", fileNum, fileCount)
+		u.FileList = append(u.FileList, info)
 
 	}
 

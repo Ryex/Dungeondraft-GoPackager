@@ -28,13 +28,12 @@ func (ls *ListCmd) Run(ctx *Context) error {
 	}
 
 	packFileName := filepath.Base(packFilePath)
-	packName := strings.TrimSuffix(packFileName, filepath.Ext(packFileName))
 
 	l := log.WithFields(log.Fields{
 		"filename": packFileName,
 	})
 
-	unpacker := unpack.NewUnpacker(l, packName)
+	unpacker := unpack.NewUnpacker(l)
 
 	unpacker.IgnoreJson = ls.IgnoreJson
 
@@ -46,17 +45,24 @@ func (ls *ListCmd) Run(ctx *Context) error {
 
 	defer file.Close()
 
-	fileList, err := unpacker.ReadPackageFilelist(file)
+	err := unpacker.ReadPackageFilelist(file)
 	if err != nil {
 		log.WithError(err).Error("failed to read file list")
 		return err
 	}
+
+	err = unpacker.ReadPackJson(file)
+	if err != nil {
+		log.WithError(err).Error("failed to read pack json")
+		return err
+	}
+
 	tree := treeprint.New()
 	branchMap := make(map[string]treeprint.Tree)
 
 	var nodeForPath func(path string, fileInfo *structures.FileInfo) treeprint.Tree
 	nodeForPath = func(path string, fileInfo *structures.FileInfo) treeprint.Tree {
-		meta := fmt.Sprintf("%s -- %s", fileInfo.Path, humanize.Bytes(uint64(fileInfo.Size)))
+		meta := fmt.Sprintf("%s -- %s", fileInfo.ResPath, humanize.Bytes(uint64(fileInfo.Size)))
 		useMeta := true
 		if strings.HasSuffix(path, string(filepath.Separator)) {
 			path = path[:len(path)-1]
@@ -84,9 +90,14 @@ func (ls *ListCmd) Run(ctx *Context) error {
 			return branchMap[path]
 		}
 	}
-	for _, packedFile := range fileList {
-		path := unpacker.NormalizeResourcePath(packedFile)
-		nodeForPath(path, &packedFile)
+	for i := 0; i < len(unpacker.FileList); i++ {
+		packedFile := &unpacker.FileList[i]
+		path := unpacker.NormalizeResourcePath(packedFile.ResPath)
+		l.WithField("res", packedFile.ResPath).
+			WithField("size", packedFile.Size).
+			WithField("index", i).
+			Trace("building tree node")
+		nodeForPath(path, packedFile)
 	}
 
 	fmt.Println(tree.String())

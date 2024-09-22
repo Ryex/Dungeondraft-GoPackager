@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"image"
 	"io"
 	"os"
 	"strconv"
@@ -84,6 +85,8 @@ type FileInfo struct {
 	Md5         string
 	ResPath     string
 	ResPathSize int32
+	Image       image.Image
+	PngImage    []byte
 }
 
 // FileInfoPair groups a FileInfo and iot's Bytes equivalent
@@ -98,8 +101,9 @@ type Package struct {
 	ID             string               `json:"id"`
 	Version        string               `json:"version"`
 	Author         string               `json:"author"`
-	Keywords       []string             `json:"keywords"`
-	Allow3rdParty  bool                 `json:"allow_3rd_party_mapping_software_to_read"`
+	KeywordsRaw    string               `json:"keywords"`
+	Keywords       []string             `json:"-"`
+	Allow3rdParty  *bool                `json:"allow_3rd_party_mapping_software_to_read,omitempty"`
 	ColorOverrides CustomColorOverrides `json:"custom_color_overrides,omitempty"`
 }
 
@@ -248,22 +252,28 @@ func (fil *FileInfoList) WriteFiles(log logrus.FieldLogger, out io.Writer) (err 
 	return
 }
 
-func (fil *FileInfoList) writeFile(log logrus.FieldLogger, out io.Writer, info FileInfo) (err error) {
-	log.Debug("writing")
+func (fil *FileInfoList) writeFile(l logrus.FieldLogger, out io.Writer, info FileInfo) (err error) {
+	l.Debug("writing")
 
-	data, err := os.ReadFile(info.Path)
-	if err != nil {
-		log.WithError(err).Error("error reading file")
-		return
+	var data []byte
+	if info.Image != nil && info.PngImage != nil {
+		l.Debug("using png image data")
+		data = info.PngImage
+	} else {
+		data, err = os.ReadFile(info.Path)
+		if err != nil {
+			l.WithError(err).Error("error reading file")
+			return
+		}
 	}
 
 	n, err := out.Write(data)
-	if !utils.CheckErrorWrite(log, err) {
+	if !utils.CheckErrorWrite(l, err) {
 		return
 	}
 	if int64(n) != info.Size {
 		err = errors.New("write of wrong size")
-		log.WithField("expectedWriteSize", info.Size).
+		l.WithField("expectedWriteSize", info.Size).
 			WithField("writeSize", n).
 			WithError(err).Error("failed to write file")
 		return

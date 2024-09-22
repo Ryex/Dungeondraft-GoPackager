@@ -1,4 +1,5 @@
 package cmd
+
 import (
 	"errors"
 	"path/filepath"
@@ -13,6 +14,7 @@ type PackCmd struct {
 	DestinationPath string `arg:"" type:"path" help:"the destination folder path to place the packaged .dungeondraft_pack"`
 
 	Overwrite bool `short:"O" help:"overwrite output files at destination"`
+	Thumbnails bool `short:"T" help:"generate thumbnails"`
 }
 
 func (p *PackCmd) Run(ctx *Context) error {
