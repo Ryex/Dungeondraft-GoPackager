@@ -1,10 +1,9 @@
 package cmd
 
 import (
-  "os"
 	"errors"
+	"os"
 	"path/filepath"
-	"strings"
 
 	log "github.com/sirupsen/logrus"
 
@@ -18,6 +17,7 @@ type UnpackCmd struct {
 	Overwrite   bool `short:"O" help:"overwrite output files at destination"`
 	RipTextures bool `short:"R" help:"convert .tex files in the package to normal image formats (probably never needed)" `
 	IgnoreJson  bool `short:"J" help:"ignore and do not extract json files"`
+	Thumbnails  bool `short:"T" help:"don't ignore resource thumbnails"`
 }
 
 func (uc *UnpackCmd) Run(ctx *Context) error {
@@ -27,7 +27,6 @@ func (uc *UnpackCmd) Run(ctx *Context) error {
 	}
 
 	packFileName := filepath.Base(packFilePath)
-	packName := strings.TrimSuffix(packFileName, filepath.Ext(packFileName))
 
 	outDirPath, pathErr := filepath.Abs(uc.DestinationPath)
 	if pathErr != nil {
@@ -39,11 +38,12 @@ func (uc *UnpackCmd) Run(ctx *Context) error {
 		"outPath":  outDirPath,
 	})
 
-	unpacker := unpack.NewUnpacker(l, packName)
+	unpacker := unpack.NewUnpacker(l)
 
 	unpacker.Overwrite = uc.Overwrite
 	unpacker.RipTextures = uc.RipTextures
 	unpacker.IgnoreJson = uc.IgnoreJson
+	unpacker.Thumbnails = uc.Thumbnails
 
 	file, fileErr := os.Open(packFilePath)
 	if fileErr != nil {

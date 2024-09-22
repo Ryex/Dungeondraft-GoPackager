@@ -1,9 +1,12 @@
 package pack
 
 import (
+	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
 	"io"
 	"math/rand"
 	"os"
@@ -12,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
+	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
 	"github.com/sirupsen/logrus"
 )
 
@@ -32,7 +35,8 @@ type Packer struct {
 // DefaultValidExt returns a slice of valid file extensions for inclusion in a .dungeondraft_pack
 func DefaultValidExt() []string {
 	return []string{
-		".png", ".jpg", ".webp",
+		".png", ".webp", ".jpg", ".jpeg",
+		"gif", ".tif", ".tiff", ".bmp",
 		".dungeondraft_wall", ".dungeondraft_tileset",
 		".dungeondraft_tags", ".json",
 	}
@@ -52,18 +56,18 @@ func GenPackID() string {
 	return string(b)
 }
 
-type NewPackerOptions struct {
+type NewPackageOptions struct {
 	Path          string
 	Name          string
 	Author        string
 	Version       string
 	Keywords      []string
-	Allow3rdParty bool
+	Allow3rdParty *bool
 	ColorOverides structures.CustomColorOverrides
 }
 
 // NewPackerFromFolder builds a new Packer from a folder with a valid pack.json
-func NewPackerFolder(log logrus.FieldLogger, options NewPackerOptions, overwrite bool) (p *Packer, err error) {
+func NewPackageJson(log logrus.FieldLogger, options NewPackageOptions, overwrite bool) (err error) {
 	folderPath, err := filepath.Abs(options.Path)
 	if err != nil {
 		return
@@ -107,6 +111,7 @@ func NewPackerFolder(log logrus.FieldLogger, options NewPackerOptions, overwrite
 		Author:         options.Author,
 		Version:        options.Version,
 		Keywords:       options.Keywords,
+		KeywordsRaw:    strings.Join(options.Keywords, ","),
 		Allow3rdParty:  options.Allow3rdParty,
 		ColorOverrides: options.ColorOverides,
 	}
@@ -122,8 +127,6 @@ func NewPackerFolder(log logrus.FieldLogger, options NewPackerOptions, overwrite
 		log.WithError(err).WithField("path", folderPath).WithField("packJSONPath", packJSONPath).Error("can't write pack.json")
 		return
 	}
-
-	p = NewPacker(log.WithField("path", folderPath).WithField("id", pack.ID).WithField("name", pack.Name), pack.Name, pack.ID, folderPath)
 	return
 }
 
@@ -163,6 +166,7 @@ func NewPackerFromFolder(log logrus.FieldLogger, folderPath string) (p *Packer, 
 		log.WithError(err).WithField("path", folderPath).WithField("packJSONPath", packJSONPath).Error("can't parse pack.json")
 		return
 	}
+	pack.Keywords = strings.Split(pack.KeywordsRaw, ",")
 
 	if pack.Name == "" {
 		err = errors.New("pack.json's name field can not be empty")
@@ -279,6 +283,7 @@ func (p *Packer) BuildFileList() (err error) {
 	packJSONInfo, err := os.Stat(packJSONPath)
 	if err != nil {
 		p.log.WithError(err).Error("can't stat pack.json")
+		return err
 	}
 
 	GUIDJSONInfo := structures.FileInfo{
@@ -319,24 +324,74 @@ func (p *Packer) fileListWalkFunc(path string, info os.FileInfo, err error) erro
 	}
 
 	if info.IsDir() {
-		l.Debug("is directory, descending into...")
+		l.Trace("is directory, descending into...")
 	} else {
 		ext := strings.ToLower(filepath.Ext(path))
 		if utils.StringInSlice(ext, p.ValidExts) {
 			if info.Mode().IsRegular() {
 
-				resPath, err := p.makeResPath(l, path)
+				img := func() image.Image {
+					if utils.StringInSlice(ext, []string{
+						".jpg", ".jpeg", ".png", ".webp", ".gif", ".tif", ".tiff", ".bmp",
+					}) {
+						img, format, err := OpenImage(path)
+						if err != nil {
+							l.WithError(err).Error("can not open path with image extension as image")
+							return nil
+						}
+						l.WithField("imageFormat", format).Trace("read image")
+						return img
+					} else {
+						return nil
+					}
+				}()
+
+				pngImg := func() []byte {
+					if img != nil {
+						buf := new(bytes.Buffer)
+						err := PngImageBytes(img, buf)
+						if err != nil {
+							l.WithError(err).Error("")
+							return nil
+						}
+						imgBytes := buf.Bytes()
+						b := make([]byte, len(imgBytes))
+						copy(b, imgBytes)
+						return b
+					}
+					return nil
+				}()
+
+				size := func() int64 {
+					if img != nil && pngImg != nil {
+						return int64(len(pngImg))
+					}
+					return info.Size()
+				}()
+
+				packedPath := func() string {
+					if img != nil && pngImg != nil {
+						return path[0:len(path)-len(ext)] + ".png"
+					}
+					return path
+				}()
+
+				resPath, err := p.makeResPath(l, packedPath)
 				if err != nil {
 					return err
 				}
 
 				fInfo := structures.FileInfo{
-					Path:    path,
-					Size:    info.Size(),
-					ResPath: resPath,
+					Path:        path,
+					Size:        size,
+					ResPath:     resPath,
+					ResPathSize: int32(binary.Size([]byte(resPath))),
+					Image:       img,
+					PngImage:    pngImg,
 				}
 				l.Info("including")
 				p.FileList = append(p.FileList, fInfo)
+
 			}
 		} else {
 			l.WithField("ext", ext).WithField("validExts", p.ValidExts).Debug("Invalid file ext, not including.")
