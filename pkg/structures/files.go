@@ -41,6 +41,7 @@ type FileInfo struct {
 	ThumbnailPath    string
 	ThumbnailResPath string
 	Image            image.Image
+	ImageFormat      string
 	PngImage         []byte
 }
 

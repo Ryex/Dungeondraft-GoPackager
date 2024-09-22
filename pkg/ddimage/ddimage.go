@@ -9,7 +9,6 @@ import (
 	_ "image/gif"
 	_ "image/jpeg"
 	"image/png"
-	_ "image/png"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,48 +20,6 @@ import (
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/sunshineplan/imgconv"
 )
-
-type Format int
-
-const (
-	JPEG Format = iota
-	PNG
-	GIT
-	TIFF
-	BMP
-	WEBP
-)
-
-var formatExts = [][]string{
-	{"jpg", "jpeg"},
-	{"png"},
-	{"gif"},
-	{"tif", "tiff"},
-	{"bmp"},
-	{"webp"},
-}
-
-func (f Format) String() (format string) {
-	defer func() {
-		if err := recover(); err != nil {
-			format = "unknown"
-		}
-	}()
-	return formatExts[f][0]
-}
-
-func FormatFromExtension(ext string) (Format, error) {
-	ext = strings.ToLower(ext)
-	for index, exts := range formatExts {
-		for _, i := range exts {
-			if ext == i {
-				return Format(index), nil
-			}
-		}
-	}
-
-	return -1, image.ErrFormat
-}
 
 func OpenImage(path string) (image.Image, string, error) {
 	file, err := os.Open(path)
