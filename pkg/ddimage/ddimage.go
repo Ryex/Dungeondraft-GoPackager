@@ -1,4 +1,4 @@
-package pack
+package ddimage
 
 import (
 	"bufio"
@@ -11,12 +11,14 @@ import (
 	"image/png"
 	_ "image/png"
 	"os"
+	"path/filepath"
 	"strings"
 
 	_ "golang.org/x/image/bmp"
 	_ "golang.org/x/image/tiff"
 	_ "golang.org/x/image/webp" // decode webp format
 
+	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/sunshineplan/imgconv"
 )
 
@@ -87,4 +89,11 @@ func ResizeVirticalAndCropWidth(img image.Image, height int, width int) image.Im
 		}).SubImage(image.Rect(0, 0, width, height))
 	}
 	return resized
+}
+
+func PathIsSupportedImage(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	return utils.StringInSlice(ext, []string{
+		".jpg", ".jpeg", ".png", ".webp", ".gif", ".tif", ".tiff", ".bmp",
+	})
 }

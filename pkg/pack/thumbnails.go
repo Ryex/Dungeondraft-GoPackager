@@ -1,8 +1,6 @@
 package pack
 
 import (
-	"crypto/md5"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"image/png"
@@ -11,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
+	"github.com/ryex/dungeondraft-gopackager/pkg/ddimage"
 )
 
 func (p *Packer) GenerateThumbnails() error {
@@ -35,10 +34,6 @@ func (p *Packer) GenerateThumbnails() error {
 		if info.Image != nil && !strings.HasPrefix(info.ResPath, thumbnailPrefix) {
 			p.log.WithField("res", info.ResPath).Trace("generating thumbnail")
 
-			hash := md5.Sum([]byte(info.ResPath))
-			thumbnailName := hex.EncodeToString(hash[:]) + ".png"
-			thumbnailPath := filepath.Join(thumbnailDir, thumbnailName)
-
 			var maxWidth, height int
 			if strings.HasPrefix(info.ResPath, terrainPrefix) {
 				maxWidth, height = 160, 160
@@ -50,17 +45,17 @@ func (p *Packer) GenerateThumbnails() error {
 				maxWidth, height = 64, 64
 			}
 
-			thumbnail := ResizeVirticalAndCropWidth(info.Image, height, maxWidth)
+			thumbnail := ddimage.ResizeVirticalAndCropWidth(info.Image, height, maxWidth)
 
 			file, err := os.OpenFile(
-				thumbnailPath,
+				info.ThumbnailPath,
 				os.O_RDWR|os.O_CREATE,
 				0644,
 			)
 			if err != nil {
 				p.log.WithError(err).
 					WithField("res", info.Path).
-					WithField("thumbnail", thumbnailPath).
+					WithField("thumbnail", info.ThumbnailPath).
 					Error("failed to open thumbnail file for writing")
 				return err
 			}
@@ -69,7 +64,7 @@ func (p *Packer) GenerateThumbnails() error {
 			if err != nil {
 				p.log.WithError(err).
 					WithField("res", info.Path).
-					WithField("thumbnail", thumbnailPath).
+					WithField("thumbnail", info.ThumbnailPath).
 					Error("failed to encode thumbnail png")
 				return err
 			}
