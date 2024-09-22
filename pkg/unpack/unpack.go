@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
+	"github.com/ryex/dungeondraft-gopackager/pkg/ddimage"
 	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
 	"github.com/sirupsen/logrus"
 )
@@ -119,7 +120,7 @@ func (u *Unpacker) ExtractFilelist(r io.ReadSeeker, outDir string) (err error) {
 	for i := 0; i < len(u.FileList); i++ {
 		packedFile := &u.FileList[i]
 
-		if strings.HasPrefix(packedFile.ResPath, thumbnailPrefix) && ! u.Thumbnails {
+		if strings.HasPrefix(packedFile.ResPath, thumbnailPrefix) && !u.Thumbnails {
 			continue
 		}
 
@@ -458,6 +459,24 @@ func (u *Unpacker) ReadPackageHeaders(r io.ReadSeeker) (headers structures.Packa
 	return
 }
 
+func (u *Unpacker) newFileInfo(resPath []byte, infoBytes structures.FileInfoBytes) structures.FileInfo {
+	info := structures.FileInfo{
+		ResPath:     string(resPath),
+		ResPathSize: int32(len(resPath)),
+		Offset:      int64(infoBytes.Offset),
+		Size:        int64(infoBytes.Size),
+		Md5:         hex.EncodeToString(infoBytes.Md5[:]),
+	}
+
+	if ddimage.PathIsSupportedImage(strings.TrimPrefix(info.ResPath, "res://")) {
+		hash := md5.Sum([]byte(resPath))
+		thumbnailName := hex.EncodeToString(hash[:]) + ".png"
+		info.ThumbnailResPath = fmt.Sprintf("res://packs/%s/thumbnails/%s", u.id, thumbnailName)
+	}
+
+	return info
+}
+
 func (u *Unpacker) getFileList(r io.ReadSeeker) (err error) {
 	headers, err := u.ReadPackageHeaders(r)
 	if err != nil {
@@ -495,13 +514,7 @@ func (u *Unpacker) getFileList(r io.ReadSeeker) (err error) {
 			return
 		}
 
-		info := structures.FileInfo{
-			ResPath:     string(pathBytes),
-			ResPathSize: filePathLength,
-			Offset:      int64(infoBytes.Offset),
-			Size:        int64(infoBytes.Size),
-			Md5:         hex.EncodeToString(infoBytes.Md5[:]),
-		}
+		info := u.newFileInfo(pathBytes, infoBytes)
 
 		u.log.
 			// WithField("infoBytes", infoBytes).

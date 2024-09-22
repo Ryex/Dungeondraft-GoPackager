@@ -2,11 +2,12 @@ package pack
 
 import (
 	"bytes"
+	"crypto/md5"
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"image"
 	"io"
 	"math/rand"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
+	"github.com/ryex/dungeondraft-gopackager/pkg/ddimage"
 	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
 	"github.com/sirupsen/logrus"
 )
@@ -254,6 +256,91 @@ func (p *Packer) PackPackage(outDir string) (err error) {
 	return
 }
 
+type NewFileInfoOptions struct {
+	Path    string
+	ResPath *string
+	RelPath *string
+	Size    *int64
+}
+
+func (p *Packer) NewFileInfo(options NewFileInfoOptions) (*structures.FileInfo, error) {
+	if options.Size == nil {
+		fileInfo, err := os.Stat(options.Path)
+		if err != nil {
+			p.log.WithError(err).Errorf("can't stat %s", options.Path)
+			return nil, err
+		}
+		*options.Size = fileInfo.Size()
+	}
+
+	l := p.log.WithField("filePath", options.Path)
+	relPath, err := filepath.Rel(p.path, options.Path)
+	if err != nil {
+		l.Error("can not get path relative to package root")
+		return nil, err
+	}
+
+	if options.ResPath == nil {
+		*options.ResPath = fmt.Sprintf("res://packs/%s/%s", p.id, relPath)
+
+		if runtime.GOOS == "windows" { // windows path separators.....
+			*options.ResPath = strings.ReplaceAll(*options.ResPath, "\\", "/")
+		}
+	}
+
+	if options.RelPath == nil {
+		if runtime.GOOS == "windows" { // windows path separators.....
+			relPath = strings.ReplaceAll(relPath, "\\", "/")
+		}
+		*options.RelPath = relPath
+	}
+
+	info := &structures.FileInfo{
+		Path:        options.Path,
+		ResPath:     *options.ResPath,
+		RelPath:     *options.RelPath,
+		ResPathSize: int32(binary.Size([]byte(*options.ResPath))),
+		Size:        *options.Size,
+	}
+
+	if ddimage.PathIsSupportedImage(options.Path) {
+
+		thumbnailDir := filepath.Join(p.path, "thumbnails")
+		hash := md5.Sum([]byte(*options.ResPath))
+		thumbnailName := hex.EncodeToString(hash[:]) + ".png"
+		thumbnailPath := filepath.Join(thumbnailDir, thumbnailName)
+		info.ThumbnailPath = thumbnailPath
+		info.ThumbnailResPath = fmt.Sprintf("res://packs/%s/thumbnails/%s", p.id, thumbnailName)
+
+		img, format, err := ddimage.OpenImage(options.Path)
+		if err != nil {
+			l.WithError(err).Error("can not open path with image extension as image")
+			return nil, err
+		}
+		l.WithField("imageFormat", format).Trace("read image")
+		info.Image = img
+
+		buf := new(bytes.Buffer)
+		err = ddimage.PngImageBytes(img, buf)
+		if err != nil {
+			l.WithError(err).Error("failed to encode png version of image")
+			return nil, err
+		}
+		imgBytes := buf.Bytes()
+		info.PngImage = make([]byte, len(imgBytes))
+		copy(info.PngImage, imgBytes)
+
+		info.Size = int64(len(info.PngImage))
+
+		ext := filepath.Ext(options.Path)
+		info.ResPath = info.ResPath[0:len(info.ResPath)-len(ext)] + ".png"
+		info.RelPath = info.RelPath[0:len(info.RelPath)-len(ext)] + ".png"
+
+	}
+
+	return info, nil
+}
+
 // BuildFileList builds a list of files at the target directory for inclusion in a .dungeondraft_pack file
 func (p *Packer) BuildFileList() (err error) {
 	p.log.Debug("beginning directory traversal to collect file list")
@@ -268,34 +355,22 @@ func (p *Packer) BuildFileList() (err error) {
 
 	packJSONPath := filepath.Join(p.path, `pack.json`)
 
-	packJSONRelPath, err := filepath.Rel(p.path, filepath.Join(p.path, fmt.Sprintf(`%s.json`, p.id)))
-	if err != nil {
-		p.log.Error("can not get path relative to package root")
-		return err
-	}
+	packJSONName := fmt.Sprintf(`%s.json`, p.id)
+	packJSONResPath := "res://packs/" + packJSONName
 
-	pathJSONResPath := "res://" + filepath.Join("packs", packJSONRelPath)
-
-	if runtime.GOOS == "windows" { // windows path separators.....
-		pathJSONResPath = strings.ReplaceAll(pathJSONResPath, "\\", "/")
-	}
-
-	packJSONInfo, err := os.Stat(packJSONPath)
-	if err != nil {
-		p.log.WithError(err).Error("can't stat pack.json")
-		return err
-	}
-
-	GUIDJSONInfo := structures.FileInfo{
+	GUIDJSONInfo, err := p.NewFileInfo(NewFileInfoOptions{
 		Path:    packJSONPath,
-		Size:    packJSONInfo.Size(),
-		ResPath: pathJSONResPath,
+		ResPath: &packJSONResPath,
+		RelPath: &packJSONName,
+	})
+	if err != nil {
+		return err
 	}
 
 	// prepend the file to the list
 	p.FileList = append(p.FileList, structures.FileInfo{}) // make space with empty struct
 	copy(p.FileList[1:], p.FileList)                       // move things forward
-	p.FileList[0] = GUIDJSONInfo                           // set to first spot
+	p.FileList[0] = *GUIDJSONInfo                          // set to first spot
 
 	return
 }
@@ -307,7 +382,7 @@ func (p *Packer) makeResPath(l logrus.FieldLogger, path string) (string, error) 
 		return "", err
 	}
 
-	resPath := "res://" + filepath.Join("packs", p.id, relPath)
+	resPath := fmt.Sprintf("res://packs/%s/%s", p.id, relPath)
 
 	if runtime.GOOS == "windows" { // windows path separators.....
 		resPath = strings.ReplaceAll(resPath, "\\", "/")
@@ -330,67 +405,13 @@ func (p *Packer) fileListWalkFunc(path string, info os.FileInfo, err error) erro
 		if utils.StringInSlice(ext, p.ValidExts) {
 			if info.Mode().IsRegular() {
 
-				img := func() image.Image {
-					if utils.StringInSlice(ext, []string{
-						".jpg", ".jpeg", ".png", ".webp", ".gif", ".tif", ".tiff", ".bmp",
-					}) {
-						img, format, err := OpenImage(path)
-						if err != nil {
-							l.WithError(err).Error("can not open path with image extension as image")
-							return nil
-						}
-						l.WithField("imageFormat", format).Trace("read image")
-						return img
-					} else {
-						return nil
-					}
-				}()
-
-				pngImg := func() []byte {
-					if img != nil {
-						buf := new(bytes.Buffer)
-						err := PngImageBytes(img, buf)
-						if err != nil {
-							l.WithError(err).Error("")
-							return nil
-						}
-						imgBytes := buf.Bytes()
-						b := make([]byte, len(imgBytes))
-						copy(b, imgBytes)
-						return b
-					}
-					return nil
-				}()
-
-				size := func() int64 {
-					if img != nil && pngImg != nil {
-						return int64(len(pngImg))
-					}
-					return info.Size()
-				}()
-
-				packedPath := func() string {
-					if img != nil && pngImg != nil {
-						return path[0:len(path)-len(ext)] + ".png"
-					}
-					return path
-				}()
-
-				resPath, err := p.makeResPath(l, packedPath)
+				fInfo, err := p.NewFileInfo(NewFileInfoOptions{Path: path})
 				if err != nil {
 					return err
 				}
 
-				fInfo := structures.FileInfo{
-					Path:        path,
-					Size:        size,
-					ResPath:     resPath,
-					ResPathSize: int32(binary.Size([]byte(resPath))),
-					Image:       img,
-					PngImage:    pngImg,
-				}
 				l.Info("including")
-				p.FileList = append(p.FileList, fInfo)
+				p.FileList = append(p.FileList, *fInfo)
 
 			}
 		} else {
