@@ -319,6 +319,7 @@ func (p *Packer) NewFileInfo(options NewFileInfoOptions) (*structures.FileInfo, 
 		}
 		l.WithField("imageFormat", format).Trace("read image")
 		info.Image = img
+		info.ImageFormat = format
 
 		buf := new(bytes.Buffer)
 		err = ddimage.PngImageBytes(img, buf)
