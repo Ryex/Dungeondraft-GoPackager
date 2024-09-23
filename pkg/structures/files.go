@@ -3,6 +3,7 @@ package structures
 import (
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"image"
 	"io"
 	"os"
@@ -86,81 +87,112 @@ func NewFileInfoList(fileList []FileInfo) *FileInfoList {
 }
 
 // UpdateOffsets updates all offset information to start from the passed point
-// there are indications that GoDot has the ability to control alignment of packed file data.
-// this function does not handle this
-func (fil *FileInfoList) UpdateOffsets(offset int64) {
-	var newList []FileInfoPair
-	for _, pair := range fil.FileList {
+// Gogot has the ability to control alignment of packed file data.
+// this function tries to handle this
+func (fil *FileInfoList) UpdateOffsets(offset int64, alignment int) {
+	for i := 0; i < len(fil.FileList); i++ {
+		offset = utils.Align(offset, alignment)
+		pair := &fil.FileList[i]
 		pair.Info.Offset = offset
 		pair.InfoBytes.Offset = uint64(offset)
 
 		offset += pair.Info.Size
-
-		newList = append(newList, pair)
 	}
-
-	fil.FileList = newList
 }
 
 // Write out headers and file contents to io
-func (fil *FileInfoList) Write(log logrus.FieldLogger, out io.Writer, offset int64) (err error) {
+func (fil *FileInfoList) Write(log logrus.FieldLogger, out io.WriteSeeker, offset int64, alignment int) (err error) {
 	log.Debug("updating offsets...")
-	fil.UpdateOffsets(fil.Size + offset)
+	fil.UpdateOffsets(fil.Size+offset, alignment)
 
 	log.Debug("writing files...")
-	err = fil.WriteHeaders(log, out)
+	err = fil.WriteHeaders(log, out, alignment)
 	if err != nil {
 		return
 	}
 
-	err = fil.WriteFiles(log, out)
+	err = fil.WriteFiles(log, out, alignment)
 
 	return
 }
 
 // WriteHeaders write out the headers to io
-func (fil *FileInfoList) WriteHeaders(log logrus.FieldLogger, out io.Writer) (err error) {
+func (fil *FileInfoList) WriteHeaders(log logrus.FieldLogger, out io.WriteSeeker, alignment int) error {
 	log.Debug("writing file headers")
-	for _, pair := range fil.FileList {
-
+	for i := 0; i < len(fil.FileList); i++ {
+		pair := &fil.FileList[i]
 		// write path length
-		err = binary.Write(out, binary.LittleEndian, pair.Info.ResPathSize)
+		err := binary.Write(out, binary.LittleEndian, pair.Info.ResPathSize)
 		if !utils.CheckErrorWrite(log, err) {
-			return
+			return err
 		}
 
 		// write filepath
 		err = binary.Write(out, binary.LittleEndian, []byte(pair.Info.ResPath))
 		if !utils.CheckErrorWrite(log, err) {
-			return
+			return err
 		}
 
 		// write fileinfo
 		err = pair.InfoBytes.Write(out)
 		if !utils.CheckErrorWrite(log, err) {
-			return
+			return err
 		}
 
 	}
 
-	return
+	curPos, err := utils.Tell(out)
+	if err != nil {
+		return err
+	}
+	offset := utils.Align(curPos, alignment)
+	err = utils.Pad(out, offset-curPos)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
+
+var AlignmentError = errors.New("alignment error")
 
 // WriteFiles write the contents of the files in the list to io
-// this function does NOT handle padding in-between filedata. this may be a problem
-func (fil *FileInfoList) WriteFiles(log logrus.FieldLogger, out io.Writer) (err error) {
+func (fil *FileInfoList) WriteFiles(log logrus.FieldLogger, out io.WriteSeeker, alignment int) error {
 	log.Debug("writing file data")
-	for _, pair := range fil.FileList {
-		err = fil.writeFile(log.WithField("file", pair.Info.Path), out, pair.Info)
+	for i := 0; i < len(fil.FileList); i++ {
+		pair := &fil.FileList[i]
+
+		curPos, err := utils.Tell(out)
 		if err != nil {
-			return
+			return err
+		}
+		if pair.Info.Offset != curPos {
+			err = errors.Join(AlignmentError, fmt.Errorf("%v != %v", curPos, pair.Info.Offset))
+			log.WithError(err).WithField("file", pair.Info.Path).Error("misaligment of writer")
+			return err
+		}
+
+		err = fil.writeFile(log.WithField("file", pair.Info.Path), out, &pair.Info)
+		if err != nil {
+			return err
+		}
+
+		curPos, err = utils.Tell(out)
+		if err != nil {
+			return err
+		}
+
+		offset := utils.Align(curPos, alignment)
+		err = utils.Pad(out, offset-curPos)
+		if err != nil {
+			return err
 		}
 	}
 
-	return
+	return nil
 }
 
-func (fil *FileInfoList) writeFile(l logrus.FieldLogger, out io.Writer, info FileInfo) (err error) {
+func (fil *FileInfoList) writeFile(l logrus.FieldLogger, out io.Writer, info *FileInfo) (err error) {
 	l.Debug("writing")
 
 	var data []byte

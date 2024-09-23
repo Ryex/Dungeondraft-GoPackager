@@ -4,7 +4,7 @@ import (
 	"errors"
 	"path/filepath"
 
-	"github.com/ryex/dungeondraft-gopackager/pkg/pack"
+	"github.com/ryex/dungeondraft-gopackager/pkg/ddpackage"
 	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
 	log "github.com/sirupsen/logrus"
 )
@@ -47,7 +47,7 @@ func (gpc *GenPackCmd) Run(ctx *Context) error {
 
 	l.Trace("Generateing pack.json")
 
-	err := pack.NewPackageJson(l, pack.NewPackageOptions{
+	err := ddpackage.NewPackageJson(l, ddpackage.NewPackageJsonOptions{
 		Path:          packDirPath,
 		Name:          gpc.Name,
 		Author:        gpc.Author,
@@ -97,19 +97,21 @@ func (gtc *GenTumbCmd) Run(ctx *Context) error {
 		"path": packDirPath,
 	})
 
-	packer, err := pack.NewPackerFromFolder(l, packDirPath)
+	pkg := ddpackage.NewPackage(l)
+
+	err := pkg.LoadUnpackedFromFolder(packDirPath)
 	if err != nil {
-		l.WithError(err).Error("could not build Packer")
+		l.WithError(err).Error("could not build Package")
 		return err
 	}
 
-	err = packer.BuildFileList()
+	err = pkg.BuildFileList()
 	if err != nil {
 		l.WithError(err).Error("could not build file list")
 		return err
 	}
 
-	err = packer.GenerateThumbnails()
+	err = pkg.GenerateThumbnails()
 	if err != nil {
 		l.WithError(err).Error("error generating thumbnails")
 		return err
