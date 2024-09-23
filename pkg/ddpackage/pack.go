@@ -1,4 +1,4 @@
-package pack
+package ddpackage
 
 import (
 	"bytes"
@@ -9,12 +9,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
-	"time"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddimage"
@@ -22,184 +20,70 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// Packer packs up a folder into a dungeodraft_pack file
-// set the Overwrite field if you wish pack operations to overwrite an existing file
-type Packer struct {
-	log       logrus.FieldLogger
-	name      string
-	id        string
-	path      string
-	Overwrite bool
-	FileList  []structures.FileInfo
-	ValidExts []string
-}
-
-// DefaultValidExt returns a slice of valid file extensions for inclusion in a .dungeondraft_pack
-func DefaultValidExt() []string {
-	return []string{
-		".png", ".webp", ".jpg", ".jpeg",
-		"gif", ".tif", ".tiff", ".bmp",
-		".dungeondraft_wall", ".dungeondraft_tileset",
-		".dungeondraft_tags", ".json",
-	}
-}
-
-func GenPackID() string {
-	var seededRand *rand.Rand = rand.New(
-		rand.NewSource(time.Now().UnixNano()))
-
-	charset := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-
-	b := make([]byte, 8)
-
-	for i := range b {
-		b[i] = charset[seededRand.Intn(len(charset))]
-	}
-	return string(b)
-}
-
-type NewPackageOptions struct {
-	Path          string
-	Name          string
-	Author        string
-	Version       string
-	Keywords      []string
-	Allow3rdParty *bool
-	ColorOverides structures.CustomColorOverrides
-}
-
-// NewPackerFromFolder builds a new Packer from a folder with a valid pack.json
-func NewPackageJson(log logrus.FieldLogger, options NewPackageOptions, overwrite bool) (err error) {
-	folderPath, err := filepath.Abs(options.Path)
-	if err != nil {
-		return
-	}
-
-	dirExists := utils.DirExists(folderPath)
-	if !dirExists {
-		err = errors.New("directory does not exists")
-		log.WithError(err).WithField("path", folderPath).Error("can't package a non existent folder")
-		return
-	}
-
-	packJSONPath := filepath.Join(folderPath, `pack.json`)
-
-	packExists := utils.FileExists(packJSONPath)
-	if packExists {
-		if !overwrite {
-			err = errors.New("a pack.json already exists and overwrite is not enabled")
-			log.WithError(err).WithField("path", folderPath).Error("a pack.json already exists")
-			return
-		} else {
-			log.WithField("path", folderPath).Warn("Overwriting pack.json")
-		}
-	}
-
-	if options.Name == "" {
-		err = errors.New("name field can not be empty")
-		log.WithError(err).Error("invalid pack info")
-		return
-	}
-
-	if options.Version == "" {
-		err = errors.New("version field can not be empty")
-		log.WithError(err).Error("invalid pack info")
-		return
-	}
-
-	pack := structures.Package{
-		Name:           options.Name,
-		ID:             GenPackID(),
-		Author:         options.Author,
-		Version:        options.Version,
-		Keywords:       options.Keywords,
-		KeywordsRaw:    strings.Join(options.Keywords, ","),
-		Allow3rdParty:  options.Allow3rdParty,
-		ColorOverrides: options.ColorOverides,
-	}
-
-	packJSONBytes, err := json.MarshalIndent(&pack, "", "\t")
-	if err != nil {
-		log.WithError(err).WithField("path", folderPath).WithField("packJSONPath", packJSONPath).Error("can't create pack.json")
-		return
-	}
-
-	err = os.WriteFile(packJSONPath, packJSONBytes, 0644)
-	if err != nil {
-		log.WithError(err).WithField("path", folderPath).WithField("packJSONPath", packJSONPath).Error("can't write pack.json")
-		return
-	}
-	return
-}
-
-// NewPackerFromFolder builds a new Packer from a folder with a valid pack.json
-func NewPackerFromFolder(log logrus.FieldLogger, folderPath string) (p *Packer, err error) {
-	folderPath, err = filepath.Abs(folderPath)
-	if err != nil {
-		return
-	}
-
-	dirExists := utils.DirExists(folderPath)
-	if !dirExists {
-		err = errors.New("directory does not exists")
-		log.WithError(err).WithField("path", folderPath).Error("can't package a non existent folder")
-		return
-	}
-
-	packJSONPath := filepath.Join(folderPath, `pack.json`)
+func (p *Package) ReadUnpackedPackJson(dirPath string) error {
+	packJSONPath := filepath.Join(dirPath, `pack.json`)
 
 	packExists := utils.FileExists(packJSONPath)
 	if !packExists {
-		err = errors.New("no pack.json in directory, generate one first.")
-		log.WithError(err).WithField("path", folderPath).Error("can't package without a pack.json")
-		return
+		err := fmt.Errorf("no pack.json in directory %s, generate one first.", dirPath)
+		p.log.WithError(err).
+			WithField("path", dirPath).
+			Error("can't package without a pack.json")
+		return errors.Join(err, MissingPackJsonError, errors.New("can't package without a pack.json"))
 	}
 
 	packJSONBytes, err := os.ReadFile(packJSONPath)
 	if err != nil {
-		log.WithError(err).WithField("path", folderPath).WithField("packJSONPath", packJSONPath).Error("can't read pack.json")
-		return
+		p.log.WithError(err).
+			WithField("path", dirPath).
+			WithField("packJSONPath", packJSONPath).
+			Error("can't read pack.json")
+		return errors.Join(err, PackJsonReadError)
 	}
 
-	var pack structures.Package
+	var pack structures.PackageInfo
 
 	err = json.Unmarshal(packJSONBytes, &pack)
 	if err != nil {
-		log.WithError(err).WithField("path", folderPath).WithField("packJSONPath", packJSONPath).Error("can't parse pack.json")
-		return
+		p.log.WithError(err).
+			WithField("path", dirPath).
+			WithField("packJSONPath", packJSONPath).
+			Error("can't parse pack.json")
+		return errors.Join(err, InvalidPackJsonError)
 	}
+
 	pack.Keywords = strings.Split(pack.KeywordsRaw, ",")
 
 	if pack.Name == "" {
 		err = errors.New("pack.json's name field can not be empty")
-		log.WithError(err).WithField("path", folderPath).WithField("packJSONPath", packJSONPath).Error("invalid pack.json")
-		return
+		p.log.WithError(err).
+			WithField("path", dirPath).
+			WithField("packJSONPath", packJSONPath).
+			Error("invalid pack.json")
+		return errors.Join(InvalidPackJsonError, err)
 	}
 
 	if pack.ID == "" {
 		err = errors.New("pack.json's id field can not be empty")
-		log.WithError(err).WithField("path", folderPath).WithField("packJSONPath", packJSONPath).Error("invalid pack.json")
-		return
+		p.log.WithError(err).
+			WithField("path", dirPath).
+			WithField("packJSONPath", packJSONPath).
+			Error("invalid pack.json")
+		return errors.Join(InvalidPackJsonError, err)
 	}
 
-	p = NewPacker(log.WithField("path", folderPath).WithField("id", pack.ID).WithField("name", pack.Name), pack.Name, pack.ID, folderPath)
-	return
-}
+	p.Info = pack
+	p.id = pack.ID
+	p.name = pack.Name
 
-// NewPacker makes a new Packer, it does no validation so the subsequent pack operations may fail badly
-func NewPacker(log logrus.FieldLogger, name string, id string, path string) *Packer {
-	return &Packer{
-		log:       log,
-		name:      name,
-		id:        id,
-		path:      path,
-		ValidExts: DefaultValidExt(),
-	}
+	return nil
 }
 
 // PackPackage packs up a directory into a .dungeondraft_pack file
 // assumes BuildFileList has been called first
-func (p *Packer) PackPackage(outDir string) (err error) {
+func (p *Package) PackPackage(outDir string, options PackOptions) (err error) {
+	p.SetPackOptions(options)
+
 	outDirPath, err := filepath.Abs(outDir)
 	if err != nil {
 		return
@@ -224,7 +108,7 @@ func (p *Packer) PackPackage(outDir string) (err error) {
 
 	packageExists := utils.FileExists(outPackagePath)
 	if packageExists {
-		if p.Overwrite {
+		if p.packOptions.Overwrite {
 			l.Warn("overwriting file")
 		} else {
 			err = errors.New("file exists")
@@ -233,6 +117,8 @@ func (p *Packer) PackPackage(outDir string) (err error) {
 		}
 	}
 
+	p.packedPath = outPackagePath
+
 	l.Debug("writing package")
 	var out *os.File
 	out, err = os.Create(outPackagePath)
@@ -240,7 +126,7 @@ func (p *Packer) PackPackage(outDir string) (err error) {
 		l.WithError(err).Error("can not open package file for writing")
 		return
 	}
-	err = p.write(l, out)
+	err = p.writePackage(l, out)
 	if err != nil {
 		l.WithError(err).Error("failed to write package file")
 		return
@@ -263,7 +149,9 @@ type NewFileInfoOptions struct {
 	Size    *int64
 }
 
-func (p *Packer) NewFileInfo(options NewFileInfoOptions) (*structures.FileInfo, error) {
+func (p *Package) NewFileInfo(options NewFileInfoOptions) (*structures.FileInfo, error) {
+	utils.AssertTrue(p.unpackedPath != "", "empty unpacked path")
+
 	if options.Size == nil {
 		fileInfo, err := os.Stat(options.Path)
 		if err != nil {
@@ -274,7 +162,7 @@ func (p *Packer) NewFileInfo(options NewFileInfoOptions) (*structures.FileInfo, 
 	}
 
 	l := p.log.WithField("filePath", options.Path)
-	relPath, err := filepath.Rel(p.path, options.Path)
+	relPath, err := filepath.Rel(p.unpackedPath, options.Path)
 	if err != nil {
 		l.Error("can not get path relative to package root")
 		return nil, err
@@ -305,7 +193,7 @@ func (p *Packer) NewFileInfo(options NewFileInfoOptions) (*structures.FileInfo, 
 
 	if ddimage.PathIsSupportedImage(options.Path) {
 
-		thumbnailDir := filepath.Join(p.path, "thumbnails")
+		thumbnailDir := filepath.Join(p.unpackedPath, "thumbnails")
 		hash := md5.Sum([]byte(*options.ResPath))
 		thumbnailName := hex.EncodeToString(hash[:]) + ".png"
 		thumbnailPath := filepath.Join(thumbnailDir, thumbnailName)
@@ -343,10 +231,12 @@ func (p *Packer) NewFileInfo(options NewFileInfoOptions) (*structures.FileInfo, 
 }
 
 // BuildFileList builds a list of files at the target directory for inclusion in a .dungeondraft_pack file
-func (p *Packer) BuildFileList() (err error) {
+func (p *Package) BuildFileList() (err error) {
+	utils.AssertTrue(p.unpackedPath != "", "empty unpacked path")
+
 	p.log.Debug("beginning directory traversal to collect file list")
 
-	err = filepath.Walk(p.path, p.fileListWalkFunc)
+	err = filepath.Walk(p.unpackedPath, p.fileListWalkFunc)
 	if err != nil {
 		p.log.WithError(err).Error("failed to walk directory")
 		return
@@ -354,7 +244,7 @@ func (p *Packer) BuildFileList() (err error) {
 
 	// inject <GUID>.json
 
-	packJSONPath := filepath.Join(p.path, `pack.json`)
+	packJSONPath := filepath.Join(p.unpackedPath, `pack.json`)
 
 	packJSONName := fmt.Sprintf(`%s.json`, p.id)
 	packJSONResPath := "res://packs/" + packJSONName
@@ -376,8 +266,9 @@ func (p *Packer) BuildFileList() (err error) {
 	return
 }
 
-func (p *Packer) makeResPath(l logrus.FieldLogger, path string) (string, error) {
-	relPath, err := filepath.Rel(p.path, path)
+func (p *Package) makeResPath(l logrus.FieldLogger, path string) (string, error) {
+	utils.AssertTrue(p.unpackedPath != "", "empty unpacked path")
+	relPath, err := filepath.Rel(p.unpackedPath, path)
 	if err != nil {
 		l.Error("can not get path relative to package root")
 		return "", err
@@ -392,7 +283,7 @@ func (p *Packer) makeResPath(l logrus.FieldLogger, path string) (string, error) 
 	return resPath, nil
 }
 
-func (p *Packer) fileListWalkFunc(path string, info os.FileInfo, err error) error {
+func (p *Package) fileListWalkFunc(path string, info os.FileInfo, err error) error {
 	l := p.log.WithField("filePath", path)
 	if err != nil {
 		l.WithError(err).Error("can't access file")
@@ -403,7 +294,7 @@ func (p *Packer) fileListWalkFunc(path string, info os.FileInfo, err error) erro
 		l.Trace("is directory, descending into...")
 	} else {
 		ext := strings.ToLower(filepath.Ext(path))
-		if utils.StringInSlice(ext, p.ValidExts) {
+		if utils.StringInSlice(ext, p.packOptions.ValidExts) {
 			if info.Mode().IsRegular() {
 
 				fInfo, err := p.NewFileInfo(NewFileInfoOptions{Path: path})
@@ -416,14 +307,14 @@ func (p *Packer) fileListWalkFunc(path string, info os.FileInfo, err error) erro
 
 			}
 		} else {
-			l.WithField("ext", ext).WithField("validExts", p.ValidExts).Debug("Invalid file ext, not including.")
+			l.WithField("ext", ext).WithField("validExts", p.packOptions.ValidExts).Debug("Invalid file ext, not including.")
 		}
 	}
 
 	return nil
 }
 
-func (p *Packer) write(l logrus.FieldLogger, out io.WriteSeeker) (err error) {
+func (p *Package) writePackage(l logrus.FieldLogger, out io.WriteSeeker) (err error) {
 	headers := structures.DefaultPackageHeader()
 	headers.FileCount = uint32(len(p.FileList))
 
@@ -436,7 +327,7 @@ func (p *Packer) write(l logrus.FieldLogger, out io.WriteSeeker) (err error) {
 		return
 	}
 
-	err = fileInfoList.Write(l, out, headers.SizeOf())
+	err = fileInfoList.Write(l, out, headers.SizeOf(), p.alignment)
 	if !utils.CheckErrorWrite(l, err) {
 		return
 	}

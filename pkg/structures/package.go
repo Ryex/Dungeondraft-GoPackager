@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-// Package stores package information for the pack.json
-type Package struct {
+// PackageInfo stores package information for the pack.json
+type PackageInfo struct {
 	Name           string               `json:"name"`
 	ID             string               `json:"id"`
 	Version        string               `json:"version"`

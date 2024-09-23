@@ -3,7 +3,6 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -12,13 +11,11 @@ import (
 	treeprint "github.com/xlab/treeprint"
 
 	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
-	"github.com/ryex/dungeondraft-gopackager/pkg/unpack"
+	"github.com/ryex/dungeondraft-gopackager/pkg/ddpackage"
 )
 
 type ListCmd struct {
 	InputPath string `arg:"" type:"path" help:"the .dungeondraft_pack file to unpack"`
-
-	IgnoreJson bool `short:"J" help:"ignore and do not extract json files"`
 }
 
 func (ls *ListCmd) Run(ctx *Context) error {
@@ -33,29 +30,15 @@ func (ls *ListCmd) Run(ctx *Context) error {
 		"filename": packFileName,
 	})
 
-	unpacker := unpack.NewUnpacker(l)
+	pkg := ddpackage.NewPackage(l)
 
-	unpacker.IgnoreJson = ls.IgnoreJson
-
-	file, fileErr := os.Open(packFilePath)
-	if fileErr != nil {
-		log.WithField("path", packFilePath).WithError(fileErr).Error("could not open file for reading.")
-		return fileErr
+	file, err := pkg.LoadFromPackedPath(packFilePath)
+	if err != nil {
+		l.WithError(err).Error("failed to load package")
+		return err
 	}
 
 	defer file.Close()
-
-	err := unpacker.ReadPackageFilelist(file)
-	if err != nil {
-		log.WithError(err).Error("failed to read file list")
-		return err
-	}
-
-	err = unpacker.ReadPackJson(file)
-	if err != nil {
-		log.WithError(err).Error("failed to read pack json")
-		return err
-	}
 
 	tree := treeprint.New()
 	branchMap := make(map[string]treeprint.Tree)
@@ -90,9 +73,9 @@ func (ls *ListCmd) Run(ctx *Context) error {
 			return branchMap[path]
 		}
 	}
-	for i := 0; i < len(unpacker.FileList); i++ {
-		packedFile := &unpacker.FileList[i]
-		path := unpacker.NormalizeResourcePath(packedFile.ResPath)
+	for i := 0; i < len(pkg.FileList); i++ {
+		packedFile := &pkg.FileList[i]
+		path := pkg.NormalizeResourcePath(packedFile.ResPath)
 		l.WithField("res", packedFile.ResPath).
 			WithField("size", packedFile.Size).
 			WithField("index", i).

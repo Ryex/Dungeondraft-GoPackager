@@ -1,4 +1,4 @@
-package pack
+package ddpackage
 
 import (
 	"errors"
@@ -12,8 +12,9 @@ import (
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddimage"
 )
 
-func (p *Packer) GenerateThumbnails() error {
-	thumbnailDir := filepath.Join(p.path, "thumbnails")
+func (p *Package) GenerateThumbnails() error {
+	utils.AssertTrue(p.unpackedPath != "", "empty unpacked path")
+	thumbnailDir := filepath.Join(p.unpackedPath, "thumbnails")
 
 	if dirExists := utils.DirExists(thumbnailDir); !dirExists {
 		err := os.MkdirAll(thumbnailDir, 0777)

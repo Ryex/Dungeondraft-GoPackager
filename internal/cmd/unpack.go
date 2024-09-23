@@ -7,7 +7,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/ryex/dungeondraft-gopackager/pkg/unpack"
+	"github.com/ryex/dungeondraft-gopackager/pkg/ddpackage"
 )
 
 type UnpackCmd struct {
@@ -16,7 +16,6 @@ type UnpackCmd struct {
 
 	Overwrite   bool `short:"O" help:"overwrite output files at destination"`
 	RipTextures bool `short:"R" help:"convert .tex files in the package to normal image formats (probably never needed)" `
-	IgnoreJson  bool `short:"J" help:"ignore and do not extract json files"`
 	Thumbnails  bool `short:"T" help:"don't ignore resource thumbnails"`
 }
 
@@ -38,12 +37,8 @@ func (uc *UnpackCmd) Run(ctx *Context) error {
 		"outPath":  outDirPath,
 	})
 
-	unpacker := unpack.NewUnpacker(l)
+	pkg := ddpackage.NewPackage(l)
 
-	unpacker.Overwrite = uc.Overwrite
-	unpacker.RipTextures = uc.RipTextures
-	unpacker.IgnoreJson = uc.IgnoreJson
-	unpacker.Thumbnails = uc.Thumbnails
 
 	file, fileErr := os.Open(packFilePath)
 	if fileErr != nil {
@@ -53,7 +48,11 @@ func (uc *UnpackCmd) Run(ctx *Context) error {
 
 	defer file.Close()
 
-	err := unpacker.ExtractPackage(file, outDirPath)
+	err := pkg.ExtractPackage(file, outDirPath, ddpackage.UnpackOptions{
+		Overwrite: uc.Overwrite,
+		RipTextures: uc.RipTextures,
+		Thumbnails: uc.Thumbnails,
+	})
 	if err != nil {
 		l.WithError(err).Error("failed to extract package")
 		return err

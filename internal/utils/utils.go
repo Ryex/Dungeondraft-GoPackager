@@ -4,10 +4,18 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"io"
 	"os"
 
 	"github.com/sirupsen/logrus"
 )
+
+func AssertTrue(condition bool, msg string) {
+	if condition {
+		return
+	}
+	logrus.Fatalf("assertion failure: %s", msg)
+}
 
 // FileExists tests if a file  exists and is not a Directory
 func FileExists(filename string) bool {
@@ -29,7 +37,6 @@ func DirExists(filename string) bool {
 
 // RipTexture detects and pulls image data from texture bytes
 func RipTexture(data []byte) (fileExt string, fileData []byte, err error) {
-
 	// webp
 	start := bytes.Index(data, []byte{0x52, 0x49, 0x46, 0x46})
 	if start >= 0 {
@@ -113,5 +120,33 @@ func CheckErrorSeek(log logrus.FieldLogger, err error) bool {
 		return false
 	}
 	return true
+}
 
+func Tell(r io.Seeker) (int64, error) {
+	curPos, err := r.Seek(0, io.SeekCurrent) // tell
+	return curPos, err
+}
+
+func Align(n int64, alignment int) int64 {
+	if alignment == 0 {
+		return n
+	}
+
+	var rest int64 = n % int64(alignment)
+	if rest == 0 {
+		return n
+	} else {
+		return n + (int64(alignment) - rest)
+	}
+}
+
+func Pad(out io.Writer, bytes int64) error {
+	for i := int64(0); i < bytes; i++ {
+		var b byte = 0
+		err := binary.Write(out, binary.LittleEndian, b)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
