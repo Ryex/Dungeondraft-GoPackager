@@ -1,0 +1,18 @@
+baseURL: https://example.org/
+languageCode: en-us
+title: Dungeondraft GoPackager
+theme: ["PaperMod"]
+
+params:
+  profileMode:
+    enabled: true
+    subtitle: "Package and edit Dungeondraft resource packs"
+    # imageUrl: "<image link>" # optional
+    # imageTitle: "<title of image as alt>" # optional
+    imageWidth: 120 # custom size
+    imageHeight: 120 # custom size
+    buttons:
+      - name: Github
+        url: "https://github.com/Ryex/Dungeondraft-GoPackager"
+      - name: Download
+        url: https://github.com/Ryex/Dungeondraft-GoPackager/releases
