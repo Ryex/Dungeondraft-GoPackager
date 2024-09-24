@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -117,7 +118,7 @@ func (p *Package) PackPackage(outDir string, options PackOptions) (err error) {
 		}
 	}
 
-	p.packedPath = outPackagePath
+	p.PackedPath = outPackagePath
 
 	l.Debug("writing package")
 	var out *os.File
@@ -150,7 +151,7 @@ type NewFileInfoOptions struct {
 }
 
 func (p *Package) NewFileInfo(options NewFileInfoOptions) (*structures.FileInfo, error) {
-	utils.AssertTrue(p.unpackedPath != "", "empty unpacked path")
+	utils.AssertTrue(p.UnpackedPath != "", "empty unpacked path")
 
 	if options.Size == nil {
 		fileInfo, err := os.Stat(options.Path)
@@ -158,17 +159,19 @@ func (p *Package) NewFileInfo(options NewFileInfoOptions) (*structures.FileInfo,
 			p.log.WithError(err).Errorf("can't stat %s", options.Path)
 			return nil, err
 		}
+		options.Size = new(int64)
 		*options.Size = fileInfo.Size()
 	}
 
 	l := p.log.WithField("filePath", options.Path)
-	relPath, err := filepath.Rel(p.unpackedPath, options.Path)
+	relPath, err := filepath.Rel(p.UnpackedPath, options.Path)
 	if err != nil {
 		l.Error("can not get path relative to package root")
 		return nil, err
 	}
 
 	if options.ResPath == nil {
+		options.ResPath = new(string)
 		*options.ResPath = fmt.Sprintf("res://packs/%s/%s", p.id, relPath)
 
 		if runtime.GOOS == "windows" { // windows path separators.....
@@ -177,6 +180,7 @@ func (p *Package) NewFileInfo(options NewFileInfoOptions) (*structures.FileInfo,
 	}
 
 	if options.RelPath == nil {
+		options.RelPath = new(string)
 		if runtime.GOOS == "windows" { // windows path separators.....
 			relPath = strings.ReplaceAll(relPath, "\\", "/")
 		}
@@ -193,7 +197,7 @@ func (p *Package) NewFileInfo(options NewFileInfoOptions) (*structures.FileInfo,
 
 	if ddimage.PathIsSupportedImage(options.Path) {
 
-		thumbnailDir := filepath.Join(p.unpackedPath, "thumbnails")
+		thumbnailDir := filepath.Join(p.UnpackedPath, "thumbnails")
 		hash := md5.Sum([]byte(*options.ResPath))
 		thumbnailName := hex.EncodeToString(hash[:]) + ".png"
 		thumbnailPath := filepath.Join(thumbnailDir, thumbnailName)
@@ -231,12 +235,46 @@ func (p *Package) NewFileInfo(options NewFileInfoOptions) (*structures.FileInfo,
 }
 
 // BuildFileList builds a list of files at the target directory for inclusion in a .dungeondraft_pack file
-func (p *Package) BuildFileList() (err error) {
-	utils.AssertTrue(p.unpackedPath != "", "empty unpacked path")
+func (p *Package) BuildFileList(progressCallbacks ...func(path string)) (err error) {
+	utils.AssertTrue(p.UnpackedPath != "", "empty unpacked path")
 
 	p.log.Debug("beginning directory traversal to collect file list")
 
-	err = filepath.Walk(p.unpackedPath, p.fileListWalkFunc)
+	walkFunc := func(path string, dir fs.DirEntry, err error) error {
+		l := p.log.WithField("filePath", path)
+		if err != nil {
+			l.WithError(err).Error("can't access file")
+			return err
+		}
+
+		if dir.IsDir() {
+			l.Trace("is directory, descending into...")
+		} else {
+			ext := strings.ToLower(filepath.Ext(path))
+			if utils.InSlice(ext, p.packOptions.ValidExts) {
+				if dir.Type().IsRegular() {
+
+					fInfo, err := p.NewFileInfo(NewFileInfoOptions{Path: path})
+					if err != nil {
+						return err
+					}
+
+					l.Info("including")
+					p.FileList = append(p.FileList, *fInfo)
+
+					for _, pcb := range progressCallbacks {
+						pcb(path)
+					}
+				}
+			} else {
+				l.WithField("ext", ext).WithField("validExts", p.packOptions.ValidExts).Debug("Invalid file ext, not including.")
+			}
+		}
+
+		return nil
+	}
+
+	err = filepath.WalkDir(p.UnpackedPath, walkFunc)
 	if err != nil {
 		p.log.WithError(err).Error("failed to walk directory")
 		return
@@ -244,7 +282,7 @@ func (p *Package) BuildFileList() (err error) {
 
 	// inject <GUID>.json
 
-	packJSONPath := filepath.Join(p.unpackedPath, `pack.json`)
+	packJSONPath := filepath.Join(p.UnpackedPath, `pack.json`)
 
 	packJSONName := fmt.Sprintf(`%s.json`, p.id)
 	packJSONResPath := "res://packs/" + packJSONName
@@ -267,8 +305,8 @@ func (p *Package) BuildFileList() (err error) {
 }
 
 func (p *Package) makeResPath(l logrus.FieldLogger, path string) (string, error) {
-	utils.AssertTrue(p.unpackedPath != "", "empty unpacked path")
-	relPath, err := filepath.Rel(p.unpackedPath, path)
+	utils.AssertTrue(p.UnpackedPath != "", "empty unpacked path")
+	relPath, err := filepath.Rel(p.UnpackedPath, path)
 	if err != nil {
 		l.Error("can not get path relative to package root")
 		return "", err
@@ -281,37 +319,6 @@ func (p *Package) makeResPath(l logrus.FieldLogger, path string) (string, error)
 	}
 
 	return resPath, nil
-}
-
-func (p *Package) fileListWalkFunc(path string, info os.FileInfo, err error) error {
-	l := p.log.WithField("filePath", path)
-	if err != nil {
-		l.WithError(err).Error("can't access file")
-		return err
-	}
-
-	if info.IsDir() {
-		l.Trace("is directory, descending into...")
-	} else {
-		ext := strings.ToLower(filepath.Ext(path))
-		if utils.StringInSlice(ext, p.packOptions.ValidExts) {
-			if info.Mode().IsRegular() {
-
-				fInfo, err := p.NewFileInfo(NewFileInfoOptions{Path: path})
-				if err != nil {
-					return err
-				}
-
-				l.Info("including")
-				p.FileList = append(p.FileList, *fInfo)
-
-			}
-		} else {
-			l.WithField("ext", ext).WithField("validExts", p.packOptions.ValidExts).Debug("Invalid file ext, not including.")
-		}
-	}
-
-	return nil
 }
 
 func (p *Package) writePackage(l logrus.FieldLogger, out io.WriteSeeker) (err error) {

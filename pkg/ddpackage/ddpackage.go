@@ -28,11 +28,19 @@ type Package struct {
 	id            string
 	unpackOptions *UnpackOptions
 	packOptions   *PackOptions
-	unpackedPath  string
-	packedPath    string
+	UnpackedPath  string
+	PackedPath    string
 	alignment     int
 	FileList      []structures.FileInfo
 	Info          structures.PackageInfo
+}
+
+func (p *Package) Id() string {
+	return p.id
+}
+
+func (p *Package) Name() string {
+	return p.name
 }
 
 func NewPackage(log logrus.FieldLogger) *Package {
@@ -85,15 +93,19 @@ func (p *Package) LoadFromPackedPath(path string) (*os.File, error) {
 		return nil, errors.Join(fileErr, errors.New("could not open package file for reading"))
 	}
 
-	p.packedPath = packFilePath
+	p.SetUnpackOptions(UnpackOptions{})
+
+	p.PackedPath = packFilePath
 	err := p.ReadPackageFilelist(file)
 	if err != nil {
 		p.log.WithError(err).Error("failed to read file list")
+		file.Close()
 		return nil, errors.Join(err, errors.New("failed to read file list"))
 	}
 	err = p.ReadPackedPackJson(file)
 	if err != nil {
 		p.log.WithError(err).Error("failed to read pack json")
+		file.Close()
 		return nil, errors.Join(err, errors.New("failed to read pack json"))
 	}
 
@@ -121,7 +133,9 @@ func (p *Package) LoadUnpackedFromFolder(dirPath string) error {
 		return err
 	}
 
-	p.unpackedPath = dirPath
+	p.SetPackOptions(PackOptions{})
+
+	p.UnpackedPath = dirPath
 
 	return nil
 }

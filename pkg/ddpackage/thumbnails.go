@@ -13,8 +13,8 @@ import (
 )
 
 func (p *Package) GenerateThumbnails() error {
-	utils.AssertTrue(p.unpackedPath != "", "empty unpacked path")
-	thumbnailDir := filepath.Join(p.unpackedPath, "thumbnails")
+	utils.AssertTrue(p.UnpackedPath != "", "empty unpacked path")
+	thumbnailDir := filepath.Join(p.UnpackedPath, "thumbnails")
 
 	if dirExists := utils.DirExists(thumbnailDir); !dirExists {
 		err := os.MkdirAll(thumbnailDir, 0777)

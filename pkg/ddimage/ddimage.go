@@ -37,6 +37,11 @@ func PngImageBytes(img image.Image, buf *bytes.Buffer) (err error) {
 	return
 }
 
+func BytesToImage(byts []byte) (image.Image, error) {
+	img, _, err := image.Decode(bytes.NewReader(byts))
+	return img, err
+}
+
 func ResizeVirticalAndCropWidth(img image.Image, height int, width int) image.Image {
 	resized := imgconv.Resize(img, &imgconv.ResizeOption{Width: 0, Height: height})
 	resizedWidth := resized.Bounds().Dx()
@@ -50,7 +55,7 @@ func ResizeVirticalAndCropWidth(img image.Image, height int, width int) image.Im
 
 func PathIsSupportedImage(path string) bool {
 	ext := strings.ToLower(filepath.Ext(path))
-	return utils.StringInSlice(ext, []string{
+	return utils.InSlice(ext, []string{
 		".jpg", ".jpeg", ".png", ".webp", ".gif", ".tif", ".tiff", ".bmp",
 	})
 }

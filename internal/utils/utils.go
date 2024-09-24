@@ -1,11 +1,13 @@
 package utils
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/binary"
 	"errors"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 )
@@ -15,6 +17,14 @@ func AssertTrue(condition bool, msg string) {
 		return
 	}
 	logrus.Fatalf("assertion failure: %s", msg)
+}
+
+func MapKeys[K comparable, V any](m map[K]V) []K {
+	keys := make([]K, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 // FileExists tests if a file  exists and is not a Directory
@@ -33,6 +43,26 @@ func DirExists(filename string) bool {
 		return false
 	}
 	return info.IsDir()
+}
+
+func ReadFile(path string) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	stat, err := file.Stat()
+	if err != nil {
+		return nil, err
+	}
+
+	bs := make([]byte, stat.Size())
+	_, err = bufio.NewReader(file).Read(bs)
+	if err != nil && err != io.EOF {
+		return nil, err
+	}
+	return bs, nil
 }
 
 // RipTexture detects and pulls image data from texture bytes
@@ -80,14 +110,19 @@ func RipTexture(data []byte) (fileExt string, fileData []byte, err error) {
 	return
 }
 
-// StringInSlice tests inclusion of a string in a slice
-func StringInSlice(a string, list []string) bool {
-	for _, b := range list {
-		if b == a {
+// InSlice tests inclusion of a string in a slice
+func InSlice[T comparable](a T, list []T) bool {
+	for i := 0; i < len(list); i++ {
+		if list[i] == a {
 			return true
 		}
 	}
 	return false
+}
+
+func SplitOne(s string, sep string) (string, string) {
+	x := strings.SplitN(s, sep, 1)
+	return x[0], x[1]
 }
 
 // CheckErrorRead checks and logs a read error
