@@ -1,0 +1,9 @@
+
+Website = "https://ryex.github.io/Dungeondraft-GoPackager/"
+
+[Details]
+# Icon = "Icon.png"
+Name = "Dungeondraft GoPackager"
+ID = "io.github.ryex.dungondraft-gopackager"
+Version = "0.1.0"
+Build = 1
