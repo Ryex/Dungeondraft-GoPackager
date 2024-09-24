@@ -20,15 +20,15 @@ import (
 )
 
 // ExtractPackage extracts the package contents to the filesystem
-func (p *Package) ExtractPackage(r io.ReadSeeker, outDir string, options UnpackOptions) (err error) {
+func (p *Package) ExtractPackage(r io.ReadSeeker, outDir string, options UnpackOptions, progressCallbacks ...func(p int, t int)) (err error) {
 	p.SetUnpackOptions(options)
-	p.unpackedPath = outDir
+	p.UnpackedPath = outDir
 	err = p.ReadPackageFilelist(r)
 	if err != nil {
 		return
 	}
 
-	err = p.ExtractFilelist(r, outDir)
+	err = p.ExtractFilelist(r, outDir, progressCallbacks...)
 
 	return
 }
@@ -59,7 +59,7 @@ func (p *Package) MapResourcePaths() {
 }
 
 // ExtractFilelist takes a slice of FileInfo and extracts the files from the package at the reader
-func (p *Package) ExtractFilelist(r io.ReadSeeker, outDir string) (err error) {
+func (p *Package) ExtractFilelist(r io.ReadSeeker, outDir string, progressCallbacks ...func(p int, t int)) (err error) {
 	outDirPath, err := filepath.Abs(outDir)
 	if err != nil {
 		return
@@ -119,7 +119,7 @@ func (p *Package) ExtractFilelist(r io.ReadSeeker, outDir string) (err error) {
 
 		if fileExt == ".tex" && !p.unpackOptions.RipTextures {
 			continue
-		} 
+		}
 
 		l := p.log.
 			WithField("packedPath", packedFile.ResPath).
@@ -136,6 +136,10 @@ func (p *Package) ExtractFilelist(r io.ReadSeeker, outDir string) (err error) {
 			return err
 		}
 		extractedPaths[packedFile.Path] = packedFile.ResPath
+
+		for _, pcb := range progressCallbacks {
+			pcb(i + 1, len(p.FileList))
+		}
 	}
 
 	p.log.Info("unpacking complete")
@@ -293,7 +297,16 @@ func (p *Package) ReadPackedPackJson(r io.ReadSeeker) (err error) {
 	p.id = p.Info.ID
 	p.name = p.Info.Name
 
+	p.updateInfoRelPath()
+
 	return nil
+}
+
+func (p *Package) updateInfoRelPath() {
+	for i := 0; i < len(p.FileList); i++ {
+		info := &p.FileList[i]
+		info.RelPath = strings.TrimPrefix(strings.TrimPrefix(info.ResPath, "res://packs/"), p.id+"/")
+	}
 }
 
 func (p *Package) checkedRead(r io.Reader, data any) error {
@@ -429,7 +442,7 @@ func (p *Package) ReadPackageHeaders(r io.ReadSeeker) (headers structures.Packag
 	return
 }
 
-func (p *Package) newFileInfo(resPath []byte, infoBytes structures.FileInfoBytes) structures.FileInfo {
+func (p *Package) newFileInfoPacked(resPath []byte, infoBytes structures.FileInfoBytes) structures.FileInfo {
 	info := structures.FileInfo{
 		ResPath:     string(resPath),
 		ResPathSize: int32(len(resPath)),
@@ -484,7 +497,7 @@ func (p *Package) getFileList(r io.ReadSeeker) (err error) {
 			return
 		}
 
-		info := p.newFileInfo(pathBytes, infoBytes)
+		info := p.newFileInfoPacked(pathBytes, infoBytes)
 
 		p.log.
 			WithField("info", info).

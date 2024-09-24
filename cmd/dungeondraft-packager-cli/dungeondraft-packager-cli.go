@@ -20,7 +20,7 @@ var CLI struct {
 
 func main() {
 	ctx := kong.Parse(&CLI,
-		kong.Name("dungeondraft-packager"),
+		kong.Name("dungeondraft-packager-cli"),
 		kong.Description("Pack, Unpack, Edit, and Prepare resources for .dungeondraft_pack files"),
 		kong.UsageOnError(),
 		kong.ConfigureHelp(

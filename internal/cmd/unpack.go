@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/schollz/progressbar/v3"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddpackage"
@@ -48,10 +49,16 @@ func (uc *UnpackCmd) Run(ctx *Context) error {
 
 	defer file.Close()
 
+	var bar *progressbar.ProgressBar 	
 	err := pkg.ExtractPackage(file, outDirPath, ddpackage.UnpackOptions{
 		Overwrite: uc.Overwrite,
 		RipTextures: uc.RipTextures,
 		Thumbnails: uc.Thumbnails,
+	}, func(p, t int) {
+			if bar == nil {
+				bar = progressbar.Default(int64(t))
+			}
+			bar.Set(p)
 	})
 	if err != nil {
 		l.WithError(err).Error("failed to extract package")
