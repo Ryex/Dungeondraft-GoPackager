@@ -101,7 +101,7 @@ func (fil *FileInfoList) UpdateOffsets(offset int64, alignment int) {
 }
 
 // Write out headers and file contents to io
-func (fil *FileInfoList) Write(log logrus.FieldLogger, out io.WriteSeeker, offset int64, alignment int) (err error) {
+func (fil *FileInfoList) Write(log logrus.FieldLogger, out io.WriteSeeker, offset int64, alignment int, progressCallbacks ...func(p float64)) (err error) {
 	log.Debug("updating offsets...")
 	fil.UpdateOffsets(fil.Size+offset, alignment)
 
@@ -111,7 +111,7 @@ func (fil *FileInfoList) Write(log logrus.FieldLogger, out io.WriteSeeker, offse
 		return
 	}
 
-	err = fil.WriteFiles(log, out, alignment)
+	err = fil.WriteFiles(log, out, alignment, progressCallbacks...)
 
 	return
 }
@@ -157,7 +157,7 @@ func (fil *FileInfoList) WriteHeaders(log logrus.FieldLogger, out io.WriteSeeker
 var AlignmentError = errors.New("alignment error")
 
 // WriteFiles write the contents of the files in the list to io
-func (fil *FileInfoList) WriteFiles(log logrus.FieldLogger, out io.WriteSeeker, alignment int) error {
+func (fil *FileInfoList) WriteFiles(log logrus.FieldLogger, out io.WriteSeeker, alignment int, progressCallbacks ...func(p float64)) error {
 	log.Debug("writing file data")
 	for i := 0; i < len(fil.FileList); i++ {
 		pair := &fil.FileList[i]
@@ -186,6 +186,10 @@ func (fil *FileInfoList) WriteFiles(log logrus.FieldLogger, out io.WriteSeeker, 
 		err = utils.Pad(out, offset-curPos)
 		if err != nil {
 			return err
+		}
+
+		for _, pcb := range progressCallbacks {
+			pcb(float64(i+1) / float64(len(fil.FileList)))
 		}
 	}
 

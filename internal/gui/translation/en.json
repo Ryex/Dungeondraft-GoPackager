@@ -28,5 +28,12 @@
   "pack.tree.label": "Resources",
   "pack.preview.defaultText": "Select a resource",
   "pack.preview.label": "Path: {{.Path}}",
-  "pack.refreshBtn.text": "Refresh"
+  "pack.refreshBtn.text": "Refresh",
+  "pack.outPath.placeholder": "Where to save .dungeondraft_pack file",
+  "pack.packBtn.text": "Package",
+  "pack.packageProgressDlg.title": "Packing to {{.Path}}",
+  "pack.thumbnails.error.text": "Error generating thumbnails for {{.Path}}",
+  "pack.package.error.text": "Error packing {{.Path}} to {{.Pack}}",
+  "pack.success.dlg.title": "Packaging successful",
+  "pack.success.dlg.text": "{{.Pth}} Packaged to {{.Pack}} successfully"
 }
