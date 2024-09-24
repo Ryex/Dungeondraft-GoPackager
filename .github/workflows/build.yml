@@ -47,7 +47,7 @@ jobs:
         run: go mod download
       - name: Build gui
         run: |
-          fyne package -src ./cmd/dungeondraft-packager -release
+          fyne package -src ./cmd/dungeondraft-packager -appID io.github.ryex.dungondraft-gopackager
       - name: Build cli
         run: |
           go build -ldflags "-s -w" ./cmd/dungeondraft-packager-cli
