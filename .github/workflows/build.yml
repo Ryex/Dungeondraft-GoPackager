@@ -15,10 +15,9 @@ jobs:
           - os: linux
           - os: windows
             ext: .exe
-            args: -app-id io.github.ryex.dungondraft-gopackager
+            host: windows-latest
           - os: darwin
             host: macos-latest
-            args: -app-id io.github.ryex.dungondraft-gopackager
     steps:
       - name: Setup Go environment
         id: setup-go
@@ -37,25 +36,15 @@ jobs:
             ~/.cache/go-build
             ~/.cache/fyne-cross
           key: ${{ runner.os }}-build-cache-${{ hashFiles('**/go.sum') }}
-      - name: Install Fyne-cross
-        run: go install github.com/fyne-io/fyne-cross@latest
       - name: Install Fyne
         run: go install fyne.io/fyne/v2/cmd/fyne@latest
-      - name: Install Podman
-        if: ${{ runner.os == 'macos' }}
-        run: |
-          brew install podman
-          podman machine init
-          podman machine start
       - name: install go deps
         run: go mod download
       - name: Build gui
         run: |
-          fyne-cross \
-            ${{ matrix.target.os }} \
+          fyne package \
             ${{ matrix.target.args }} \
-            -dir ./cmd/dungeondraft-packager \
-            -name dungeondraft-packager${{ matrix.target.ext }}
+            --src ./cmd/dungeondraft-packager
           ls -R fyne-cross
       - name: Build cli
         run: |
