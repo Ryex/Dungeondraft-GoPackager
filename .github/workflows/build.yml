@@ -36,16 +36,17 @@ jobs:
             ~/.cache/go-build
             ~/.cache/fyne-cross
           key: ${{ runner.os }}-build-cache-${{ hashFiles('**/go.sum') }}
+      - name: Install Build Deps (Linux)
+        if: ${{ runner.os == 'linux' }}
+        run: sudo apt-get install golang gcc libgl1-mesa-dev xorg-dev
       - name: Install Fyne
         run: go install fyne.io/fyne/v2/cmd/fyne@latest
       - name: install go deps
         run: go mod download
       - name: Build gui
         run: |
-          fyne package \
-            ${{ matrix.target.args }} \
-            --src ./cmd/dungeondraft-packager
-          ls -R fyne-cross
+          fyne package -src ./cmd/dungeondraft-packager
+          ls .
       - name: Build cli
         run: |
           go build ./cmd/dungeondraft-packager-cli
