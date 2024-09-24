@@ -1,0 +1,59 @@
+name: build
+on: push
+
+jobs:
+  build:
+    name: "Build Dungeondraft-GoPackager (${{ matrix.target.os }}, ${{ matrix.go-version }})"
+    runs-on: 'ubuntu-latest'
+    env:
+      GO111MODULE: on
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version: ["1.23.x"]
+        target:
+          - os: linux
+          - os: windows
+            ext: .exe
+          - os: darwin
+            args: -app-id io.github.ryex.dungondraft-gopackager
+    steps:
+      - name: Setup Go environment
+        id: setup-go
+        uses: actions/setup-go@v3
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Cache build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+            ~/.cache/fyne-cross
+          key: ${{ runner.os }}-build-cache-${{ hashFiles('**/go.sum') }}
+      - name: Install Fyne-cross
+        run: go install github.com/fyne-io/fyne-cross@latest
+      - name: Install Fyne
+        run: go install fyne.io/fyne/v2/cmd/fyne@latest
+      - name: Install Podman
+        if: ${{ runner.os == 'macos' }}
+        run: |
+          brew install podman
+          podman machine init
+          podman machine start
+      - name: Build gui
+        run: |
+          fyne-cross \
+            ${{ matrix.target.os }} \
+            ${{ matrix.target.args }} \
+            -dir ./cmd/dungeondraft-packager \
+            -name dungeondraft-packager${{ matrix.target.ext }}
+          ls -R fyne-cross
+      - name: Build cli
+        run: |
+          go build ./cmd/dungeondraft-packager-cli
+          ls .
