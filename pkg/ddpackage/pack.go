@@ -82,7 +82,7 @@ func (p *Package) ReadUnpackedPackJson(dirPath string) error {
 
 // PackPackage packs up a directory into a .dungeondraft_pack file
 // assumes BuildFileList has been called first
-func (p *Package) PackPackage(outDir string, options PackOptions) (err error) {
+func (p *Package) PackPackage(outDir string, options PackOptions, progressCallbacks ...func(p float64)) (err error) {
 	p.SetPackOptions(options)
 
 	outDirPath, err := filepath.Abs(outDir)
@@ -127,7 +127,7 @@ func (p *Package) PackPackage(outDir string, options PackOptions) (err error) {
 		l.WithError(err).Error("can not open package file for writing")
 		return
 	}
-	err = p.writePackage(l, out)
+	err = p.writePackage(l, out, progressCallbacks...)
 	if err != nil {
 		l.WithError(err).Error("failed to write package file")
 		return
@@ -321,7 +321,7 @@ func (p *Package) makeResPath(l logrus.FieldLogger, path string) (string, error)
 	return resPath, nil
 }
 
-func (p *Package) writePackage(l logrus.FieldLogger, out io.WriteSeeker) (err error) {
+func (p *Package) writePackage(l logrus.FieldLogger, out io.WriteSeeker, progressCallbacks ...func(p float64)) (err error) {
 	headers := structures.DefaultPackageHeader()
 	headers.FileCount = uint32(len(p.FileList))
 
@@ -334,7 +334,7 @@ func (p *Package) writePackage(l logrus.FieldLogger, out io.WriteSeeker) (err er
 		return
 	}
 
-	err = fileInfoList.Write(l, out, headers.SizeOf(), p.alignment)
+	err = fileInfoList.Write(l, out, headers.SizeOf(), p.alignment, progressCallbacks...)
 	if !utils.CheckErrorWrite(l, err) {
 		return
 	}

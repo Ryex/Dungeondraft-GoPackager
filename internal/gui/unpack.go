@@ -63,7 +63,6 @@ func (a *App) setPackContent(pkg *ddpackage.Package) {
 
 	tree, treeSelected, nodeMap := a.buildPackageTree()
 
-	log.Info("tree built")
 
 	leftSplit := container.New(
 		NewBottomExpandVBoxLayout(),
@@ -164,13 +163,12 @@ func (a *App) setPackContent(pkg *ddpackage.Package) {
 		rightSplit.Refresh()
 	}))
 
-	log.Info("tree slector built")
 	split := container.NewPadded(container.NewHSplit(
 		leftSplit,
 		container.NewPadded(rightSplit),
 	))
 
-	outputPath := binding.NewString()
+	outputPath := binding.BindPreferenceString("unpack.outPath", a.app.Preferences())
 
 	outEntry := widget.NewEntryWithData(outputPath)
 	outEntry.SetPlaceHolder(lang.X("unpack.outPath.placeholder", "Where to extract resources"))
@@ -240,7 +238,6 @@ func (a *App) setPackContent(pkg *ddpackage.Package) {
 		extrctBtn,
 	)
 
-	log.Info("form built")
 
 	disableButtonsListener := binding.NewDataListener(func() {
 		disable, _ := a.disableButtons.Get()
@@ -254,7 +251,6 @@ func (a *App) setPackContent(pkg *ddpackage.Package) {
 		}
 	})
 
-	log.Info("listen built")
 
 	a.setMainContent(
 		container.New(
@@ -265,7 +261,6 @@ func (a *App) setPackContent(pkg *ddpackage.Package) {
 		disableButtonsListener,
 	)
 
-	log.Info("main content set")
 
 	a.disableButtons.Set(false)
 }
@@ -357,16 +352,16 @@ func (a *App) extractPackage(path string, options ddpackage.UnpackOptions) {
 	)
 	progressDlg.Show()
 	go func() {
-		err := a.pkg.ExtractPackage(a.pkgFile, path, options, func(p, t int) {
-			progressVal.Set(float64(p) / float64(t))
+		err := a.pkg.ExtractPackage(a.pkgFile, path, options, func(p float64) {
+			progressVal.Set(p)
 		})
 		progressDlg.Hide()
 		packPath, _ := a.operatingPath.Get()
 		if err != nil {
 			errDlg := dialog.NewError(
 				errors.Join(err, errors.New(lang.X(
-					"unpack.ununpack.error.text",
-					"Error unpcking {{.Pack}} to {{.Path}}",
+					"unpack.extract.error.text",
+					"Error extracting {{.Pack}} to {{.Path}}",
 					map[string]any{
 						"Pack": packPath,
 						"Path": targetPath,

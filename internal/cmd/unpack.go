@@ -40,7 +40,6 @@ func (uc *UnpackCmd) Run(ctx *Context) error {
 
 	pkg := ddpackage.NewPackage(l)
 
-
 	file, fileErr := os.Open(packFilePath)
 	if fileErr != nil {
 		log.WithField("path", packFilePath).WithError(fileErr).Error("could not open file for reading.")
@@ -49,16 +48,13 @@ func (uc *UnpackCmd) Run(ctx *Context) error {
 
 	defer file.Close()
 
-	var bar *progressbar.ProgressBar 	
+	bar := progressbar.Default(100, "Unpacking ...")
 	err := pkg.ExtractPackage(file, outDirPath, ddpackage.UnpackOptions{
-		Overwrite: uc.Overwrite,
+		Overwrite:   uc.Overwrite,
 		RipTextures: uc.RipTextures,
-		Thumbnails: uc.Thumbnails,
-	}, func(p, t int) {
-			if bar == nil {
-				bar = progressbar.Default(int64(t))
-			}
-			bar.Set(p)
+		Thumbnails:  uc.Thumbnails,
+	}, func(p float64) {
+		bar.Set(int(p * 100))
 	})
 	if err != nil {
 		l.WithError(err).Error("failed to extract package")

@@ -20,7 +20,7 @@ import (
 )
 
 // ExtractPackage extracts the package contents to the filesystem
-func (p *Package) ExtractPackage(r io.ReadSeeker, outDir string, options UnpackOptions, progressCallbacks ...func(p int, t int)) (err error) {
+func (p *Package) ExtractPackage(r io.ReadSeeker, outDir string, options UnpackOptions, progressCallbacks ...func(p float64)) (err error) {
 	p.SetUnpackOptions(options)
 	p.UnpackedPath = outDir
 	err = p.ReadPackageFilelist(r)
@@ -59,7 +59,7 @@ func (p *Package) MapResourcePaths() {
 }
 
 // ExtractFilelist takes a slice of FileInfo and extracts the files from the package at the reader
-func (p *Package) ExtractFilelist(r io.ReadSeeker, outDir string, progressCallbacks ...func(p int, t int)) (err error) {
+func (p *Package) ExtractFilelist(r io.ReadSeeker, outDir string, progressCallbacks ...func(p float64)) (err error) {
 	outDirPath, err := filepath.Abs(outDir)
 	if err != nil {
 		return
@@ -138,7 +138,7 @@ func (p *Package) ExtractFilelist(r io.ReadSeeker, outDir string, progressCallba
 		extractedPaths[packedFile.Path] = packedFile.ResPath
 
 		for _, pcb := range progressCallbacks {
-			pcb(i + 1, len(p.FileList))
+			pcb(float64(i+1) / float64(len(p.FileList)))
 		}
 	}
 

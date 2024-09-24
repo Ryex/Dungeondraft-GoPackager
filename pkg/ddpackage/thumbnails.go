@@ -12,7 +12,7 @@ import (
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddimage"
 )
 
-func (p *Package) GenerateThumbnails() error {
+func (p *Package) GenerateThumbnails(progressCallbacks ...func(p float64)) error {
 	utils.AssertTrue(p.UnpackedPath != "", "empty unpacked path")
 	thumbnailDir := filepath.Join(p.UnpackedPath, "thumbnails")
 
@@ -31,7 +31,7 @@ func (p *Package) GenerateThumbnails() error {
 	fmt.Println(terrainPrefix)
 	fmt.Println(wallsPrefix)
 	fmt.Println(pathsPrefix)
-	for _, info := range p.FileList {
+	for i, info := range p.FileList {
 		if info.Image != nil && !strings.HasPrefix(info.ResPath, thumbnailPrefix) {
 			p.log.WithField("res", info.ResPath).Trace("generating thumbnail")
 
@@ -58,7 +58,11 @@ func (p *Package) GenerateThumbnails() error {
 					WithField("res", info.Path).
 					WithField("thumbnail", info.ThumbnailPath).
 					Error("failed to open thumbnail file for writing")
-				return err
+				return errors.Join(
+					err,
+					fmt.Errorf("failed to open thumbnail file %s for writing", info.ThumbnailPath),
+					fmt.Errorf("failed generate thumbnail for %s", info.RelPath),
+				)
 			}
 
 			err = png.Encode(file, thumbnail)
@@ -67,8 +71,16 @@ func (p *Package) GenerateThumbnails() error {
 					WithField("res", info.Path).
 					WithField("thumbnail", info.ThumbnailPath).
 					Error("failed to encode thumbnail png")
-				return err
+				return errors.Join(
+					err,
+					fmt.Errorf("failed to encode thumbnail png"),
+					fmt.Errorf("failed generate thumbnail for %s", info.RelPath),
+				)
 			}
+		}
+
+		for _, pcb := range progressCallbacks {
+			pcb(float64(i+1) / float64(len(p.FileList)))
 		}
 	}
 
