@@ -6,12 +6,13 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 <!-- insertion marker -->
-## Unreleased
+## [2.0.0+pre-1](https://github.com/Ryex/Dungeondraft-GoPackager/releases/tag/2.0.0+pre-1) - 2024-09-24
 
-<small>[Compare with latest](https://github.com/Ryex/Dungeondraft-GoPackager/compare/v1.1.0...HEAD)</small>
+<small>[Compare with v1.1.0](https://github.com/Ryex/Dungeondraft-GoPackager/compare/v1.1.0...2.0.0+pre-1)</small>
 
 ### Features
 
+- finialize packaging gui ([27210cb](https://github.com/Ryex/Dungeondraft-GoPackager/commit/27210cb576d49edeaf3793e71bca537ab3f73069) by Rachel Powers).
 - initial gui ([2f60012](https://github.com/Ryex/Dungeondraft-GoPackager/commit/2f600127f1c6918a5ef4f43554cb14d2d72d1369) by Rachel Powers).
 - start of gui ([75fdbd0](https://github.com/Ryex/Dungeondraft-GoPackager/commit/75fdbd07b88885548c9a56974a522c071bb6aa38) by Rachel Powers).
 - track image format ([8699a4a](https://github.com/Ryex/Dungeondraft-GoPackager/commit/8699a4a5321e790be87a0d713f2f9572043a873d) by Rachel Powers).
@@ -25,7 +26,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - merge command binaries, use kong for cli parsing, seperate generate command, list cmd ([fc9b8ca](https://github.com/Ryex/Dungeondraft-GoPackager/commit/fc9b8ca7ac15eaed1f291d8ff9fb0b48ca689901) by Rachel Powers).
 - update for useing with latest dungeondraft (GoDot 3.4.2) ([872512f](https://github.com/Ryex/Dungeondraft-GoPackager/commit/872512faec06d52be95b93ecef39c0a46cfe391e) by Rachel Powers).
 
-<!-- insertion marker -->
+
 
 ## [v1.1.0](https://github.com/Ryex/Dungeondraft-GoPackager/releases/tag/v1.1.0) - 2020-07-16
 
