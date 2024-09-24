@@ -4,7 +4,7 @@ on: push
 jobs:
   build:
     name: "Build Dungeondraft-GoPackager (${{ matrix.target.os }}, ${{ matrix.go-version }})"
-    runs-on: 'ubuntu-latest'
+    runs-on: ${{ matrix.target.host || 'ubuntu-latest' }}
     env:
       GO111MODULE: on
     strategy:
@@ -15,7 +15,9 @@ jobs:
           - os: linux
           - os: windows
             ext: .exe
+            args: -app-id io.github.ryex.dungondraft-gopackager
           - os: darwin
+            host: macos-latest
             args: -app-id io.github.ryex.dungondraft-gopackager
     steps:
       - name: Setup Go environment
@@ -45,6 +47,8 @@ jobs:
           brew install podman
           podman machine init
           podman machine start
+      - name: install go deps
+        run: go mod download
       - name: Build gui
         run: |
           fyne-cross \
