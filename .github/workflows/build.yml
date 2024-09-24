@@ -1,6 +1,8 @@
 name: build
 on: push
-
+permissions:
+  packages: write
+  contents: write
 jobs:
   build:
     name: "Build Dungeondraft-GoPackager (${{ matrix.target.os }}, ${{ matrix.go-version }})"
@@ -45,9 +47,18 @@ jobs:
         run: go mod download
       - name: Build gui
         run: |
-          fyne package -src ./cmd/dungeondraft-packager
-          ls .
+          fyne package -src ./cmd/dungeondraft-packager -release
       - name: Build cli
         run: |
-          go build ./cmd/dungeondraft-packager-cli
-          ls .
+          go build -ldflags "-s -w" ./cmd/dungeondraft-packager-cli
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          body_path: CHANGELOG.md
+          draft: true
+          files: |
+            dungeondraft-packager*
+            README.md
+            LICENSE.md
+            
