@@ -1,6 +1,9 @@
 package structures
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+)
 
 type Set[T comparable] struct {
 	data map[T]struct{}
@@ -13,11 +16,11 @@ func NewSet[T comparable]() *Set[T] {
 }
 
 func (s *Set[T]) AsSlice() []T {
-  res := make([]T, len(s.data))
-  for d := range s.data {
-    res = append(res, d)
-  }
-  return res
+	res := make([]T, len(s.data))
+	for d := range s.data {
+		res = append(res, d)
+	}
+	return res
 }
 
 func (s *Set[T]) Has(d T) bool {
@@ -46,6 +49,7 @@ func (s *Set[T]) AddM(list ...T) {
 		s.Add(d)
 	}
 }
+
 func (s *Set[T]) RemoveM(list ...T) {
 	for _, d := range list {
 		s.Remove(d)
@@ -99,20 +103,23 @@ func (s *Set[T]) Difference(s2 *Set[T]) *Set[T] {
 }
 
 func (s *Set[T]) UnmarshalJSON(bytes []byte) error {
-  var data []T
+	var data []T
 	err := json.Unmarshal(bytes, &data)
 	if err != nil {
-	  return err
+		return err
 	}
 	s.Clear()
 	for _, d := range data {
-	  s.Add(d)
+		s.Add(d)
 	}
 	return nil
 }
 
 func (s *Set[T]) MarshalJSON() ([]byte, error) {
-  data := s.AsSlice()
-  return json.Marshal(data)
+	data := s.AsSlice()
+	return json.Marshal(data)
 }
 
+func (s Set[T]) String() string {
+	return fmt.Sprintf("%v", s.AsSlice())
+}
