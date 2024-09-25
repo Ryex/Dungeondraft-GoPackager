@@ -23,12 +23,12 @@ jobs:
     steps:
       - name: Setup Go environment
         id: setup-go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
           go-version: ${{ matrix.go-version }}
 
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Cache build artifacts
         uses: actions/cache@v4
@@ -51,14 +51,47 @@ jobs:
       - name: Build cli
         run: |
           go build -ldflags "-s -w" ./cmd/dungeondraft-packager-cli
-      - name: Release
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Prep artifacts (windows)
+        if: ${{ runner.os == 'windows' }}
+        run: |
+          mv cmd/dungeondraft-packager/dungeondraft-packager.exe .
+      - name: List dir
+        run: ls
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
         with:
-          body_path: CHANGELOG.md
-          draft: true
-          files: |
+          name: Dungeondraft-GoPackager-${{ runner.os }}
+          path: |
             dungeondraft-packager*
             README.md
             LICENSE.md
-            
+            CHANGELOG.md
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+      - name: Grab and store version
+        run: |
+          tag_name=$(echo ${{ github.ref }} | grep -oE "[^/]+$")
+          echo "VERSION=$tag_name" >> $GITHUB_ENV
+      - name: List dir
+        run: ls
+      - name: Package
+        run: |
+          pushd Dungeondraft-GoPackager-Linux ; tar -czf ../Dungeondraft-GoPackager-Linux-${{ env.Version }}.tar.gz * ; popd
+          pushd Dungeondraft-GoPackager-macOS ; zip -r ../Dungeondraft-GoPackager-macOS-${{ env.Version }}.zip * ; popd
+          pushd Dungeondraft-GoPackager-Windows ; zip -r ../Dungeondraft-GoPackager-Windows-${{ env.Version }}.zip * ; popd
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: Dungeondraft-GoPackager-Linux/CHANGELOG.md
+          draft: true
+          files: |
+            Dungeondraft-GoPackager-Linux-${{ env.Version }}.tar.gz
+            Dungeondraft-GoPackager-macOS-${{ env.Version }}.zip
+            Dungeondraft-GoPackager-Windows-${{ env.Version }}.zip
+
