@@ -33,6 +33,11 @@ type Package struct {
 	alignment     int
 	FileList      []structures.FileInfo
 	Info          structures.PackageInfo
+
+	Walls    map[string]structures.PackageWall
+	Tilesets map[string]structures.PackageTileset
+
+	Tags structures.PackageTags
 }
 
 func (p *Package) Id() string {
@@ -45,20 +50,22 @@ func (p *Package) Name() string {
 
 func NewPackage(log logrus.FieldLogger) *Package {
 	return &Package{
-		log: log,
+		log:       log,
 		alignment: 0,
+		Walls: make(map[string]structures.PackageWall),
+		Tilesets: make(map[string]structures.PackageTileset),
+		Tags: *structures.NewPackageTags(),
 	}
 }
 
 // set packed file alignment
 func (p *Package) SetAlignment(alignment int) error {
-	if alignment > 0  {
+	if alignment > 0 {
 		return errors.New("alignment must be greater than 0")
 	}
 	p.alignment = alignment
 	return nil
 }
-
 
 func (p *Package) SetUnpackOptions(options UnpackOptions) {
 	p.unpackOptions = &options

@@ -53,6 +53,16 @@ func (a *App) loadPack(path string) {
 			return
 		}
 
+		err = pkg.LoadPackedTags(file)
+		if err != nil {
+			a.showErrorDialog(errors.Join(err, fmt.Errorf(lang.X("unpack.tags.error", "Failed to read tags"))))
+			err = nil
+		}
+		err = pkg.LoadPackedResourceMetadata(file)
+		if err != nil {
+			a.showErrorDialog(errors.Join(err, fmt.Errorf(lang.X("unpack.metadata.error", "Failed to read metadata"))))
+			err = nil
+		}
 		a.pkgFile = file
 		a.setPackContent(pkg)
 	}()
@@ -62,7 +72,6 @@ func (a *App) setPackContent(pkg *ddpackage.Package) {
 	a.pkg = pkg
 
 	tree, treeSelected, nodeMap := a.buildPackageTree()
-
 
 	leftSplit := container.New(
 		NewBottomExpandVBoxLayout(),
@@ -238,7 +247,6 @@ func (a *App) setPackContent(pkg *ddpackage.Package) {
 		extrctBtn,
 	)
 
-
 	disableButtonsListener := binding.NewDataListener(func() {
 		disable, _ := a.disableButtons.Get()
 		log.Info("unpack buttons disable: ", disable)
@@ -251,7 +259,6 @@ func (a *App) setPackContent(pkg *ddpackage.Package) {
 		}
 	})
 
-
 	a.setMainContent(
 		container.New(
 			NewBottomExpandVBoxLayout(),
@@ -261,12 +268,10 @@ func (a *App) setPackContent(pkg *ddpackage.Package) {
 		disableButtonsListener,
 	)
 
-
 	a.disableButtons.Set(false)
 }
 
 func (a *App) buildPackageTree() (*widget.Tree, binding.String, map[string]*structures.FileInfo) {
-
 	nodeTree, nodeMap := buildInfoMaps(&a.pkg.FileList)
 
 	log.Debugf("nodeTree: %s", spew.Sdump(nodeTree))
@@ -353,6 +358,7 @@ func (a *App) extractPackage(path string, options ddpackage.UnpackOptions) {
 	progressDlg.Show()
 	go func() {
 		err := a.pkg.ExtractPackage(a.pkgFile, path, options, func(p float64) {
+			log.Info(p)
 			progressVal.Set(p)
 		})
 		progressDlg.Hide()

@@ -23,6 +23,8 @@
   "unpack.extract.error.text": "Error extracting {{.Pack}} to {{.Path}}",
   "unpack.success.dlg.title": "Extraction successful",
   "unpack.success.dlg.text": "{{.Pack}} extracted to {{.Path}} successfully",
+  "unpack.tags.error": "Failed to read tags",
+  "unpack.metadata.error": "Failed to read metadata",
   "pack.wait": "Loading unpacked resources from {{.Path}} ...",
   "pack.buildList.activity": "Loading {{.Path}} ...",
   "pack.tree.label": "Resources",

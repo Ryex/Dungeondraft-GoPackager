@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/ryex/dungeondraft-gopackager/pkg/structures/color"
 )
 
 // PackageInfo stores package information for the pack.json
@@ -53,4 +55,37 @@ func (o *CustomColorOverrides) Set(value string) error {
 	}
 	o.Enabled = true
 	return nil
+}
+
+type TilesetType string
+
+const (
+	TilesetNormal      TilesetType = "normal"
+	TilesetCustomColor TilesetType = "custom_color"
+)
+
+type PackageTileset struct {
+	// relative resource path
+	Path string `json:"path"`
+	// Tileset name
+	Name string `json:"name"`
+	// Tileset Type
+	Type TilesetType `json:"type"`
+	// default color
+	Color color.Color `json:"color"`
+}
+
+func NewPackageTileset() *PackageTileset {
+	return &PackageTileset{Type: TilesetNormal, Color: color.Color{}}
+}
+
+type PackageWall struct  {
+	// relative resource path
+	Path string `json:"path"`
+	// default color
+	Color color.Color `json:"color"`
+}
+
+func NewPackageWall() *PackageWall {
+	return &PackageWall{Color: color.Color{}}
 }
