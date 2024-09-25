@@ -99,7 +99,7 @@ func (p *Package) PackPackage(outDir string, options PackOptions, progressCallba
 	if !dirExists {
 		err = os.MkdirAll(outDirPath, 0777)
 		if err != nil {
-			return
+			return errors.Join(err, fmt.Errorf("failed to make directory %s", outDirPath))
 		}
 	}
 

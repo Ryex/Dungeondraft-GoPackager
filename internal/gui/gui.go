@@ -176,6 +176,7 @@ func (a *App) buildMainUI() {
 			NewBottomExpandVBoxLayout(),
 			welcome,
 			inputContainer,
+			widget.NewSeparator(),
 			container.NewPadded(
 				a.mainContentContainer,
 			),
@@ -268,7 +269,7 @@ func (a *App) setWaitContent(msg string) binding.String {
 	msgText := canvas.NewText(msg, theme.Color(theme.ColorNameForeground))
 	msgText.TextSize = 16
 	msgText.Alignment = fyne.TextAlignCenter
-	activityText  := canvas.NewText("", theme.Color(theme.ColorNameForeground))
+	activityText := canvas.NewText("", theme.Color(theme.ColorNameForeground))
 	activityText.TextSize = 12
 	activityText.Alignment = fyne.TextAlignCenter
 	activityStr := binding.NewString()
@@ -287,4 +288,9 @@ func (a *App) setWaitContent(msg string) binding.String {
 	)
 	a.setMainContent(activityContent)
 	return activityStr
+}
+
+func (a *App) showErrorDialog(err error) {
+	errDlg := dialog.NewError(err, a.window)
+	errDlg.Show()
 }

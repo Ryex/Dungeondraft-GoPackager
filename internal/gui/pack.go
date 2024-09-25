@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -18,7 +19,6 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/custom_binding"
-	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddimage"
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddpackage"
 	log "github.com/sirupsen/logrus"
@@ -110,7 +110,7 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 
 			filePath := info.Path
 
-			fileData, err := utils.ReadFile(info.Path)
+			fileData, err := os.ReadFile(info.Path)
 			if err != nil {
 				log.WithError(err).Errorf("failed to read image data for %s", filePath)
 				return widget.NewLabel(fmt.Sprintf("Failed to read image data for %s", filePath))

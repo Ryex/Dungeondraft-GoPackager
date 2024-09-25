@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/binary"
 	"errors"
@@ -43,26 +42,6 @@ func DirExists(filename string) bool {
 		return false
 	}
 	return info.IsDir()
-}
-
-func ReadFile(path string) ([]byte, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer file.Close()
-
-	stat, err := file.Stat()
-	if err != nil {
-		return nil, err
-	}
-
-	bs := make([]byte, stat.Size())
-	_, err = bufio.NewReader(file).Read(bs)
-	if err != nil && err != io.EOF {
-		return nil, err
-	}
-	return bs, nil
 }
 
 // RipTexture detects and pulls image data from texture bytes

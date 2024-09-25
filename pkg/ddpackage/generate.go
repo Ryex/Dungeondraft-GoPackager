@@ -3,6 +3,7 @@ package ddpackage
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -45,11 +46,11 @@ func NewPackageJson(log logrus.FieldLogger, options NewPackageJsonOptions, overw
 		return
 	}
 
-	dirExists := utils.DirExists(folderPath)
-	if !dirExists {
-		err = errors.New("directory does not exists")
-		log.WithError(err).WithField("path", folderPath).Error("can't package a non existent folder")
-		return
+	if dirExists := utils.DirExists(folderPath); !dirExists {
+		err = os.MkdirAll(folderPath, 0777)
+		if err != nil {
+			return errors.Join(err, fmt.Errorf("failed to make directory %s", folderPath))
+		}
 	}
 
 	packJSONPath := filepath.Join(folderPath, `pack.json`)
@@ -88,9 +89,12 @@ func NewPackageJson(log logrus.FieldLogger, options NewPackageJsonOptions, overw
 		ColorOverrides: options.ColorOverides,
 	}
 
-	packJSONBytes, err := json.MarshalIndent(&pack, "", "\t")
+	packJSONBytes, err := json.MarshalIndent(&pack, "", "  ")
 	if err != nil {
-		log.WithError(err).WithField("path", folderPath).WithField("packJSONPath", packJSONPath).Error("can't create pack.json")
+		log.WithError(err).
+			WithField("path", folderPath).
+			WithField("packJSONPath", packJSONPath).
+			Error("can't create pack.json")
 		return
 	}
 

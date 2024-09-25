@@ -266,7 +266,7 @@ func (p *Package) ReadPackageFilelist(r io.ReadSeeker) (err error) {
 
 func (p *Package) ReadPackedPackJson(r io.ReadSeeker) (err error) {
 	if p.FileList == nil {
-		return errors.New("empty file list")
+		return EmptyFileListError
 	}
 	var packJsonInfo *structures.FileInfo
 	for i := 0; i < len(p.FileList); i++ {
@@ -279,7 +279,7 @@ func (p *Package) ReadPackedPackJson(r io.ReadSeeker) (err error) {
 	}
 
 	if packJsonInfo == nil {
-		return errors.New("can't find pack json in package file list")
+		return MissingPackJsonError
 	}
 
 	packJSONBytes, err := p.ReadFileFromPackage(r, *packJsonInfo)

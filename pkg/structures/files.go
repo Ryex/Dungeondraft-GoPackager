@@ -7,6 +7,8 @@ import (
 	"image"
 	"io"
 	"os"
+	"regexp"
+	"strings"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/sirupsen/logrus"
@@ -44,6 +46,73 @@ type FileInfo struct {
 	Image            image.Image
 	ImageFormat      string
 	PngImage         []byte
+}
+
+var idTrimPrefixRegex = regexp.MustCompile(`^([\w\-. ]+)/`)
+
+func (fi *FileInfo) CalcRelPath() string {
+	if fi.RelPath != "" {
+		return fi.RelPath
+	}
+	path := strings.TrimPrefix(fi.ResPath, "res://packs/")
+	path = idTrimPrefixRegex.ReplaceAllString(path, "")
+	return path
+}
+
+func (fi *FileInfo) IsData() bool {
+	return strings.HasPrefix(fi.CalcRelPath(), "data/")
+}
+
+func (fi *FileInfo) IsWallData() bool {
+	return strings.HasPrefix(fi.CalcRelPath(), "data/walls/")
+}
+
+func (fi *FileInfo) IsTilesetData() bool {
+	return strings.HasPrefix(fi.CalcRelPath(), "data/tilesets/")
+}
+
+func (fi *FileInfo) IsTexture() bool {
+	return strings.HasPrefix(fi.CalcRelPath(), "textures/")
+}
+
+func (fi *FileInfo) IsThumbnail() bool {
+	return strings.HasPrefix(fi.CalcRelPath(), "thumbnails/")
+}
+
+func (fi *FileInfo) IsObject() bool {
+	return strings.HasPrefix(fi.CalcRelPath(), "textures/paths/")
+}
+
+func (fi *FileInfo) IsTerrain() bool {
+	return strings.HasPrefix(fi.CalcRelPath(), "textures/terrain/")
+}
+
+func (fi *FileInfo) IsMaterial() bool {
+	return strings.HasPrefix(fi.CalcRelPath(), "textures/materials/")
+}
+
+func (fi *FileInfo) IsTileset() bool {
+	return strings.HasPrefix(fi.CalcRelPath(), "textures/tilesets/")
+}
+
+func (fi *FileInfo) IsPattern() bool {
+	return strings.HasPrefix(fi.CalcRelPath(), "textures/patterns/")
+}
+
+func (fi *FileInfo) IsWall() bool {
+	return strings.HasPrefix(fi.CalcRelPath(), "textures/walls/")
+}
+
+func (fi *FileInfo) IsPath() bool {
+	return strings.HasPrefix(fi.CalcRelPath(), "textures/paths/")
+}
+
+func (fi *FileInfo) IsPortal() bool {
+	return strings.HasPrefix(fi.CalcRelPath(), "textures/portals/")
+}
+
+func (fi *FileInfo) IsLight() bool {
+	return strings.HasPrefix(fi.CalcRelPath(), "textures/lights/")
 }
 
 // FileInfoPair groups a FileInfo and iot's Bytes equivalent
