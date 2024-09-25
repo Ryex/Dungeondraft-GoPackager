@@ -1,8 +1,1 @@
-*.png
-*.webp
-*.jpg
-*.json
-*.dungeondraft_*
-*.log
 vendor/
-gui/
