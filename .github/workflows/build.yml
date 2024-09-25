@@ -1,0 +1,64 @@
+name: build
+on: push
+permissions:
+  packages: write
+  contents: write
+jobs:
+  build:
+    name: "Build Dungeondraft-GoPackager (${{ matrix.target.os }}, ${{ matrix.go-version }})"
+    runs-on: ${{ matrix.target.host || 'ubuntu-latest' }}
+    env:
+      GO111MODULE: on
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version: ["1.23.x"]
+        target:
+          - os: linux
+          - os: windows
+            ext: .exe
+            host: windows-latest
+          - os: darwin
+            host: macos-latest
+    steps:
+      - name: Setup Go environment
+        id: setup-go
+        uses: actions/setup-go@v3
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Cache build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+            ~/.cache/fyne-cross
+          key: ${{ runner.os }}-build-cache-${{ hashFiles('**/go.sum') }}
+      - name: Install Build Deps (Linux)
+        if: ${{ runner.os == 'linux' }}
+        run: sudo apt-get install golang gcc libgl1-mesa-dev xorg-dev
+      - name: Install Fyne
+        run: go install fyne.io/fyne/v2/cmd/fyne@latest
+      - name: install go deps
+        run: go mod download
+      - name: Build gui
+        run: |
+          fyne package -src ./cmd/dungeondraft-packager -appID io.github.ryex.dungondraft-gopackager
+      - name: Build cli
+        run: |
+          go build -ldflags "-s -w" ./cmd/dungeondraft-packager-cli
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          body_path: CHANGELOG.md
+          draft: true
+          files: |
+            dungeondraft-packager*
+            README.md
+            LICENSE.md
+            
