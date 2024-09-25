@@ -75,7 +75,7 @@ func (p *Package) SetPackOptions(options PackOptions) {
 func DefaultValidExt() []string {
 	return []string{
 		".png", ".webp", ".jpg", ".jpeg",
-		"gif", ".tif", ".tiff", ".bmp",
+		".gif", ".tif", ".tiff", ".bmp",
 		".dungeondraft_wall", ".dungeondraft_tileset",
 		".dungeondraft_tags", ".json",
 	}

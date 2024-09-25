@@ -207,27 +207,34 @@ func (p *Package) NewFileInfo(options NewFileInfoOptions) (*structures.FileInfo,
 		img, format, err := ddimage.OpenImage(options.Path)
 		if err != nil {
 			l.WithError(err).Error("can not open path with image extension as image")
-			return nil, err
+			err = errors.Join(err, fmt.Errorf("failed to open %s as an image", options.Path))
+			// log but let info construction continue
+		} else {
+			l.WithField("imageFormat", format).Trace("read image")
+			info.Image = img
+			info.ImageFormat = format
+
+			if !ddimage.PathIsSupportedDDImage(options.Path) {
+				l.WithField("imageFormat", format).
+					Info("format is not supported by dungeondraft, converting to png")
+				buf := new(bytes.Buffer)
+				err = ddimage.PngImageBytes(img, buf)
+				if err != nil {
+					l.WithError(err).Error("failed to encode png version of image")
+					// log but let info construction continue
+				} else {
+					imgBytes := buf.Bytes()
+					info.PngImage = make([]byte, len(imgBytes))
+					copy(info.PngImage, imgBytes)
+
+					info.Size = int64(len(info.PngImage))
+
+					ext := filepath.Ext(options.Path)
+					info.ResPath = info.ResPath[0:len(info.ResPath)-len(ext)] + ".png"
+					info.RelPath = info.RelPath[0:len(info.RelPath)-len(ext)] + ".png"
+				}
+			}
 		}
-		l.WithField("imageFormat", format).Trace("read image")
-		info.Image = img
-		info.ImageFormat = format
-
-		buf := new(bytes.Buffer)
-		err = ddimage.PngImageBytes(img, buf)
-		if err != nil {
-			l.WithError(err).Error("failed to encode png version of image")
-			return nil, err
-		}
-		imgBytes := buf.Bytes()
-		info.PngImage = make([]byte, len(imgBytes))
-		copy(info.PngImage, imgBytes)
-
-		info.Size = int64(len(info.PngImage))
-
-		ext := filepath.Ext(options.Path)
-		info.ResPath = info.ResPath[0:len(info.ResPath)-len(ext)] + ".png"
-		info.RelPath = info.RelPath[0:len(info.RelPath)-len(ext)] + ".png"
 
 	}
 
@@ -244,7 +251,7 @@ func (p *Package) BuildFileList(progressCallbacks ...func(path string)) (err err
 		l := p.log.WithField("filePath", path)
 		if err != nil {
 			l.WithError(err).Error("can't access file")
-			return err
+			return errors.Join(err, fmt.Errorf("can't access %s", path))
 		}
 
 		if dir.IsDir() {
