@@ -4,6 +4,7 @@ import (
 	"embed"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -18,6 +19,8 @@ import (
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/custom_layout"
+	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddpackage"
 	log "github.com/sirupsen/logrus"
 )
@@ -32,8 +35,7 @@ type App struct {
 	mainContentLock      sync.Mutex
 	defaultMainContent   fyne.CanvasObject
 
-	pkgFile *os.File
-	pkg     *ddpackage.Package
+	pkg *ddpackage.Package
 
 	disableButtons          binding.Bool
 	mainDisableListener     binding.DataListener
@@ -57,7 +59,7 @@ func (a *App) Main() {
 		log.WithError(translationErr).Error("Failed to load translations")
 	}
 	a.window = a.app.NewWindow(lang.X("window.title", "Dungeondraft-GoPackager"))
-	a.window.Resize(fyne.NewSize(800, 600))
+	a.window.Resize(fyne.NewSize(1200, 800))
 
 	a.buildMainUI()
 	a.setupPathHandler()
@@ -68,8 +70,8 @@ func (a *App) Main() {
 }
 
 func (a *App) clean() {
-	if a.pkgFile != nil {
-		a.pkgFile.Close()
+	if a.pkg != nil {
+		a.pkg.Close()
 	}
 	fmt.Println("Exited")
 }
@@ -147,7 +149,7 @@ func (a *App) buildMainUI() {
 	a.disableButtons.AddListener(a.mainDisableListener)
 
 	inputContainer := container.New(
-		NewLeftExpandHBoxLayout(),
+		custom_layout.NewLeftExpandHBoxLayout(),
 		pathInput,
 		layout.NewSpacer(),
 		packBtn,
@@ -173,7 +175,7 @@ func (a *App) buildMainUI() {
 
 	content := container.NewPadded(
 		container.New(
-			NewBottomExpandVBoxLayout(),
+			custom_layout.NewBottomExpandVBoxLayout(),
 			welcome,
 			inputContainer,
 			widget.NewSeparator(),
@@ -212,8 +214,10 @@ func (a *App) setMainContent(o fyne.CanvasObject, disableButtonsListeners ...bin
 		log.Info("setting main content")
 		a.mainContentContainer.Add(o)
 
-		log.Info("refreshing main content")
-		a.mainContentContainer.Refresh()
+		// log.Info("refreshing main content")
+		// winSize := a.window.Canvas().Size()
+		// a.mainContentContainer.Refresh()
+		// a.window.Resize(winSize)
 	}()
 }
 
@@ -248,10 +252,12 @@ func (a *App) setErrContent(err error, msg string) {
 	msgText.TextSize = 16
 	msgText.Alignment = fyne.TextAlignCenter
 
-	errText := canvas.NewText(err.Error(), theme.Color(theme.ColorNameForeground))
-	errText.TextSize = 14
-	errText.TextStyle = fyne.TextStyle{Italic: true}
-	errText.Alignment = fyne.TextAlignCenter
+	errText := multilineCanvasText(
+		err.Error(),
+		14,
+		fyne.TextStyle{Italic: true},
+		fyne.TextAlignCenter,
+	)
 
 	msgContent := container.NewVBox(
 		layout.NewSpacer(),
@@ -261,6 +267,21 @@ func (a *App) setErrContent(err error, msg string) {
 	)
 
 	a.setMainContent(msgContent)
+}
+
+func multilineCanvasText(text string, size float32, style fyne.TextStyle, align fyne.TextAlign) fyne.CanvasObject {
+	lines := strings.Split(text, "\n")
+	content := container.NewVBox(utils.Map(
+		lines,
+		func(line string) fyne.CanvasObject {
+			text := canvas.NewText(line, theme.Color(theme.ColorNameError))
+			text.TextSize = size
+			text.TextStyle = style
+			text.Alignment = align
+			return text
+		},
+	)...)
+	return content
 }
 
 func (a *App) setWaitContent(msg string) binding.String {

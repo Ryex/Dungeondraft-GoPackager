@@ -16,7 +16,7 @@ import (
 )
 
 func GenPackID() string {
-	var seededRand *rand.Rand = rand.New(
+	seededRand := rand.New(
 		rand.NewSource(time.Now().UnixNano()))
 
 	charset := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -29,7 +29,7 @@ func GenPackID() string {
 	return string(b)
 }
 
-type NewPackageJsonOptions struct {
+type NewPackageJSONOptions struct {
 	Path          string
 	Name          string
 	Author        string
@@ -40,14 +40,14 @@ type NewPackageJsonOptions struct {
 }
 
 // NewPackerFromFolder builds a new Packer from a folder with a valid pack.json
-func NewPackageJson(log logrus.FieldLogger, options NewPackageJsonOptions, overwrite bool) (err error) {
+func NewPackageJSON(log logrus.FieldLogger, options NewPackageJSONOptions, overwrite bool) (err error) {
 	folderPath, err := filepath.Abs(options.Path)
 	if err != nil {
 		return
 	}
 
 	if dirExists := utils.DirExists(folderPath); !dirExists {
-		err = os.MkdirAll(folderPath, 0777)
+		err = os.MkdirAll(folderPath, 0o777)
 		if err != nil {
 			return errors.Join(err, fmt.Errorf("failed to make directory %s", folderPath))
 		}
@@ -98,7 +98,7 @@ func NewPackageJson(log logrus.FieldLogger, options NewPackageJsonOptions, overw
 		return
 	}
 
-	err = os.WriteFile(packJSONPath, packJSONBytes, 0644)
+	err = os.WriteFile(packJSONPath, packJSONBytes, 0o644)
 	if err != nil {
 		log.WithError(err).WithField("path", folderPath).WithField("packJSONPath", packJSONPath).Error("can't write pack.json")
 		return

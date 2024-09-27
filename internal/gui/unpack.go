@@ -3,25 +3,18 @@ package gui
 import (
 	"errors"
 	"fmt"
-	"math"
 	"path/filepath"
-	"strings"
 
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/lang"
-	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
-	"github.com/davecgh/go-spew/spew"
-	"github.com/ryex/dungeondraft-gopackager/internal/utils"
-	"github.com/ryex/dungeondraft-gopackager/pkg/ddimage"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/custom_layout"
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddpackage"
-	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -30,9 +23,8 @@ func (a *App) loadPack(path string) {
 	a.setWaitContent(lang.X("unpack.wait", "Loading {{.Path}} ...", map[string]any{"Path": path}))
 	a.disableButtons.Set(true)
 
-	if a.pkgFile != nil {
-		a.pkgFile.Close()
-		a.pkgFile = nil
+	if a.pkg != nil {
+		a.pkg.Close()
 	}
 	a.pkg = nil
 
@@ -43,7 +35,7 @@ func (a *App) loadPack(path string) {
 
 		pkg := ddpackage.NewPackage(l)
 
-		file, err := pkg.LoadFromPackedPath(path)
+		err := pkg.LoadFromPackedPath(path)
 		if err != nil {
 			l.WithError(err).Error("could not load path")
 			a.setErrContent(
@@ -53,17 +45,16 @@ func (a *App) loadPack(path string) {
 			return
 		}
 
-		err = pkg.LoadPackedTags(file)
+		err = pkg.LoadTags()
 		if err != nil {
 			a.showErrorDialog(errors.Join(err, fmt.Errorf(lang.X("unpack.tags.error", "Failed to read tags"))))
 			err = nil
 		}
-		err = pkg.LoadPackedResourceMetadata(file)
+		err = pkg.LoadResourceMetadata()
 		if err != nil {
 			a.showErrorDialog(errors.Join(err, fmt.Errorf(lang.X("unpack.metadata.error", "Failed to read metadata"))))
 			err = nil
 		}
-		a.pkgFile = file
 		a.setPackContent(pkg)
 	}()
 }
@@ -71,111 +62,7 @@ func (a *App) loadPack(path string) {
 func (a *App) setPackContent(pkg *ddpackage.Package) {
 	a.pkg = pkg
 
-	tree, treeSelected, nodeMap := a.buildPackageTree()
-
-	leftSplit := container.New(
-		NewBottomExpandVBoxLayout(),
-		widget.NewLabel(lang.X("unpack.tree.label", "Resources")),
-		container.NewStack(
-			canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground)),
-			tree,
-		),
-	)
-
-	defaultPreview := container.NewCenter(
-		widget.NewLabel(lang.X("unpack.preview.defaultText", "Select a resource")),
-	)
-
-	rightSplit := container.NewStack(defaultPreview)
-
-	treeSelected.AddListener(binding.NewDataListener(func() {
-		tni, err := treeSelected.Get()
-		if err != nil {
-			log.WithError(err).Error("error collecting bound tree node value")
-			return
-		}
-
-		content := func() fyne.CanvasObject {
-			info, ok := nodeMap[tni]
-			if !ok {
-				return defaultPreview
-			}
-
-			fileData, err := a.pkg.ReadFileFromPackage(a.pkgFile, *info)
-			if err != nil {
-				log.WithError(err).Errorf("failed to read image data for %s", tni)
-				return widget.NewLabel(fmt.Sprintf("Failed to read image data for %s", tni))
-			}
-
-			label := widget.NewLabel(lang.X("unpack.preview.label", "Path: {{.Path}}", map[string]any{"Path": info.ResPath}))
-
-			if !ddimage.PathIsSupportedImage(info.RelPath) {
-				widget.NewMultiLineEntry()
-				textGrid := widget.NewTextGridFromString(string(fileData))
-				textGrid.ShowLineNumbers = true
-				bg := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
-				copyBtn := widget.NewButtonWithIcon("", theme.ContentCopyIcon(), func() {
-					a.window.Clipboard().SetContent(string(fileData))
-				})
-				content := container.NewPadded(
-					container.New(
-						NewBottomExpandVBoxLayout(),
-						label,
-						container.NewStack(
-							bg,
-							textGrid,
-							container.NewPadded(
-
-								container.NewVBox(
-									container.NewHBox(layout.NewSpacer(), copyBtn),
-									layout.NewSpacer(),
-								),
-							),
-						),
-					),
-				)
-				return content
-			}
-
-			img, err := ddimage.BytesToImage(fileData)
-			if err != nil {
-				log.WithError(err).Errorf("failed to decode image for %s", tni)
-				content := widget.NewLabel(fmt.Sprintf("Failed to decode image for %s", tni))
-				return content
-			}
-
-			log.Infof("loaded image for %s", tni)
-			imgW := canvas.NewImageFromImage(img)
-			height := float32(64)
-			if strings.HasPrefix(tni, "textures/terrain") {
-				height = 160
-			} else if strings.HasPrefix(tni, "textures/walls") {
-				height = 32
-			} else if strings.HasPrefix(tni, "textures/paths") {
-				height = 48
-			}
-			tmpW := float64(height) * float64(img.Bounds().Dx()) / float64(img.Bounds().Dy())
-			width := float32(math.Max(1.0, math.Floor(tmpW+0.5)))
-			imgW.SetMinSize(fyne.NewSize(width, height))
-			imgW.FillMode = canvas.ImageFillContain
-			imgW.ScaleMode = canvas.ImageScaleFastest
-			content := container.New(
-				NewBottomExpandVBoxLayout(),
-				label,
-				imgW,
-			)
-			return content
-		}()
-
-		rightSplit.RemoveAll()
-		rightSplit.Add(content)
-		rightSplit.Refresh()
-	}))
-
-	split := container.NewPadded(container.NewHSplit(
-		leftSplit,
-		container.NewPadded(rightSplit),
-	))
+	split := a.buildPackageTreeAndPreview()
 
 	outputPath := binding.BindPreferenceString("unpack.outPath", a.app.Preferences())
 
@@ -235,7 +122,7 @@ func (a *App) setPackContent(pkg *ddpackage.Package) {
 
 	extractForm := container.NewVBox(
 		container.New(
-			NewLeftExpandHBoxLayout(),
+			custom_layout.NewLeftExpandHBoxLayout(),
 			outEntry,
 			outBrowseBtn,
 		),
@@ -261,7 +148,7 @@ func (a *App) setPackContent(pkg *ddpackage.Package) {
 
 	a.setMainContent(
 		container.New(
-			NewBottomExpandVBoxLayout(),
+			custom_layout.NewBottomExpandVBoxLayout(),
 			extractForm,
 			split,
 		),
@@ -269,79 +156,6 @@ func (a *App) setPackContent(pkg *ddpackage.Package) {
 	)
 
 	a.disableButtons.Set(false)
-}
-
-func (a *App) buildPackageTree() (*widget.Tree, binding.String, map[string]*structures.FileInfo) {
-	nodeTree, nodeMap := buildInfoMaps(&a.pkg.FileList)
-
-	log.Debugf("nodeTree: %s", spew.Sdump(nodeTree))
-
-	selected := binding.NewString()
-
-	tree := widget.NewTree(
-		func(tni widget.TreeNodeID) []widget.TreeNodeID {
-			nodes, ok := nodeTree[tni]
-			if ok {
-				return nodes
-			} else {
-				return []string{}
-			}
-		},
-		func(tni widget.TreeNodeID) bool {
-			_, ok := nodeMap[tni]
-			return !ok
-		},
-		func(b bool) fyne.CanvasObject {
-			return widget.NewLabel("label template")
-		},
-		func(tni widget.TreeNodeID, b bool, co fyne.CanvasObject) {
-			_, file := filepath.Split(tni)
-			if b {
-				co.(*widget.Label).SetText(file + "/")
-			} else {
-				co.(*widget.Label).SetText(file)
-			}
-		},
-	)
-
-	tree.OnSelected = func(uid widget.TreeNodeID) {
-		selected.Set(uid)
-	}
-
-	return tree, selected, nodeMap
-}
-
-func buildInfoMaps(infoList *[]structures.FileInfo) (map[string][]string, map[string]*structures.FileInfo) {
-	nodeMap := make(map[string]*structures.FileInfo, len(*infoList))
-	nodeTree := make(map[string][]string)
-	for i := 0; i < len(*infoList); i++ {
-		info := &(*infoList)[i]
-		if strings.HasPrefix(info.RelPath, "thumbnails/") {
-			continue
-		}
-		if strings.HasSuffix(info.RelPath, ".json") {
-			continue
-		}
-		nodeMap[info.RelPath] = info
-
-		dir, _ := filepath.Split(info.RelPath)
-		next := dir[:max(len(dir)-1, 0)]
-		path := info.RelPath
-		nodeTree[next] = append(nodeTree[next], path)
-		for next != "" {
-			path = next
-			dir, _ = filepath.Split(next)
-			next = dir[:max(len(dir)-1, 0)]
-			if !utils.InSlice(path, nodeTree[next]) {
-				nodeTree[next] = append(nodeTree[next], path)
-			}
-		}
-		if !utils.InSlice(path, nodeTree[next]) {
-			nodeTree[next] = append(nodeTree[next], path)
-		}
-	}
-
-	return nodeTree, nodeMap
 }
 
 func (a *App) extractPackage(path string, options ddpackage.UnpackOptions) {
@@ -357,7 +171,7 @@ func (a *App) extractPackage(path string, options ddpackage.UnpackOptions) {
 	)
 	progressDlg.Show()
 	go func() {
-		err := a.pkg.ExtractPackage(a.pkgFile, path, options, func(p float64) {
+		err := a.pkg.ExtractPackage(path, options, func(p float64) {
 			log.Info(p)
 			progressVal.Set(p)
 		})

@@ -12,18 +12,18 @@ import (
 	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
 )
 
-func (p *Package) LoadPackedTags(r io.ReadSeeker) error {
-	if p.FileList == nil {
-		return EmptyFileListError
+func (p *Package) loadPackedTags(r io.ReadSeeker) error {
+	if p.fileList == nil || len(p.fileList) == 0 {
+		return ErrEmptyFileList
 	}
 	if p.id == "" {
-		return UnsetPackIdError
+		return ErrUnsetPackID
 	}
 	tagsResPath := fmt.Sprintf("res://packs/%s/data/default.dungeondraft_tags", p.id)
 
 	var tagsInfo *structures.FileInfo
-	for i := 0; i < len(p.FileList); i++ {
-		packedFile := &p.FileList[i]
+	for i := 0; i < len(p.fileList); i++ {
+		packedFile := &p.fileList[i]
 		if packedFile.ResPath == tagsResPath {
 			tagsInfo = packedFile
 			break
@@ -35,37 +35,37 @@ func (p *Package) LoadPackedTags(r io.ReadSeeker) error {
 		return nil
 	}
 
-	tagsBytes, err := p.ReadFileFromPackage(r, *tagsInfo)
+	tagsBytes, err := p.readPackedFileFromPackage(r, tagsInfo)
 	if err != nil {
 		p.log.WithError(err).WithField("res", tagsResPath).Error("failed to read tags file")
-		return errors.Join(err, TagsReadError)
+		return errors.Join(err, ErrTagsRead)
 	}
 
-	err = json.Unmarshal(tagsBytes, &p.Tags)
+	err = json.Unmarshal(tagsBytes, &p.tags)
 	if err != nil {
 		p.log.WithError(err).WithField("res", tagsResPath).Error("failed to parse tags file")
-		return errors.Join(err, TagsParseError)
+		return errors.Join(err, ErrTagsParse)
 	}
 
 	return nil
 }
 
-func (p *Package) LoadPackedResourceMetadata(r io.ReadSeeker) error {
+func (p *Package) loadPackedResourceMetadata(r io.ReadSeeker) error {
 	if p.id == "" {
-		return UnsetPackIdError
+		return ErrUnsetPackID
 	}
 
-	for i := 0; i < len(p.FileList); i++ {
-		info := &p.FileList[i]
+	for i := 0; i < len(p.fileList); i++ {
+		info := &p.fileList[i]
 
-		if !(info.IsWallData() || info.IsTilesetData()) {
+		if !info.IsWallData() && !info.IsTilesetData() {
 			continue
 		}
 
-		fileData, err := p.ReadFileFromPackage(r, *info)
+		fileData, err := p.readPackedFileFromPackage(r, info)
 		if err != nil {
 			p.log.WithError(err).WithField("res", info.ResPath).Error("failed to read data file")
-			return errors.Join(err, MetadataReadError, fmt.Errorf("failed to read data file %s", info.ResPath))
+			return errors.Join(err, ErrMetadataRead, fmt.Errorf("failed to read data file %s", info.ResPath))
 		}
 
 		if info.IsWallData() {
@@ -73,29 +73,29 @@ func (p *Package) LoadPackedResourceMetadata(r io.ReadSeeker) error {
 			err = json.Unmarshal(fileData, wall)
 			if err != nil {
 				p.log.WithError(err).WithField("res", info.ResPath).Error("failed to parse data file")
-				return errors.Join(err, WallParseError, fmt.Errorf("failed to parse data file %s", info.ResPath))
+				return errors.Join(err, ErrWallParse, fmt.Errorf("failed to parse data file %s", info.ResPath))
 			}
-			p.Walls[info.ResPath] = *wall
+			p.walls[info.ResPath] = *wall
 		} else if info.IsTilesetData() {
 			ts := structures.NewPackageTileset()
 			err = json.Unmarshal(fileData, ts)
 			if err != nil {
 				p.log.WithError(err).WithField("res", info.ResPath).Error("failed to parse data file")
-				return errors.Join(err, TilesetParseError, fmt.Errorf("failed to parse data file %s", info.ResPath))
+				return errors.Join(err, ErrTilesetParse, fmt.Errorf("failed to parse data file %s", info.ResPath))
 			}
-			p.Tilesets[info.ResPath] = *ts
+			p.tilesets[info.ResPath] = *ts
 		}
 	}
 
 	return nil
 }
 
-func (p *Package) ReadUnpackedTags() error {
-	if p.UnpackedPath == "" {
-		return UnsetUnpackedPathError
+func (p *Package) loadUnpackedTags() error {
+	if p.unpackedPath == "" {
+		return ErrUnsetUnpackedPath
 	}
 
-	tagsPath := filepath.Join(p.UnpackedPath, "data", "default.dungeondraft_tags")
+	tagsPath := filepath.Join(p.unpackedPath, "data", "default.dungeondraft_tags")
 
 	if tagsExist := utils.FileExists(tagsPath); !tagsExist {
 		p.log.WithField("tagsPath", tagsPath).Info("no default.dungeondraft_tags file in pack")
@@ -108,34 +108,34 @@ func (p *Package) ReadUnpackedTags() error {
 			WithField("path", p.UnpackedPath).
 			WithField("tagsPath", tagsPath).
 			Error("can't read tags file")
-		return errors.Join(err, TagsReadError)
+		return errors.Join(err, ErrTagsRead)
 	}
 
-	err = json.Unmarshal(tagsBytes, &p.Tags)
+	err = json.Unmarshal(tagsBytes, &p.tags)
 	if err != nil {
 		p.log.WithError(err).WithField("tagsPath", tagsPath).Error("failed to parse tags file")
-		return errors.Join(err, TagsParseError)
+		return errors.Join(err, ErrTagsParse)
 	}
 
 	return nil
 }
 
-func (p *Package) ReadUnpackedResourceMetadata() error {
-	if p.UnpackedPath == "" {
-		return UnsetUnpackedPathError
+func (p *Package) loadUnpackedResourceMetadata() error {
+	if p.unpackedPath == "" {
+		return ErrUnsetUnpackedPath
 	}
 
-	for i := 0; i < len(p.FileList); i++ {
-		info := &p.FileList[i]
+	for i := 0; i < len(p.fileList); i++ {
+		info := &p.fileList[i]
 
-		if !(info.IsWallData() || info.IsTilesetData()) {
+		if !info.IsWallData() && !info.IsTilesetData() {
 			continue
 		}
 
 		fileData, err := os.ReadFile(info.Path)
 		if err != nil {
 			p.log.WithError(err).WithField("res", info.ResPath).Error("failed to read data file")
-			return errors.Join(err, MetadataReadError, fmt.Errorf("failed to read data file %s", info.Path))
+			return errors.Join(err, ErrMetadataRead, fmt.Errorf("failed to read data file %s", info.Path))
 		}
 
 		if info.IsWallData() {
@@ -143,17 +143,17 @@ func (p *Package) ReadUnpackedResourceMetadata() error {
 			err = json.Unmarshal(fileData, wall)
 			if err != nil {
 				p.log.WithError(err).WithField("res", info.ResPath).Error("failed to parse data file")
-				return errors.Join(err, WallParseError, fmt.Errorf("failed to parse data file %s", info.Path))
+				return errors.Join(err, ErrWallParse, fmt.Errorf("failed to parse data file %s", info.Path))
 			}
-			p.Walls[info.ResPath] = *wall
+			p.walls[info.ResPath] = *wall
 		} else if info.IsTilesetData() {
 			ts := structures.NewPackageTileset()
 			err = json.Unmarshal(fileData, ts)
 			if err != nil {
 				p.log.WithError(err).WithField("res", info.ResPath).Error("failed to parse data file")
-				return errors.Join(err, TilesetParseError, fmt.Errorf("failed to parse data file %s", info.Path))
+				return errors.Join(err, ErrTilesetParse, fmt.Errorf("failed to parse data file %s", info.Path))
 			}
-			p.Tilesets[info.ResPath] = *ts
+			p.tilesets[info.ResPath] = *ts
 		}
 	}
 
@@ -161,28 +161,28 @@ func (p *Package) ReadUnpackedResourceMetadata() error {
 }
 
 func (p *Package) WriteUnpackedTags() error {
-	if p.UnpackedPath == "" {
-		return UnsetUnpackedPathError
+	if p.unpackedPath == "" {
+		return ErrUnsetUnpackedPath
 	}
 
-	tagsPath := filepath.Join(p.UnpackedPath, "data", "default.dungeondraft_tags")
+	tagsPath := filepath.Join(p.unpackedPath, "data", "default.dungeondraft_tags")
 	dirPath := filepath.Dir(tagsPath)
 
 	if dirExists := utils.DirExists(dirPath); !dirExists {
-		err := os.MkdirAll(dirPath, 0777)
+		err := os.MkdirAll(dirPath, 0o777)
 		if err != nil {
 			return errors.Join(err, fmt.Errorf("failed to make directory %s", dirPath))
 		}
 	}
 
-	tagsBytes, err := json.MarshalIndent(&p.Tags, "", "  ")
+	tagsBytes, err := json.MarshalIndent(&p.tags, "", "  ")
 	if err != nil {
 		p.log.WithError(err).
 			Error("failed to create tags json")
 		return errors.Join(err, errors.New("failed to create tags json"))
 	}
 
-	err = os.WriteFile(tagsPath, tagsBytes, 0644)
+	err = os.WriteFile(tagsPath, tagsBytes, 0o644)
 	if err != nil {
 		p.log.WithError(err).
 			Error("failed to write tags file")
@@ -193,21 +193,21 @@ func (p *Package) WriteUnpackedTags() error {
 }
 
 func (p *Package) WriteResourceMetadata() error {
-	if p.UnpackedPath == "" {
-		return UnsetUnpackedPathError
+	if p.unpackedPath == "" {
+		return ErrUnsetUnpackedPath
 	}
 
-	for i := 0; i < len(p.FileList); i++ {
-		info := &p.FileList[i]
+	for i := 0; i < len(p.fileList); i++ {
+		info := &p.fileList[i]
 
-		if !(info.IsWallData() || info.IsTilesetData()) {
+		if !info.IsWallData() && !info.IsTilesetData() {
 			continue
 		}
 
 		dirPath := filepath.Dir(info.Path)
 
 		if dirExists := utils.DirExists(dirPath); !dirExists {
-			err := os.MkdirAll(dirPath, 0777)
+			err := os.MkdirAll(dirPath, 0o777)
 			if err != nil {
 				return errors.Join(err, fmt.Errorf("failed to make directory %s", dirPath))
 			}
@@ -216,7 +216,7 @@ func (p *Package) WriteResourceMetadata() error {
 		var fileBytes []byte
 		var err error
 		if info.IsWallData() {
-			wall := p.Walls[info.ResPath]
+			wall := p.walls[info.ResPath]
 			fileBytes, err = json.MarshalIndent(&wall, "", "  ")
 			if err != nil {
 				p.log.WithError(err).
@@ -225,7 +225,7 @@ func (p *Package) WriteResourceMetadata() error {
 				return errors.Join(err, fmt.Errorf("failed to create wall json for %s", info.ResPath))
 			}
 		} else {
-			tileset := p.Tilesets[info.ResPath]
+			tileset := p.tilesets[info.ResPath]
 			fileBytes, err = json.MarshalIndent(&tileset, "", "  ")
 			if err != nil {
 				p.log.WithError(err).
@@ -235,8 +235,8 @@ func (p *Package) WriteResourceMetadata() error {
 			}
 		}
 
-		if fileBytes != nil && len(fileBytes) > 0 {
-			err = os.WriteFile(info.Path, fileBytes, 0644)
+		if len(fileBytes) > 0 {
+			err = os.WriteFile(info.Path, fileBytes, 0o644)
 			if err != nil {
 				p.log.WithError(err).
 					Error("failed to write metadata file")

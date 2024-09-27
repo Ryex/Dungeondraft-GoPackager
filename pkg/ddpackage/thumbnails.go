@@ -3,18 +3,20 @@ package ddpackage
 import (
 	"errors"
 	"fmt"
+	"image"
 	"image/png"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddimage"
 )
 
 func (p *Package) GenerateThumbnails(progressCallbacks ...func(p float64)) error {
-	utils.AssertTrue(p.UnpackedPath != "", "empty unpacked path")
-	thumbnailDir := filepath.Join(p.UnpackedPath, "thumbnails")
+	if p.unpackedPath == "" {
+		return ErrUnsetUnpackedPath
+	}
+	thumbnailDir := filepath.Join(p.unpackedPath, "thumbnails")
 
 	if dirExists := utils.DirExists(thumbnailDir); !dirExists {
 		err := os.MkdirAll(thumbnailDir, 0777)
@@ -31,22 +33,34 @@ func (p *Package) GenerateThumbnails(progressCallbacks ...func(p float64)) error
 	fmt.Println(terrainPrefix)
 	fmt.Println(wallsPrefix)
 	fmt.Println(pathsPrefix)
-	for i, info := range p.FileList {
-		if info.Image != nil && !strings.HasPrefix(info.ResPath, thumbnailPrefix) {
+	for i, info := range p.fileList {
+		if info.IsTexture() {
 			p.log.WithField("res", info.ResPath).Trace("generating thumbnail")
 
 			var maxWidth, height int
-			if strings.HasPrefix(info.ResPath, terrainPrefix) {
+			if info.IsTerrain() {
 				maxWidth, height = 160, 160
-			} else if strings.HasPrefix(info.ResPath, wallsPrefix) {
+			} else if info.IsWall() {
 				maxWidth, height = 228, 32
-			} else if strings.HasPrefix(info.ResPath, pathsPrefix) {
+			} else if info.IsPath() {
 				maxWidth, height = 228, 48
 			} else {
 				maxWidth, height = 64, 64
 			}
 
-			thumbnail := ddimage.ResizeVirticalAndCropWidth(info.Image, height, maxWidth)
+			var image image.Image
+			if info.Image == nil {
+				img, _, err := ddimage.OpenImage(info.Path)
+				if err != nil {
+					err = errors.Join(err, fmt.Errorf("failed to open %s as an image", info.Path))
+					return err
+				}
+				image = img
+			} else {
+				image = info.Image
+			}
+
+			thumbnail := ddimage.ResizeVirticalAndCropWidth(image, height, maxWidth)
 
 			file, err := os.OpenFile(
 				info.ThumbnailPath,
@@ -80,7 +94,7 @@ func (p *Package) GenerateThumbnails(progressCallbacks ...func(p float64)) error
 		}
 
 		for _, pcb := range progressCallbacks {
-			pcb(float64(i+1) / float64(len(p.FileList)))
+			pcb(float64(i+1) / float64(len(p.fileList)))
 		}
 	}
 
