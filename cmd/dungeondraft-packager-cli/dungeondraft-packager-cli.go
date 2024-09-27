@@ -19,7 +19,8 @@ var CLI struct {
 }
 
 func main() {
-	ctx := kong.Parse(&CLI,
+  ctx := &cmd.Context{}
+	cliCtx := kong.Parse(&CLI,
 		kong.Name("dungeondraft-packager-cli"),
 		kong.Description("Pack, Unpack, Edit, and Prepare resources for .dungeondraft_pack files"),
 		kong.UsageOnError(),
@@ -28,7 +29,7 @@ func main() {
 				Compact: true,
 				Summary: true,
 			}),
-		// vars
+		kong.Bind(ctx),
 	)
 
 	level := CLI.LogLevel + 2
@@ -38,6 +39,6 @@ func main() {
 		ForceColors: true,
 	})
 
-	err := ctx.Run(&cmd.Context{})
-	ctx.FatalIfErrorf(err)
+	err := cliCtx.Run(ctx)
+	cliCtx.FatalIfErrorf(err)
 }

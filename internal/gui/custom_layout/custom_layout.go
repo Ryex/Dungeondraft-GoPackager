@@ -1,4 +1,4 @@
-package gui
+package custom_layout
 
 import (
 	"fyne.io/fyne/v2"
@@ -15,6 +15,8 @@ func isVerticalSpacer(obj fyne.CanvasObject) bool {
 	spacer, ok := obj.(layout.SpacerObject)
 	return ok && spacer.ExpandVertical()
 }
+
+// ** Left expand HBox **
 
 type leftExpandHBoxLayout struct {
 	paddingFunc func() float32
@@ -99,6 +101,94 @@ func (g leftExpandHBoxLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
 	}
 	return minSize
 }
+
+// ** right expand HBox **
+
+type rightExpandHBoxLayout struct {
+	paddingFunc func() float32
+}
+
+func NewRightExpandHBoxLayout() fyne.Layout {
+	return rightExpandHBoxLayout{
+		paddingFunc: theme.Padding,
+	}
+}
+
+func (g rightExpandHBoxLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
+	spacers := 0
+	visibleObjects := 0
+	// Size taken up by rightmost objects
+	leftmost := float32(0)
+
+	for i, child := range objects {
+		if !child.Visible() {
+			continue
+		}
+
+		if isHorizontalSpacer(child) {
+			spacers++
+			continue
+		}
+
+		visibleObjects++
+		if i != len(objects)-1 {
+			leftmost += child.MinSize().Width
+		}
+	}
+
+	padding := g.paddingFunc()
+
+	rightExtra := size.Width - leftmost - (float32(spacers) * padding) - (padding * float32(visibleObjects-1))
+	extra := size.Width - leftmost - rightExtra - (padding * float32(visibleObjects-1))
+
+	// Spacers split extra space equally
+	spacerSize := float32(0)
+	if spacers > 0 {
+		spacerSize = extra / float32(spacers)
+	}
+
+	x, y := float32(0), float32(0)
+	for i, child := range objects {
+		if !child.Visible() {
+			continue
+		}
+
+		if isHorizontalSpacer(child) {
+			x += spacerSize
+			continue
+		}
+		child.Move(fyne.NewPos(x, y))
+
+		width := child.MinSize().Width
+		if i == len(objects)-1 {
+			width = rightExtra
+		}
+		x += padding + width
+		child.Resize(fyne.NewSize(width, size.Height))
+	}
+}
+
+func (g rightExpandHBoxLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
+	minSize := fyne.NewSize(0, 0)
+	addPadding := false
+	padding := g.paddingFunc()
+	for _, child := range objects {
+		if !child.Visible() || isHorizontalSpacer(child) {
+			continue
+		}
+
+		childMin := child.MinSize()
+		minSize.Height = fyne.Max(childMin.Height, minSize.Height)
+		minSize.Width += childMin.Width
+		if addPadding {
+			minSize.Width += padding
+		}
+		addPadding = true
+	}
+	return minSize
+}
+
+// ** bottom expand VBox **
 
 type bottomExpandVBoxLayout struct {
 	paddingFunc func() float32
@@ -187,4 +277,3 @@ func (v bottomExpandVBoxLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
 	}
 	return minSize
 }
-

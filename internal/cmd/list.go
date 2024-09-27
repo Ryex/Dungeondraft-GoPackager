@@ -1,77 +1,42 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
 	humanize "github.com/dustin/go-humanize"
 	"github.com/sirupsen/logrus"
-	log "github.com/sirupsen/logrus"
 	treeprint "github.com/xlab/treeprint"
 
-	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddpackage"
 	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
 )
 
 type ListCmd struct {
-	Files ListFilesCmd `cmd:""`
-	Tags  ListTagsCmd  `cmd:""`
+	Files ListFilesCmd `cmd:"" help:"lists files in the pack"`
+	Tags  ListTagsCmd  `cmd:"" help:"lists all tags that match the provided resource patterns, with no patterns lists all tags"`
 }
 
 type ListFilesCmd struct {
-	InputPath string `arg:"" type:"path" help:"the .dungeondraft_pack file or resource directory to work with"`
+	All        bool   `short:"A" help:"List all file in the package, overrides the individual type options"`
+	Textures   bool   `short:"X" default:"true" negatable:"" help:"list texture files. default is true but negatable with --no-textures"`
+	Thumbnails bool   `short:"T" default:"false" negatable:"" help:"list thumbnail files"`
+	Data       bool   `short:"D" default:"false" negatable:"" help:"list Data files (tags, and wall/terrain metadata )"`
+	InputPath  string `arg:"" type:"path" help:"the .dungeondraft_pack file or resource directory to work with"`
 }
 
-func (ls *ListFilesCmd) Run(ctx *Context) error {
-	packPath, pathErr := filepath.Abs(ls.InputPath)
-	if pathErr != nil {
-		return errors.Join(pathErr, errors.New("could not get absolute path for packfile"))
-	}
-
-	if utils.DirExists(packPath) {
-		return ls.loadUnpacked(packPath)
-	}
-	return ls.loadPacked(packPath)
-}
-
-func (ls *ListFilesCmd) loadPacked(path string) error {
-	l := log.WithFields(log.Fields{
-		"filename": path,
-	})
-	pkg := ddpackage.NewPackage(l)
-
-	file, err := pkg.LoadFromPackedPath(path)
+func (lsf *ListFilesCmd) Run(ctx *Context) error {
+	err := ctx.LoadPkg(lsf.InputPath)
 	if err != nil {
-		l.WithError(err).Error("failed to load package")
 		return err
 	}
-
-	defer file.Close()
-
-	ls.printTree(l, pkg)
+	lsf.printTree(ctx.Log, ctx.Pkg)
 	return nil
 }
 
-func (ls *ListFilesCmd) loadUnpacked(path string) error {
-	l := log.WithFields(log.Fields{
-		"filename": path,
-	})
-	pkg := ddpackage.NewPackage(l)
-
-	err := pkg.LoadUnpackedFromFolder(path)
-	if err != nil {
-		l.WithError(err).Error("failed to load package")
-		return err
-	}
-
-	ls.printTree(l, pkg)
-	return nil
-}
-
-func (ls *ListFilesCmd) printTree(l logrus.FieldLogger, pkg *ddpackage.Package) {
+func (lsf *ListFilesCmd) printTree(l logrus.FieldLogger, pkg *ddpackage.Package) {
 	tree := treeprint.New()
 	branchMap := make(map[string]treeprint.Tree)
 
@@ -105,122 +70,19 @@ func (ls *ListFilesCmd) printTree(l logrus.FieldLogger, pkg *ddpackage.Package) 
 			return branchMap[path]
 		}
 	}
-	for i := 0; i < len(pkg.FileList); i++ {
-		packedFile := &pkg.FileList[i]
-		path := pkg.NormalizeResourcePath(packedFile.ResPath)
-		l.WithField("res", packedFile.ResPath).
-			WithField("size", packedFile.Size).
-			WithField("index", i).
-			Trace("building tree node")
-		nodeForPath(path, packedFile)
-	}
-
-	fmt.Println(tree.String())
-}
-
-type ListTagsCmd struct {
-	InputPath string `arg:"" type:"path" help:"the .dungeondraft_pack file or resource directory to work with"`
-}
-
-func (ls *ListTagsCmd) Run(ctx *Context) error {
-	packPath, pathErr := filepath.Abs(ls.InputPath)
-	if pathErr != nil {
-		return errors.Join(pathErr, errors.New("could not get absolute path for packfile"))
-	}
-
-	if utils.DirExists(packPath) {
-		return ls.loadUnpacked(packPath)
-	}
-	return ls.loadPacked(packPath)
-}
-
-func (ls *ListTagsCmd) loadPacked(path string) error {
-	l := log.WithFields(log.Fields{
-		"filename": path,
-	})
-	pkg := ddpackage.NewPackage(l)
-
-	file, err := pkg.LoadFromPackedPath(path)
-	if err != nil {
-		l.WithError(err).Error("failed to load package")
-		return err
-	}
-	defer file.Close()
-	err = pkg.LoadPackedTags(file)
-	if err != nil {
-		l.WithError(err).Error("failed to load tags")
-		return err
-	}
-
-	ls.printTree(l, pkg)
-	return nil
-}
-
-func (ls *ListTagsCmd) loadUnpacked(path string) error {
-	l := log.WithFields(log.Fields{
-		"filename": path,
-	})
-	pkg := ddpackage.NewPackage(l)
-
-	err := pkg.LoadUnpackedFromFolder(path)
-	if err != nil {
-		l.WithError(err).Error("failed to load package")
-		return err
-	}
-	err = pkg.ReadUnpackedTags()
-	if err != nil {
-		l.WithError(err).Error("failed to load tags")
-		return err
-	}
-
-	ls.printTree(l, pkg)
-	return nil
-}
-
-func (ls *ListTagsCmd) printTree(l logrus.FieldLogger, pkg *ddpackage.Package) {
-	tree := treeprint.New()
-	branchMap := make(map[string]treeprint.Tree)
-
-	var nodeForPath func(path string, fileInfo *structures.FileInfo) treeprint.Tree
-	nodeForPath = func(path string, fileInfo *structures.FileInfo) treeprint.Tree {
-		var tags []string
-		for tag := range pkg.Tags.Tags {
-			set := pkg.Tags.Tags[tag]
-			if set.Has(fileInfo.RelPath) {
-				tags = append(tags, strings.Join([]string{"\"", tag, "\""}, ""))
-			}
+	fileList := pkg.FileList()
+	for i := 0; i < len(fileList); i++ {
+		info := &fileList[i]
+		if info.IsMetadata() && !lsf.All {
+			continue
 		}
-		meta := strings.Join(tags, ", ")
-		useMeta := true
-		if strings.HasSuffix(path, string(filepath.Separator)) {
-			path = path[:len(path)-1]
-			useMeta = false
+		if info.IsTexture() && (!lsf.Textures && !lsf.All) {
+			continue
 		}
-		dir, file := filepath.Split(path)
-		if dir == "" {
-			if branchMap[file] == nil {
-				if useMeta {
-					branchMap[file] = tree.AddMetaBranch(meta, file)
-				} else {
-					branchMap[file] = tree.AddBranch(file)
-				}
-			}
-			return branchMap[file]
-		} else {
-			if branchMap[path] == nil {
-				parent := nodeForPath(dir, fileInfo)
-				if useMeta {
-					branchMap[path] = parent.AddMetaBranch(meta, file)
-				} else {
-					branchMap[path] = parent.AddBranch(file)
-				}
-			}
-			return branchMap[path]
+		if info.IsThumbnail() && (!lsf.Thumbnails && !lsf.All) {
+			continue
 		}
-	}
-	for i := 0; i < len(pkg.FileList); i++ {
-		info := &pkg.FileList[i]
-		if !info.IsTexture() {
+		if info.IsData() && (!lsf.Data && !lsf.All) {
 			continue
 		}
 		path := pkg.NormalizeResourcePath(info.ResPath)
@@ -232,4 +94,39 @@ func (ls *ListTagsCmd) printTree(l logrus.FieldLogger, pkg *ddpackage.Package) {
 	}
 
 	fmt.Println(tree.String())
+}
+
+type ListTagsCmd struct {
+	InputPath    string   `arg:"" type:"path" help:"the .dungeondraft_pack file or resource directory to work with"`
+	GlobPatterns []string `arg:"" optional:"" help:"glob patterns to match against paths relative to package root (paths should not stor with a dot (./) and must use slash separation even on windows (a/b))"`
+}
+
+func (lst *ListTagsCmd) Run(ctx *Context) error {
+	err := ctx.LoadPkg(lst.InputPath)
+	if err != nil {
+		return err
+	}
+	err = ctx.LoadTags()
+	if err != nil {
+		return err
+	}
+	return lst.printTags(ctx.Log, ctx.Pkg)
+}
+
+func (ls *ListTagsCmd) printTags(l logrus.FieldLogger, pkg *ddpackage.Package) error {
+	var tags []string
+	if len(ls.GlobPatterns) < 1 {
+		tags = pkg.Tags().AllTags()
+	} else {
+		files, err := pkg.FileList().Glob(func(fi *structures.FileInfo) bool { return fi.IsTexture() }, ls.GlobPatterns...)
+		if err != nil {
+			l.WithError(err).Error("failed to glob file list")
+			return err
+		}
+		tags = pkg.Tags().TagsFor(files.RelPaths()...).AsSlice()
+	}
+	for _, tag := range tags {
+		fmt.Fprintln(os.Stdout, tag)
+	}
+	return nil
 }

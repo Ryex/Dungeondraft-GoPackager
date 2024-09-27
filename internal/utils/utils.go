@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -20,8 +21,10 @@ func AssertTrue(condition bool, msg string) {
 
 func MapKeys[K comparable, V any](m map[K]V) []K {
 	keys := make([]K, len(m))
+	i := 0
 	for k := range m {
-		keys = append(keys, k)
+		keys[i] = k
+		i++
 	}
 	return keys
 }
@@ -146,7 +149,7 @@ func Align(n int64, alignment int) int64 {
 		return n
 	}
 
-	var rest int64 = n % int64(alignment)
+	var rest = n % int64(alignment)
 	if rest == 0 {
 		return n
 	} else {
@@ -163,4 +166,37 @@ func Pad(out io.Writer, bytes int64) error {
 		}
 	}
 	return nil
+}
+
+func TruncatePathHumanFriendly(path string, maxLen int) string {
+	path = filepath.Clean(path)
+	repeat := false
+	depth := 1
+	for len(path) > maxLen && !repeat {
+		dir, file := filepath.Split(path)
+		top := dir
+		for i := 0; i < depth && top != ""; i++ {
+			top, _ = filepath.Split(top[:max(len(top)-1, 0)])
+		}
+		depth += 1
+		var next string
+		if top != "" {
+			next = filepath.Join(top, "...", file)
+		} else {
+			next = path
+		}
+		if next == path {
+			repeat = true
+		}
+		path = next
+	}
+	return path
+}
+
+func Map[T, U any](ts []T, f func(T) U) []U {
+  us := make([]U, len(ts))
+  for i := range ts {
+    us[i] = f(ts[i])
+  }
+  return us
 }

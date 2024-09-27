@@ -44,6 +44,14 @@ func (pt *PackageTags) Tag(tag string, resources ...string) {
 	s.AddM(resources...)
 }
 
+func (pt *PackageTags) AllTags() []string {
+	return utils.MapKeys(pt.Tags)
+}
+
+func (pt *PackageTags) AllSets() []string {
+	return utils.MapKeys(pt.Sets)
+}
+
 func (pt *PackageTags) Untag(tag string, resources ...string) {
 	s, ok := pt.Tags[tag]
 	if ok {
@@ -72,11 +80,43 @@ func (pt *PackageTags) RemoveTagFromSet(set string, tags ...string) {
 }
 
 func (pt *PackageTags) ResourcesFor(tag string) []string {
-	s, _ := pt.Tags[tag]
+	s := pt.Tags[tag]
 	return s.AsSlice()
 }
 
-func (pt *PackageTags) TagsFor(set string) []string {
-	s, _ := pt.Sets[set]
-	return s.AsSlice()
+func (pt *PackageTags) Set(set string) *Set[string] {
+	s := pt.Sets[set]
+	return s
+}
+
+func (pt *PackageTags) DeleteTag(tag string) {
+	delete(pt.Tags, tag)
+}
+
+func (pt *PackageTags) DeleteSet(set string) {
+	delete(pt.Sets, set)
+}
+
+func (pt *PackageTags) TagsFor(resources ...string) *Set[string] {
+	res := NewSet[string]()
+	for i, resource := range resources {
+		cur := NewSet[string]()
+		for tag, s := range pt.Tags {
+			if s.Has(resource) {
+				cur.Add(tag)
+			}
+		}
+		if i == 0 {
+			res = cur
+		} else {
+			res = res.Intersect(cur)
+		}
+	}
+	return res
+}
+
+func (pt *PackageTags) ClearTagsFor(resources ...string) {
+	for tag := range pt.Tags {
+		pt.Tags[tag].RemoveM(resources...)
+	}
 }

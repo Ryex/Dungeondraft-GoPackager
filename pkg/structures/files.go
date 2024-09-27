@@ -8,10 +8,11 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"runtime"
 	"strings"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
-	"github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 // FileInfoBytes is a struct used for readign and writing the encoded file information bytes
@@ -34,29 +35,46 @@ func (fi *FileInfoBytes) SizeOf() int64 {
 
 // FileInfo stores file information
 type FileInfo struct {
-	Path             string
-	Offset           int64
-	Size             int64
-	Md5              string
-	ResPath          string
-	ResPathSize      int32
-	RelPath          string
+	Path        string
+	Offset      int64
+	Size        int64
+	Md5         string
+	ResPath     string
+	ResPathSize int32
+	RelPath     string
+
+	// if the file should have metadata this resource path points to that metadata
+	// but that resource may not exist
+	MetadataPath string
+	// if the file could have a thumbnail this resource path points to it
+	// but the resource may not exist
 	ThumbnailPath    string
 	ThumbnailResPath string
-	Image            image.Image
 	ImageFormat      string
-	PngImage         []byte
+
+	// used internally for conversion of non dungeondraft supported image formats
+	Image    image.Image
+	PngImage []byte
 }
 
 var idTrimPrefixRegex = regexp.MustCompile(`^([\w\-. ]+)/`)
 
 func (fi *FileInfo) CalcRelPath() string {
+	var path string
 	if fi.RelPath != "" {
-		return fi.RelPath
+		path = fi.RelPath
+	} else {
+		path = strings.TrimPrefix(fi.ResPath, "res://packs/")
+		path = idTrimPrefixRegex.ReplaceAllString(path, "")
 	}
-	path := strings.TrimPrefix(fi.ResPath, "res://packs/")
-	path = idTrimPrefixRegex.ReplaceAllString(path, "")
+	if runtime.GOOS == "windows" {
+		path = strings.ReplaceAll(path, "\\", "/")
+	}
 	return path
+}
+
+func (fi *FileInfo) IsMetadata() bool {
+	return !fi.IsData() && !fi.IsTexture()
 }
 
 func (fi *FileInfo) IsData() bool {
@@ -115,21 +133,146 @@ func (fi *FileInfo) IsLight() bool {
 	return strings.HasPrefix(fi.CalcRelPath(), "textures/lights/")
 }
 
+type FileInfoList []FileInfo
+
+func (fil FileInfoList) ToInfoPairList() *FileInfoPairList {
+	return NewFileInfoPairList(fil)
+}
+
+func (fil FileInfoList) Write(log log.FieldLogger, out io.WriteSeeker, offset int64, alignment int, progressCallbacks ...func(p float64)) (err error) {
+	fipl := fil.ToInfoPairList()
+	return fipl.Write(log, out, offset, alignment, progressCallbacks...)
+}
+
+func (fil FileInfoList) AsSlice() []FileInfo {
+	return fil
+}
+
+func (fil FileInfoList) GetRessource(path string) *FileInfo {
+	for i := 0; i < len(fil); i++ {
+		if fil[i].ResPath == path {
+			return &fil[i]
+		}
+	}
+	return nil
+}
+
+func (fil FileInfoList) Find(P func(*FileInfo) bool) *FileInfo {
+	for i := 0; i < len(fil); i++ {
+		if P(&fil[i]) {
+			return &fil[i]
+		}
+	}
+	return nil
+}
+
+func (fil FileInfoList) Filter(P func(*FileInfo) bool) FileInfoList {
+	res := []FileInfo{}
+	for i := 0; i < len(fil); i++ {
+		if P(&fil[i]) {
+			res = append(res, fil[i])
+		}
+	}
+	return res
+}
+
+var replaces = regexp.MustCompile(`(\.)|(\*\*/)|(\*\*$)|(\*)|(\[)|(\])|(\})|(\{)|(\+)|([^/\*])`)
+
+func GlobToRelPathRegexp(pattern string) (*regexp.Regexp, error) {
+	pat := replaces.ReplaceAllStringFunc(pattern, func(s string) string {
+		switch s {
+		case ".":
+			return "\\."
+		case "**":
+			fallthrough
+		case "**/":
+			return ".*"
+		case "*":
+			return "[^/]*"
+		case "[":
+			return "\\["
+		case "]":
+			return "\\]"
+		case "{":
+			return "\\{"
+		case "}":
+			return "\\}"
+		case "+":
+			return "\\+"
+		default:
+			if s == "\\" && runtime.GOOS == "windows" {
+				return "/"
+			}
+			return s
+		}
+	})
+	return regexp.Compile("^" + pat + "$")
+}
+
+var ErrBadFileInfoListGlobPattern = errors.New("could not compile glob pattern")
+
+type FileInfoFilterFunc func(*FileInfo) bool
+
+func (fil FileInfoList) Glob(filter FileInfoFilterFunc, patterns ...string) (FileInfoList, error) {
+	matches := []FileInfo{}
+
+	for _, pattern := range patterns {
+		regexpPat, err := GlobToRelPathRegexp(pattern)
+		if err != nil {
+			return nil, errors.Join(err, ErrBadFileInfoListGlobPattern)
+		}
+		log.Debugf("compiled glob pattern %s", regexpPat.String())
+
+		for _, info := range fil {
+			if filter != nil && !filter(&info) {
+				continue
+			}
+			relPath := info.CalcRelPath()
+			if regexpPat.MatchString(relPath) {
+				matches = append(matches, info)
+			}
+		}
+	}
+
+	return matches, nil
+}
+
+func (fil FileInfoList) Paths() (paths []string) {
+	for _, info := range fil {
+		paths = append(paths, info.Path)
+	}
+	return
+}
+
+func (fil FileInfoList) ResPaths() (paths []string) {
+	for _, info := range fil {
+		paths = append(paths, info.ResPath)
+	}
+	return
+}
+
+func (fil FileInfoList) RelPaths() (paths []string) {
+	for _, info := range fil {
+		paths = append(paths, info.CalcRelPath())
+	}
+	return
+}
+
 // FileInfoPair groups a FileInfo and iot's Bytes equivalent
 type FileInfoPair struct {
 	Info      FileInfo
 	InfoBytes FileInfoBytes
 }
 
-// FileInfoList used to calculate the size of the list and properly set offsets in the info
-type FileInfoList struct {
+// FileInfoPairList used to calculate the size of the list and properly set offsets in the info
+type FileInfoPairList struct {
 	FileList []FileInfoPair
 	Size     int64
 }
 
-// NewFileInfoList builds a valid FileInfoList with size information
-func NewFileInfoList(fileList []FileInfo) *FileInfoList {
-	L := &FileInfoList{}
+// NewFileInfoPairList builds a valid FileInfoList with size information
+func NewFileInfoPairList(fileList []FileInfo) *FileInfoPairList {
+	pairList := &FileInfoPairList{}
 
 	var totalSize int64
 
@@ -144,24 +287,24 @@ func NewFileInfoList(fileList []FileInfo) *FileInfoList {
 		totalSize += int64(fInfo.ResPathSize)
 		totalSize += int64(binary.Size(fInfoBytes))
 
-		L.FileList = append(L.FileList, FileInfoPair{
+		pairList.FileList = append(pairList.FileList, FileInfoPair{
 			Info:      fInfo,
 			InfoBytes: fInfoBytes,
 		})
 	}
 
-	L.Size = totalSize
+	pairList.Size = totalSize
 
-	return L
+	return pairList
 }
 
 // UpdateOffsets updates all offset information to start from the passed point
 // Gogot has the ability to control alignment of packed file data.
 // this function tries to handle this
-func (fil *FileInfoList) UpdateOffsets(offset int64, alignment int) {
-	for i := 0; i < len(fil.FileList); i++ {
+func (fipl *FileInfoPairList) UpdateOffsets(offset int64, alignment int) {
+	for i := 0; i < len(fipl.FileList); i++ {
 		offset = utils.Align(offset, alignment)
-		pair := &fil.FileList[i]
+		pair := &fipl.FileList[i]
 		pair.Info.Offset = offset
 		pair.InfoBytes.Offset = uint64(offset)
 
@@ -170,26 +313,26 @@ func (fil *FileInfoList) UpdateOffsets(offset int64, alignment int) {
 }
 
 // Write out headers and file contents to io
-func (fil *FileInfoList) Write(log logrus.FieldLogger, out io.WriteSeeker, offset int64, alignment int, progressCallbacks ...func(p float64)) (err error) {
+func (fipl *FileInfoPairList) Write(log log.FieldLogger, out io.WriteSeeker, offset int64, alignment int, progressCallbacks ...func(p float64)) (err error) {
 	log.Debug("updating offsets...")
-	fil.UpdateOffsets(fil.Size+offset, alignment)
+	fipl.UpdateOffsets(fipl.Size+offset, alignment)
 
 	log.Debug("writing files...")
-	err = fil.WriteHeaders(log, out, alignment)
+	err = fipl.WriteHeaders(log, out, alignment)
 	if err != nil {
 		return
 	}
 
-	err = fil.WriteFiles(log, out, alignment, progressCallbacks...)
+	err = fipl.WriteFiles(log, out, alignment, progressCallbacks...)
 
 	return
 }
 
 // WriteHeaders write out the headers to io
-func (fil *FileInfoList) WriteHeaders(log logrus.FieldLogger, out io.WriteSeeker, alignment int) error {
+func (fipl *FileInfoPairList) WriteHeaders(log log.FieldLogger, out io.WriteSeeker, alignment int) error {
 	log.Debug("writing file headers")
-	for i := 0; i < len(fil.FileList); i++ {
-		pair := &fil.FileList[i]
+	for i := 0; i < len(fipl.FileList); i++ {
+		pair := &fipl.FileList[i]
 		// write path length
 		err := binary.Write(out, binary.LittleEndian, pair.Info.ResPathSize)
 		if !utils.CheckErrorWrite(log, err) {
@@ -223,25 +366,25 @@ func (fil *FileInfoList) WriteHeaders(log logrus.FieldLogger, out io.WriteSeeker
 	return nil
 }
 
-var AlignmentError = errors.New("alignment error")
+var ErrAlignment = errors.New("alignment error")
 
 // WriteFiles write the contents of the files in the list to io
-func (fil *FileInfoList) WriteFiles(log logrus.FieldLogger, out io.WriteSeeker, alignment int, progressCallbacks ...func(p float64)) error {
+func (fipl *FileInfoPairList) WriteFiles(log log.FieldLogger, out io.WriteSeeker, alignment int, progressCallbacks ...func(p float64)) error {
 	log.Debug("writing file data")
-	for i := 0; i < len(fil.FileList); i++ {
-		pair := &fil.FileList[i]
+	for i := 0; i < len(fipl.FileList); i++ {
+		pair := &fipl.FileList[i]
 
 		curPos, err := utils.Tell(out)
 		if err != nil {
 			return err
 		}
 		if pair.Info.Offset != curPos {
-			err = errors.Join(AlignmentError, fmt.Errorf("%v != %v", curPos, pair.Info.Offset))
+			err = errors.Join(ErrAlignment, fmt.Errorf("%v != %v", curPos, pair.Info.Offset))
 			log.WithError(err).WithField("file", pair.Info.Path).Error("misaligment of writer")
 			return err
 		}
 
-		err = fil.writeFile(log.WithField("file", pair.Info.Path), out, &pair.Info)
+		err = fipl.writeFile(log.WithField("file", pair.Info.Path), out, &pair.Info)
 		if err != nil {
 			return err
 		}
@@ -258,14 +401,14 @@ func (fil *FileInfoList) WriteFiles(log logrus.FieldLogger, out io.WriteSeeker, 
 		}
 
 		for _, pcb := range progressCallbacks {
-			pcb(float64(i+1) / float64(len(fil.FileList)))
+			pcb(float64(i+1) / float64(len(fipl.FileList)))
 		}
 	}
 
 	return nil
 }
 
-func (fil *FileInfoList) writeFile(l logrus.FieldLogger, out io.Writer, info *FileInfo) (err error) {
+func (fipl *FileInfoPairList) writeFile(l log.FieldLogger, out io.Writer, info *FileInfo) (err error) {
 	l.Debug("writing")
 
 	var data []byte

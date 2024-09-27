@@ -49,7 +49,7 @@ func (uc *UnpackCmd) Run(ctx *Context) error {
 	defer file.Close()
 
 	bar := progressbar.Default(100, "Unpacking ...")
-	err := pkg.ExtractPackage(file, outDirPath, ddpackage.UnpackOptions{
+	err := pkg.ExtractPackage(outDirPath, ddpackage.UnpackOptions{
 		Overwrite:   uc.Overwrite,
 		RipTextures: uc.RipTextures,
 		Thumbnails:  uc.Thumbnails,

@@ -22,6 +22,9 @@ import (
 	// _ "golang.org/x/image/webp"
 
 	// uses libwebp >=1.0.3
+	// replace with
+	// github.com/chirino/webp@8b3bed1ecc92085133c77728637009906734715f
+	// for webp 1.4.0
 	_ "github.com/chai2010/webp"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
@@ -49,12 +52,12 @@ func OpenImage(path string) (image.Image, string, error) {
 	return image.Decode(file)
 }
 
-var InvalidSVGError = errors.New("invalid svg")
+var ErrInvalidSVG = errors.New("invalid svg")
 
 func ReadSvg(r io.Reader) (image.Image, error) {
 	icon, err := oksvg.ReadIconStream(r)
 	if err != nil {
-		return nil, errors.Join(err, InvalidSVGError)
+		return nil, errors.Join(err, ErrInvalidSVG)
 	}
 	return SvgToImage(icon)
 }
@@ -87,9 +90,8 @@ func PngImageBytes(img image.Image, buf *bytes.Buffer) (err error) {
 	return
 }
 
-func BytesToImage(byts []byte) (image.Image, error) {
-	img, _, err := image.Decode(bytes.NewReader(byts))
-	return img, err
+func BytesToImage(byts []byte) (image.Image, string, error) {
+	return image.Decode(bytes.NewReader(byts))
 }
 
 func ResizeVirticalAndCropWidth(img image.Image, height int, width int) image.Image {

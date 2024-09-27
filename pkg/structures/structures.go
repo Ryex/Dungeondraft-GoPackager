@@ -19,23 +19,24 @@ type PackageHeaders struct {
 }
 
 const (
-	GODOT_PACKAGE_MAGIC uint32 = 0x43504447 // PCK archive Magic
+	// PCK archive Magic
+	GodotPackageMagic uint32 = 0x43504447
 
-	GODOT_PACKAGE_FORMAT uint32 = 1 // package format should stay at 1 unless GoDot changes
+	GodotPackageFormat uint32 = 1 // package format should stay at 1 unless GoDot changes
 
-	GODOT_MAJOR uint32 = 3 // latest dungeondraft is built with 3.4.2
-	GODOT_MINOR uint32 = 4 // these should update with dungeondraft but no harm should come if they don't (presumably)
-	GODOT_PATCH uint32 = 2
+	GodotMajor uint32 = 3 // latest dungeondraft is built with 3.4.2
+	GodotMinor uint32 = 4 // these should update with dungeondraft but no harm should come if they don't (presumably)
+	GodotPatch uint32 = 2
 )
 
 // DefaultPackageHeader gives the defaults Package Headers you would expect
 func DefaultPackageHeader() *PackageHeaders {
 	return &PackageHeaders{
-		Magic:             GODOT_PACKAGE_MAGIC,
-		PackFormatVersion: GODOT_PACKAGE_FORMAT,
-		VersionMajor:      GODOT_MAJOR,
-		VersionMinor:      GODOT_MINOR,
-		VersionPatch:      GODOT_PATCH,
+		Magic:             GodotPackageMagic,
+		PackFormatVersion: GodotPackageFormat,
+		VersionMajor:      GodotMajor,
+		VersionMinor:      GodotMinor,
+		VersionPatch:      GodotPatch,
 	}
 }
 

@@ -17,8 +17,9 @@ func NewSet[T comparable]() *Set[T] {
 
 func (s *Set[T]) AsSlice() []T {
 	res := make([]T, len(s.data))
+	i := 0
 	for d := range s.data {
-		res = append(res, d)
+		res[i] = d
 	}
 	return res
 }
@@ -61,7 +62,7 @@ type SetFilterFunc[T comparable] func(d T) bool
 func (s *Set[T]) Filter(P SetFilterFunc[T]) *Set[T] {
 	res := NewSet[T]()
 	for d := range s.data {
-		if P(d) == false {
+		if !P(d) {
 			continue
 		}
 		res.Add(d)
@@ -83,7 +84,7 @@ func (s *Set[T]) Union(s2 *Set[T]) *Set[T] {
 func (s *Set[T]) Intersect(s2 *Set[T]) *Set[T] {
 	res := NewSet[T]()
 	for d := range s.data {
-		if s2.Has(d) == false {
+		if !s2.Has(d) {
 			continue
 		}
 		res.Add(d)
