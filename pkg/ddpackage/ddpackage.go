@@ -172,6 +172,7 @@ func (p *Package) LoadFromPackedPath(path string) error {
 	p.pkgFile = file
 	p.mode = PackageModePacked
 
+
 	p.updateResourceMap()
 
 	return nil

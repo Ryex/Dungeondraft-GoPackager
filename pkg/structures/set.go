@@ -15,11 +15,18 @@ func NewSet[T comparable]() *Set[T] {
 	return s
 }
 
+func SetFrom[T comparable](from []T) *Set[T] {
+	s := NewSet[T]()
+	s.AddM(from...)
+	return s
+}
+
 func (s *Set[T]) AsSlice() []T {
 	res := make([]T, len(s.data))
 	i := 0
 	for d := range s.data {
 		res[i] = d
+		i++
 	}
 	return res
 }

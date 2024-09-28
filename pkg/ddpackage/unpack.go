@@ -15,7 +15,6 @@ import (
 	"strings"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
-	"github.com/ryex/dungeondraft-gopackager/pkg/ddimage"
 	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
 )
 
@@ -458,25 +457,13 @@ func (p *Package) newFileInfoPacked(resPath []byte, infoBytes structures.FileInf
 func (p *Package) updatePackedFileInfoAfter() {
 	for i := 0; i < len(p.fileList); i++ {
 		info := &p.fileList[i]
+		p.log.Infof("unpdating info for %s", info.ResPath)
 
 		info.RelPath = strings.TrimPrefix(strings.TrimPrefix(info.ResPath, "res://packs/"), p.id+"/")
-		if ddimage.PathIsSupportedImage(strings.TrimPrefix(info.ResPath, "res://")) {
+		if info.IsTexture() {
 			hash := md5.Sum([]byte(info.ResPath))
 			thumbnailName := hex.EncodeToString(hash[:]) + ".png"
 			info.ThumbnailResPath = fmt.Sprintf("res://packs/%s/thumbnails/%s", p.id, thumbnailName)
-			{
-				data, err := p.readPackedFileFromPackage(p.pkgFile, info)
-				if err != nil {
-					p.log.WithError(err).Errorf("can not read %s", info.ResPath)
-				} else {
-					_, format, err := ddimage.BytesToImage(data)
-					if err != nil {
-						p.log.WithError(err).Warnf("can not decode %s as an image", info.ResPath)
-					} else {
-						info.ImageFormat = format
-					}
-				}
-			}
 		}
 
 		isWall := info.IsWall()

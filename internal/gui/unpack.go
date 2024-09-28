@@ -47,12 +47,12 @@ func (a *App) loadPack(path string) {
 
 		err = pkg.LoadTags()
 		if err != nil {
-			a.showErrorDialog(errors.Join(err, fmt.Errorf(lang.X("unpack.tags.error", "Failed to read tags"))))
+			a.showErrorDialog(errors.Join(err, fmt.Errorf(lang.X("package.tags.error", "Failed to read tags"))))
 			err = nil
 		}
 		err = pkg.LoadResourceMetadata()
 		if err != nil {
-			a.showErrorDialog(errors.Join(err, fmt.Errorf(lang.X("unpack.metadata.error", "Failed to read metadata"))))
+			a.showErrorDialog(errors.Join(err, fmt.Errorf(lang.X("package.metadata.error", "Failed to read metadata"))))
 			err = nil
 		}
 		a.setPackContent(pkg)
@@ -62,7 +62,7 @@ func (a *App) loadPack(path string) {
 func (a *App) setPackContent(pkg *ddpackage.Package) {
 	a.pkg = pkg
 
-	split := a.buildPackageTreeAndPreview()
+	split := a.buildPackageTreeAndInfoPane(false)
 
 	outputPath := binding.BindPreferenceString("unpack.outPath", a.app.Preferences())
 

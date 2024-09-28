@@ -105,7 +105,7 @@ func (p *Package) loadUnpackedTags() error {
 	tagsBytes, err := os.ReadFile(tagsPath)
 	if err != nil {
 		p.log.WithError(err).
-			WithField("path", p.UnpackedPath).
+			WithField("path", p.unpackedPath).
 			WithField("tagsPath", tagsPath).
 			Error("can't read tags file")
 		return errors.Join(err, ErrTagsRead)
@@ -117,6 +117,32 @@ func (p *Package) loadUnpackedTags() error {
 		return errors.Join(err, ErrTagsParse)
 	}
 
+	return nil
+}
+
+func (p *Package) SaveUnpackedTags() error {
+	if p.mode != PackageModeUnpacked {
+		return ErrPackageNotUnpacked
+	}
+	tagsPath := filepath.Join(p.unpackedPath, "data", "default.dungeondraft_tags")
+
+	tagsBytes, err := json.MarshalIndent(&p.tags, "", "  ")
+	if err != nil {
+		p.log.WithError(err).
+			WithField("path", p.unpackedPath).
+			WithField("tagsPath", tagsPath).
+			Error("can't save tags file")
+		return errors.Join(err, ErrTagsWrite)
+	}
+
+	err = os.WriteFile(tagsPath, tagsBytes, 0o644)
+	if err != nil {
+		p.log.WithError(err).
+			WithField("path", p.unpackedPath).
+			WithField("tagsPath", tagsPath).
+			Error("can't save tags file")
+		return errors.Join(err, ErrTagsWrite)
+	}
 	return nil
 }
 

@@ -2,6 +2,7 @@ package gui
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 
 	"fyne.io/fyne/v2"
@@ -85,6 +86,17 @@ func (a *App) loadUnpackedPath(path string) {
 			)
 			return
 		}
+
+		err = pkg.LoadTags()
+		if err != nil {
+			a.showErrorDialog(errors.Join(err, fmt.Errorf(lang.X("package.tags.error", "Failed to read tags"))))
+			err = nil
+		}
+		err = pkg.LoadResourceMetadata()
+		if err != nil {
+			a.showErrorDialog(errors.Join(err, fmt.Errorf(lang.X("package.metadata.error", "Failed to read metadata"))))
+			err = nil
+		}
 		a.setUnpackedContent(pkg)
 	}()
 }
@@ -151,7 +163,7 @@ func (a *App) setNotAPackageContent(path string) {
 func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 	a.pkg = pkg
 
-	split := a.buildPackageTreeAndPreview()
+	split := a.buildPackageTreeAndInfoPane(true)
 
 	outputPath := binding.BindPreferenceString("pack.outPath", a.app.Preferences())
 

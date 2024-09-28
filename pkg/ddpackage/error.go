@@ -12,6 +12,7 @@ var (
 	ErrUnsetPackID        = errors.New("pack id not set")
 	ErrUnsetUnpackedPath  = errors.New("pack unpacked path not set")
 	ErrTagsRead           = errors.New("tags read error")
+	ErrTagsWrite          = errors.New("tags write error")
 	ErrTagsParse          = errors.New("tag file parse error")
 	ErrMetadataRead       = errors.New("metadata read error")
 	ErrWallParse          = errors.New("wall file parse error")

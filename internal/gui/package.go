@@ -5,6 +5,7 @@ import (
 	"math"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -15,6 +16,7 @@ import (
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/bindings"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
@@ -23,7 +25,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func (a *App) buildPackageTreeAndPreview() fyne.CanvasObject {
+func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
 	filter := binding.NewString()
 	filterEntry := widget.NewEntryWithData(filter)
 	filterEntry.SetPlaceHolder(lang.X("tree.filter.placeholder", "Filter with glob (ie. */objects/**)"))
@@ -57,9 +59,6 @@ func (a *App) buildPackageTreeAndPreview() fyne.CanvasObject {
 	defaultPreview := container.NewCenter(
 		widget.NewLabel(lang.X("preview.defaultText", "Select a resource")),
 	)
-	tooLarge := container.NewCenter(
-		widget.NewLabel(lang.X("preview.toolarge", "This file is too large!\nOpen it in a text editor.")),
-	)
 
 	rightSplit := container.NewStack(defaultPreview)
 
@@ -71,92 +70,7 @@ func (a *App) buildPackageTreeAndPreview() fyne.CanvasObject {
 			if info == nil {
 				return defaultPreview
 			}
-
-			fileData, err := a.pkg.LoadResource(info.ResPath)
-			if err != nil {
-				log.WithError(err).Errorf("failed to read image data for %s", tni)
-				return widget.NewLabel(fmt.Sprintf("Failed to read image data for %s", tni))
-			}
-
-			pathLabel := widget.NewLabel(
-				lang.X(
-					"preview.path.label",
-					"Path",
-				),
-			)
-			pathEntry := widget.NewEntry()
-			pathEntry.SetText(info.CalcRelPath())
-			pathEntry.OnChanged = func(_ string) {
-				pathEntry.SetText(info.CalcRelPath())
-			}
-			pathEntry.Refresh()
-			path := container.New(
-				layouts.NewRightExpandHBoxLayout(),
-				pathLabel,
-				pathEntry,
-			)
-
-			if !ddimage.PathIsSupportedImage(info.RelPath) {
-				textContent := string(fileData)
-				if len(textContent) > 1000 {
-					return tooLarge
-				}
-				widget.NewMultiLineEntry()
-				textEntry := widget.NewMultiLineEntry()
-				textEntry.Text = textContent
-				bg := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
-				copyBtn := widget.NewButtonWithIcon("", theme.ContentCopyIcon(), func() {
-					a.window.Clipboard().SetContent(string(fileData))
-				})
-				content := container.NewPadded(
-					container.New(
-						layouts.NewBottomExpandVBoxLayout(),
-						path,
-						container.NewStack(
-							bg,
-							textEntry,
-							container.NewPadded(
-								container.NewVBox(
-									container.NewHBox(layout.NewSpacer(), copyBtn),
-									layout.NewSpacer(),
-								),
-							),
-						),
-					),
-				)
-				return content
-			}
-
-			img, _, err := ddimage.BytesToImage(fileData)
-			if err != nil {
-				log.WithError(err).Errorf("failed to decode image for %s", tni)
-				content := widget.NewLabel(fmt.Sprintf("Failed to decode image for %s", tni))
-				return content
-			}
-
-			log.Infof("loaded image for %s", tni)
-			imgW := canvas.NewImageFromImage(img)
-			height := float32(64)
-			if info.IsTerrain() {
-				height = 160
-			} else if info.IsWall() {
-				height = 32
-			} else if info.IsPath() {
-				height = 48
-			}
-			tmpW := float64(height) * float64(img.Bounds().Dx()) / float64(img.Bounds().Dy())
-			width := float32(math.Max(1.0, math.Floor(tmpW+0.5)))
-			imgW.SetMinSize(fyne.NewSize(width, height))
-			imgW.FillMode = canvas.ImageFillContain
-			imgW.ScaleMode = canvas.ImageScaleFastest
-			content := container.New(
-				layouts.NewBottomExpandVBoxLayout(),
-				path,
-				container.NewScroll(
-					imgW,
-				),
-			)
-			return content
+			return a.buildInfoPane(info, editable)
 		}()
 
 		rightSplit.RemoveAll()
@@ -247,23 +161,210 @@ func (a *App) buildPackageTree(filter binding.String) (*widget.Tree, binding.Str
 		log.WithError(err).Debug("file list fetch failure")
 	})
 
-	// TODO: remove if safe
-	// filter.AddListener(binding.NewDataListener(func() {
-	// 	log.Trace("rebuilding tree")
-	// 	fil, err := mappedList.Get()
-	// 	if err != nil {
-	// 		log.WithError(err).Debug("file list fetch failure")
-	// 		return
-	// 	}
-	// 	nodeTree = buildInfoMaps(fil)
-	// 	tree.Refresh()
-	// }))
-
 	tree.OnSelected = func(uid widget.TreeNodeID) {
 		selected.Set(uid)
 	}
 
 	return tree, selected
+}
+
+func (a *App) buildInfoPane(info *structures.FileInfo, editable bool) fyne.CanvasObject {
+	tabs := container.NewAppTabs(
+		container.NewTabItemWithIcon(
+			lang.X("preview.tab.resource", "Resource"),
+			theme.FileIcon(),
+			a.buildFilePreview(info)),
+	)
+
+	if info.IsTexture() {
+		tabs.Append(container.NewTabItemWithIcon(
+			lang.X("preview.tab.tags", "Tags"),
+			theme.ListIcon(),
+			a.buildTagInfo(info, editable),
+		))
+	}
+
+	if info.ShouldHaveMetadata() {
+		tabs.Append(container.NewTabItemWithIcon(
+			lang.X("preview.tab.metadata", "Settings"),
+			theme.ColorPaletteIcon(),
+			nil,
+		))
+	}
+
+	tabs.SetTabLocation(container.TabLocationTop)
+	return tabs
+}
+
+func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
+	fileData, err := a.pkg.LoadResource(info.ResPath)
+	if err != nil {
+		log.WithError(err).Errorf("failed to read image data for %s", info.ResPath)
+		return widget.NewLabel(fmt.Sprintf("Failed to read image data for %s", info.ResPath))
+	}
+
+	pathLabel := widget.NewLabel(
+		lang.X(
+			"preview.path.label",
+			"Path",
+		),
+	)
+	pathEntry := widget.NewEntry()
+	pathEntry.SetText(info.CalcRelPath())
+	pathEntry.OnChanged = func(_ string) {
+		pathEntry.SetText(info.CalcRelPath())
+	}
+	pathEntry.Refresh()
+	path := container.New(
+		layouts.NewRightExpandHBoxLayout(),
+		pathLabel,
+		pathEntry,
+	)
+
+	tooLarge := container.NewCenter(
+		widget.NewLabel(lang.X("preview.toolarge", "This file is too large!\nOpen it in a text editor.")),
+	)
+
+	bg := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
+	if !ddimage.PathIsSupportedImage(info.RelPath) {
+		textContent := string(fileData)
+		if len(textContent) > 1000 {
+			return container.NewPadded(layouts.NewBottomExpandVBox(path, container.NewStack(
+				bg, tooLarge,
+			)))
+		}
+		widget.NewMultiLineEntry()
+		textEntry := widget.NewMultiLineEntry()
+		textEntry.Text = textContent
+		copyBtn := widget.NewButtonWithIcon("", theme.ContentCopyIcon(), func() {
+			a.window.Clipboard().SetContent(string(fileData))
+		})
+		content := container.NewPadded(
+			layouts.NewBottomExpandVBox(
+				path,
+				container.NewStack(
+					bg,
+					textEntry,
+					container.NewPadded(
+						container.NewVBox(
+							container.NewHBox(layout.NewSpacer(), copyBtn),
+							layout.NewSpacer(),
+						),
+					),
+				),
+			),
+		)
+		return content
+	}
+
+	img, _, err := ddimage.BytesToImage(fileData)
+	if err != nil {
+		log.WithError(err).Errorf("failed to decode image for %s", info.ResPath)
+		content := widget.NewLabel(fmt.Sprintf("Failed to decode image for %s", info.ResPath))
+		return content
+	}
+
+	log.Infof("loaded image for %s", info.ResPath)
+	imgW := canvas.NewImageFromImage(img)
+	height := float32(64)
+	if info.IsTerrain() {
+		height = 160
+	} else if info.IsWall() {
+		height = 32
+	} else if info.IsPath() {
+		height = 48
+	}
+	tmpW := float64(height) * float64(img.Bounds().Dx()) / float64(img.Bounds().Dy())
+	width := float32(math.Max(1.0, math.Floor(tmpW+0.5)))
+	imgW.SetMinSize(fyne.NewSize(width, height))
+	imgW.FillMode = canvas.ImageFillContain
+	imgW.ScaleMode = canvas.ImageScaleFastest
+	content := container.NewPadded(container.New(
+		layouts.NewBottomExpandVBoxLayout(),
+		path,
+		container.NewPadded(container.NewStack(
+			bg,
+			container.NewScroll(
+				imgW,
+			),
+		)),
+	))
+	return content
+}
+
+func (a *App) buildTagInfo(info *structures.FileInfo, editable bool) fyne.CanvasObject {
+	var tags []string
+	boundTags := binding.BindStringList(&tags)
+	updateTags := func() {
+		updated := a.pkg.Tags().TagsFor(info.RelPath).AsSlice()
+		boundTags.Set(updated)
+		log.Infof("tags for %s: %s", info.ResPath, spew.Sdump(tags))
+	}
+	updateTags()
+
+	tagsList := widget.NewListWithData(
+		boundTags,
+		func() fyne.CanvasObject {
+			return layouts.NewLeftExpandHBox(
+				widget.NewLabel("template"),
+				widget.NewButtonWithIcon("", theme.DeleteIcon(), nil),
+			)
+		},
+		func(di binding.DataItem, co fyne.CanvasObject) {
+			c := co.(*fyne.Container)
+			l := c.Objects[0].(*widget.Label)
+			l.Bind(di.(binding.String))
+			btn := c.Objects[1].(*widget.Button)
+			if editable {
+				btn.OnTapped = func() {
+					tag, err := di.(binding.String).Get()
+					if err != nil {
+						log.WithError(err).Errorf("failed to get tag in del tag btn for %s", info.RelPath)
+						return
+					}
+					a.pkg.Tags().Untag(tag, info.RelPath)
+					updateTags()
+					a.saveUnpackedTags()
+				}
+			} else {
+				btn.Disable()
+				btn.Hide()
+			}
+		},
+	)
+	content := layouts.NewTopExpandVBox(tagsList)
+
+	if editable {
+		tagSelecter := widget.NewSelectEntry(a.pkg.Tags().AllTags())
+		addBtn := widget.NewButtonWithIcon(
+			lang.X("tags.addBtn.text", "Add"),
+			theme.ContentAddIcon(),
+			func() {
+				if tagSelecter.Text == "" {
+					return
+				}
+				a.pkg.Tags().Tag(tagSelecter.Text, info.RelPath)
+				updateTags()
+				a.saveUnpackedTags()
+			})
+		content.Add(layouts.NewLeftExpandHBox(tagSelecter, addBtn))
+	}
+
+	return content
+}
+
+func (a *App) saveUnpackedTags() {
+	if a.tagSaveTimer != nil {
+		a.tagSaveTimer.Stop()
+		a.tagSaveTimer = nil
+	}
+	a.tagSaveTimer = time.AfterFunc(500*time.Millisecond, func() {
+		a.tagSaveTimer = nil
+		err := a.pkg.SaveUnpackedTags()
+		if err != nil {
+			a.showErrorDialog(err)
+		}
+	})
 }
 
 func buildInfoMaps(infoList []structures.FileInfo) map[string][]string {
