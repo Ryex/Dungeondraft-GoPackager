@@ -36,21 +36,17 @@ func (p *Package) ExtractPackage(outDir string, options UnpackOptions, progressC
 }
 
 var (
-	resourcePathRegex  = regexp.MustCompile(`^res://packs/([\w\-. ]+)((\.json$)|(/))`)
-	thumbnailPathRegex = regexp.MustCompile(`^res://packs/([\w\-. ]+)((\.json$)|(/))`)
 	packJSONPathRegex  = regexp.MustCompile(`^res://packs/([\w\-. ]+).json`)
+	idTrimPrefixRegex  = regexp.MustCompile(`^([\w\-. ]+)/`)
 )
 
 func (p *Package) NormalizeResourcePath(resPath string) string {
-	path := strings.Replace(string(resPath), "res://", p.name+"/", 1)
-	match := resourcePathRegex.FindStringSubmatch(resPath)
-	if match != nil {
-		guid := strings.TrimSpace(match[1])
-		clean := filepath.Clean(path)
-		path = filepath.Clean(strings.Replace(clean, filepath.Join("packs", guid)+string(filepath.Separator), "", 1))
-		path = filepath.Clean(strings.Replace(path, filepath.Join("packs", guid)+".json", "pack.json", 1))
+	if match := packJSONPathRegex.MatchString(resPath); match {
+		return "pack.json"
 	}
-	return path
+	path := strings.TrimPrefix(resPath, "res://packs/")
+	path = idTrimPrefixRegex.ReplaceAllString(path, "")
+	return filepath.Clean(path)
 }
 
 func (p *Package) MapResourcePaths() {

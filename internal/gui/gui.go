@@ -43,7 +43,8 @@ type App struct {
 	mainDisableListener     binding.DataListener
 	currentDisableListeners []binding.DataListener
 
-  tagSaveTimer *time.Timer
+	tagSaveTimer  *time.Timer
+	resSaveTimers map[string]*time.Timer
 }
 
 //go:embed translation
@@ -53,6 +54,7 @@ func NewApp() *App {
 	return &App{
 		operatingPath:  binding.NewString(),
 		disableButtons: binding.NewBool(),
+		resSaveTimers:  make(map[string]*time.Timer),
 	}
 }
 
@@ -96,7 +98,7 @@ func (a *App) buildMainUI() {
 			inputTimer.Stop()
 		}
 		inputTimer = time.AfterFunc(500*time.Millisecond, func() {
-		  inputTimer = nil
+			inputTimer = nil
 			_, err := os.Stat(path)
 			if err == nil {
 				a.operatingPath.Set(path)

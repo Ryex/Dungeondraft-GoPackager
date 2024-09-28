@@ -63,5 +63,9 @@
   "packJson.dialog.dismis": "Cancel",
   "packJson.dialog.save": "Save",
   "packJson.dismis": "Close",
-  "tags.addBtn.text": "Add"
+  "tags.addBtn.text": "Add",
+  "metadata.color.label": "Color",
+  "metadata.name.label": "Name",
+  "metadata.tilesetType.label": "Tileset Type",
+  "metadata.colorPickDialog.title": "Pick a default color"
 }

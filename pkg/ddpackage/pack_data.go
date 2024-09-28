@@ -126,23 +126,102 @@ func (p *Package) SaveUnpackedTags() error {
 	}
 	tagsPath := filepath.Join(p.unpackedPath, "data", "default.dungeondraft_tags")
 
+	l := p.log.
+		WithField("path", p.unpackedPath).
+		WithField("tagsPath", tagsPath)
 	tagsBytes, err := json.MarshalIndent(&p.tags, "", "  ")
 	if err != nil {
-		p.log.WithError(err).
-			WithField("path", p.unpackedPath).
-			WithField("tagsPath", tagsPath).
+		l.WithError(err).
 			Error("can't save tags file")
+		return errors.Join(err, ErrTagsWrite)
+	}
+
+	err = os.MkdirAll(filepath.Dir(tagsPath), 0o777)
+	if err != nil {
+		l.WithError(err).Error("can't save wall data")
 		return errors.Join(err, ErrTagsWrite)
 	}
 
 	err = os.WriteFile(tagsPath, tagsBytes, 0o644)
 	if err != nil {
-		p.log.WithError(err).
-			WithField("path", p.unpackedPath).
-			WithField("tagsPath", tagsPath).
+		l.WithError(err).
 			Error("can't save tags file")
 		return errors.Join(err, ErrTagsWrite)
 	}
+	return nil
+}
+
+func (p *Package) SaveUnpackedWall(resPath string) error {
+	if p.mode != PackageModeUnpacked {
+		return ErrPackageNotUnpacked
+	}
+
+	data, ok := p.walls[resPath]
+	if !ok {
+		return nil
+	}
+
+	p.log.Infof("%s normalised to %s", resPath, p.NormalizeResourcePath(resPath))
+
+	wallDataPath := filepath.Join(p.unpackedPath, p.NormalizeResourcePath(resPath))
+
+	l := p.log.WithField("res", wallDataPath)
+	l.Info("saving wall")
+
+	wallBytes, err := json.MarshalIndent(&data, "", "  ")
+	if err != nil {
+		l.WithError(err).Error("can't save wall data")
+		return errors.Join(err, ErrWallSave)
+	}
+
+	err = os.MkdirAll(filepath.Dir(wallDataPath), 0o777)
+	if err != nil {
+		l.WithError(err).Error("can't save wall data")
+		return errors.Join(err, ErrWallSave)
+	}
+
+	err = os.WriteFile(wallDataPath, wallBytes, 0o644)
+	if err != nil {
+		l.WithError(err).Error("can't save wall data")
+		return errors.Join(err, ErrWallSave)
+	}
+
+	return nil
+}
+
+func (p *Package) SaveUnpackedTileset(resPath string) error {
+	if p.mode != PackageModeUnpacked {
+		return ErrPackageNotUnpacked
+	}
+
+	data, ok := p.tilesets[resPath]
+	if !ok {
+		return nil
+	}
+
+	tilesetDataPath := filepath.Join(p.unpackedPath, p.NormalizeResourcePath(resPath))
+
+	l := p.log.WithField("res", tilesetDataPath)
+	l.Info("saving tileset")
+
+	tilesetBytes, err := json.MarshalIndent(&data, "", "  ")
+	if err != nil {
+		l.WithError(err).Error("can't save wall data")
+		return errors.Join(err, ErrTilesetSave)
+	}
+
+	err = os.MkdirAll(filepath.Dir(tilesetDataPath), 0o777)
+	if err != nil {
+		l.WithError(err).Error("can't save wall data")
+		return errors.Join(err, ErrTilesetSave)
+	}
+
+	err = os.WriteFile(tilesetDataPath, tilesetBytes, 0o644)
+	if err != nil {
+		l.WithError(err).Error("can't save wall data")
+		return errors.Join(err, ErrTilesetSave)
+	}
+
 	return nil
 }
 
