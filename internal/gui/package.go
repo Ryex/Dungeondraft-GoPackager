@@ -226,13 +226,13 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 	)
 
 	tooLarge := container.NewCenter(
-		widget.NewLabel(lang.X("preview.toolarge", "This file is too large!\nOpen it in a text editor.")),
+		widget.NewLabel(lang.X("preview.tooLarge", "This file is too large!\nOpen it in a text editor.")),
 	)
 
 	bg := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
 	if !ddimage.PathIsSupportedImage(info.RelPath) {
 		textContent := string(fileData)
-		if len(textContent) > 1000 {
+		if len(strings.Split(textContent, "\n")) > 200 {
 			return container.NewPadded(layouts.NewBottomExpandVBox(path, container.NewStack(
 				bg, tooLarge,
 			)))
