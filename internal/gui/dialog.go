@@ -132,6 +132,7 @@ func (dlg *PackJSONDialog) buildUi() {
 	thirdPartyCheck := widget.NewCheck(lang.X("packJson.thirdParty.label", "Allow 3rd party mapping software to use this pack"), func(checked bool) {
 		dlg.Allow3rdParty = checked
 	})
+	thirdPartyCheck.SetChecked(dlg.Allow3rdParty)
 
 	customColorsMsg := multilineCanvasText(
 		lang.X(
@@ -176,6 +177,7 @@ func (dlg *PackJSONDialog) buildUi() {
 			customColorsContainer.Hide()
 		}
 	})
+	customColorsCheck.SetChecked(dlg.ColorOverrides.Enabled)
 
 	if !dlg.editable {
 		nameEntry.Disable()
@@ -199,8 +201,8 @@ func (dlg *PackJSONDialog) buildUi() {
 			keywordsLbl, keywordsEntry,
 		),
 		thirdPartyCheck,
-		customColorsMsg,
 		customColorsCheck,
+		customColorsMsg,
 		customColorsContainer,
 	)
 
