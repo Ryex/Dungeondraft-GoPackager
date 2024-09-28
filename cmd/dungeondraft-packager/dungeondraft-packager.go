@@ -1,16 +1,21 @@
 package main
 
 import (
+	"fmt"
+	"io"
 	"os"
+	"time"
 
 	"github.com/alecthomas/kong"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui"
+	"github.com/snowzach/rotatefilehook"
 
 	log "github.com/sirupsen/logrus"
 )
 
 var CLI struct {
-	LogLevel log.Level `short:"v" type:"counter" help:"log level, 0 = Error, 1 = Warn (-v), 2 = Info (-vv), 3 = Debug (-vvv), 4 = Trace (-vvvv)"`
+	LogLevel string ` enum:"debug,info,warn,error" default:"info"`
+	LogFile  string `short:"L" type:"path" default:"./logs/packager.log"`
 }
 
 func main() {
@@ -25,13 +30,52 @@ func main() {
 			}),
 		// vars
 	)
+	f, err := os.OpenFile(CLI.LogFile, os.O_CREATE|os.O_RDWR, 0o666)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error opening log file: %v", err)
+	} else {
+		defer f.Close()
+		log.SetOutput(io.MultiWriter(f, os.Stderr))
+	}
 
-	level := CLI.LogLevel + 2
-	log.SetLevel(level)
+	var logLevel log.Level
+	switch CLI.LogLevel {
+	case "debug":
+		logLevel = log.DebugLevel
+	case "info":
+		logLevel = log.InfoLevel
+	case "warn":
+		logLevel = log.WarnLevel
+	case "error":
+		logLevel = log.ErrorLevel
+	default:
+		logLevel = log.InfoLevel
+	}
+
+	log.SetLevel(logLevel)
 	log.SetOutput(os.Stderr)
 	log.SetFormatter(&log.TextFormatter{
-		ForceColors: true,
+		ForceColors:     true,
+		FullTimestamp:   true,
+		TimestampFormat: time.RFC822,
 	})
+
+	rotateFileHook, err := rotatefilehook.NewRotateFileHook(rotatefilehook.RotateFileConfig{
+		Filename:   CLI.LogFile,
+		MaxSize:    50, // megabytes
+		MaxBackups: 3,
+		MaxAge:     28, // days
+		Level:      logLevel,
+		Formatter: &log.JSONFormatter{
+			TimestampFormat: time.RFC822,
+		},
+	})
+	if err != nil {
+		log.WithError(err).Error("Failed to init log file rotate hook")
+	} else {
+		log.AddHook(rotateFileHook)
+	}
+	log.Infof("Log level %s", logLevel.String())
 
 	app := gui.NewApp()
 	app.Main()

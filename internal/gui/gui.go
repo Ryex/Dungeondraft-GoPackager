@@ -60,6 +60,8 @@ func NewApp() *App {
 
 func (a *App) Main() {
 	a.app = app.NewWithID("io.github.ryex.dungondraft-gopackager")
+	local := lang.SystemLocale()
+	log.Infof("system local %s : %s", local.LanguageString(), local.String())
 	translationErr := lang.AddTranslationsFS(translations, "translation")
 	if translationErr != nil {
 		log.WithError(translationErr).Error("Failed to load translations")

@@ -3,7 +3,7 @@
   "greeting": "Dungeondraft-GoPackager - Package and edit Dungeondraft resource packs",
   "browse": "Browse",
   "pathInput.placeholder": "Path to .dungeondraft_pack or folder",
-  "packBtn": "Open pack",
+  "packBtn.text": "Open pack",
   "folderBtn.text": "Open folder",
   "main.defaultText": "Enter a path to get started.",
   "err.badPath": "Can not open \"{{.Path}}\"",
