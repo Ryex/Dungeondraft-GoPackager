@@ -3,6 +3,7 @@ package gui
 import (
 	"embed"
 	"fmt"
+	"image/color"
 	"os"
 	"strings"
 	"sync"
@@ -19,7 +20,8 @@ import (
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-	"github.com/ryex/dungeondraft-gopackager/internal/gui/custom_layout"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/bindings"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddpackage"
 	log "github.com/sirupsen/logrus"
@@ -136,8 +138,7 @@ func (a *App) buildMainUI() {
 		dlg.Show()
 	})
 
-	a.mainDisableListener = binding.NewDataListener(func() {
-		disable, _ := a.disableButtons.Get()
+	a.mainDisableListener = bindings.Listen(a.disableButtons, func(disable bool) {
 		if disable {
 			packBtn.Disable()
 			folderBtn.Disable()
@@ -146,10 +147,9 @@ func (a *App) buildMainUI() {
 			folderBtn.Enable()
 		}
 	})
-	a.disableButtons.AddListener(a.mainDisableListener)
 
 	inputContainer := container.New(
-		custom_layout.NewLeftExpandHBoxLayout(),
+		layouts.NewLeftExpandHBoxLayout(),
 		pathInput,
 		layout.NewSpacer(),
 		packBtn,
@@ -175,7 +175,7 @@ func (a *App) buildMainUI() {
 
 	content := container.NewPadded(
 		container.New(
-			custom_layout.NewBottomExpandVBoxLayout(),
+			layouts.NewBottomExpandVBoxLayout(),
 			welcome,
 			inputContainer,
 			widget.NewSeparator(),
@@ -187,7 +187,7 @@ func (a *App) buildMainUI() {
 	a.window.SetContent(content)
 }
 
-func (a *App) setMainContent(o fyne.CanvasObject, disableButtonsListeners ...binding.DataListener) {
+func (a *App) setMainContent(o fyne.CanvasObject, disableButtonsListeners ...func(bool)) {
 	go func() {
 		a.mainContentLock.Lock()
 		defer a.mainContentLock.Unlock()
@@ -203,9 +203,9 @@ func (a *App) setMainContent(o fyne.CanvasObject, disableButtonsListeners ...bin
 		if len(disableButtonsListeners) > 0 {
 			log.Infof("adding %v listeners", len(disableButtonsListeners))
 		}
-		for _, listener := range disableButtonsListeners {
+		for _, listenerFunc := range disableButtonsListeners {
+			listener := bindings.Listen(a.disableButtons, listenerFunc)
 			a.currentDisableListeners = append(a.currentDisableListeners, listener)
-			a.disableButtons.AddListener(listener)
 		}
 
 		log.Info("clearing main content")
@@ -222,12 +222,7 @@ func (a *App) setMainContent(o fyne.CanvasObject, disableButtonsListeners ...bin
 }
 
 func (a *App) setupPathHandler() {
-	a.operatingPath.AddListener(binding.NewDataListener(func() {
-		path, err := a.operatingPath.Get()
-		if err != nil {
-			log.WithError(err).Error("error collecting bound path value")
-			return
-		}
+	bindings.Listen(a.operatingPath, func(path string) {
 		if path == "" {
 			return
 		}
@@ -235,7 +230,16 @@ func (a *App) setupPathHandler() {
 		info, err := os.Stat(path)
 		if err != nil {
 			log.WithError(err).Errorf("can not stat path %s", path)
-			a.setErrContent(err, lang.X("err.badPath", "Can not open \"{{.Path}}\"", map[string]any{"Path": path}))
+			a.setErrContent(
+				err,
+				lang.X(
+					"err.badPath",
+					"Can not open \"{{.Path}}\"",
+					map[string]any{
+						"Path": path,
+					},
+				),
+			)
 			return
 		}
 
@@ -244,7 +248,7 @@ func (a *App) setupPathHandler() {
 		} else {
 			a.loadPack(path)
 		}
-	}))
+	})
 }
 
 func (a *App) setErrContent(err error, msg string) {
@@ -257,6 +261,7 @@ func (a *App) setErrContent(err error, msg string) {
 		14,
 		fyne.TextStyle{Italic: true},
 		fyne.TextAlignCenter,
+		theme.Color(theme.ColorNameError),
 	)
 
 	msgContent := container.NewVBox(
@@ -269,12 +274,18 @@ func (a *App) setErrContent(err error, msg string) {
 	a.setMainContent(msgContent)
 }
 
-func multilineCanvasText(text string, size float32, style fyne.TextStyle, align fyne.TextAlign) fyne.CanvasObject {
+func multilineCanvasText(
+	text string,
+	size float32,
+	style fyne.TextStyle,
+	align fyne.TextAlign,
+	color color.Color,
+) fyne.CanvasObject {
 	lines := strings.Split(text, "\n")
 	content := container.NewVBox(utils.Map(
 		lines,
 		func(line string) fyne.CanvasObject {
-			text := canvas.NewText(line, theme.Color(theme.ColorNameError))
+			text := canvas.NewText(line, color)
 			text.TextSize = size
 			text.TextStyle = style
 			text.Alignment = align
@@ -294,11 +305,10 @@ func (a *App) setWaitContent(msg string) binding.String {
 	activityText.TextSize = 12
 	activityText.Alignment = fyne.TextAlignCenter
 	activityStr := binding.NewString()
-	activityStr.AddListener(binding.NewDataListener(func() {
-		str, _ := activityStr.Get()
+	bindings.Listen(activityStr, func(str string) {
 		activityText.Text = str
 		activityText.Refresh()
-	}))
+	})
 
 	activityContent := container.NewVBox(
 		layout.NewSpacer(),

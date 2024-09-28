@@ -1,4 +1,4 @@
-package custom_binding
+package bindings
 
 import (
 	"fyne.io/fyne/v2/data/binding"
@@ -70,6 +70,31 @@ type Bound[T any] interface {
 	Set(T) error
 }
 
+func Listen[T any](data Bound[T], f func(T)) binding.DataListener {
+	listener := binding.NewDataListener(func() {
+		val, err := data.Get()
+		if err != nil {
+			return
+		}
+		f(val)
+	})
+	data.AddListener(listener)
+	return listener
+}
+
+func ListenErr[T any](data Bound[T], f func(T), e func(error)) binding.DataListener {
+	listener := binding.NewDataListener(func() {
+		val, err := data.Get()
+		if err != nil {
+			e(err)
+			return
+		}
+		f(val)
+	})
+	data.AddListener(listener)
+	return listener
+}
+
 type boundMapping[F any, T any] struct {
 	proxyBinding[Bound[F]]
 	f func(F) (T, error)
@@ -82,9 +107,10 @@ func NewMapping[F any, T any](
 ) Bound[T] {
 	return &boundMapping[F, T]{
 		proxyBinding: proxyBinding[Bound[F]]{from: from},
-		f: f,
+		f:            f,
 	}
 }
+
 func NewReversableMapping[F any, T any](
 	from Bound[F],
 	f func(F) (T, error),
@@ -92,12 +118,12 @@ func NewReversableMapping[F any, T any](
 ) Bound[T] {
 	return &boundMapping[F, T]{
 		proxyBinding: proxyBinding[Bound[F]]{from: from},
-		f: f,
-		r: r,
+		f:            f,
+		r:            r,
 	}
 }
 
-func(bm *boundMapping[F, T]) Get() (T, error) {
+func (bm *boundMapping[F, T]) Get() (T, error) {
 	v, err := bm.from.Get()
 	if err != nil {
 		var t T
@@ -106,7 +132,7 @@ func(bm *boundMapping[F, T]) Get() (T, error) {
 	return bm.f(v)
 }
 
-func(bm *boundMapping[F, T]) Set(t T) error {
+func (bm *boundMapping[F, T]) Set(t T) error {
 	if bm.r != nil {
 		rev, err := bm.r(t)
 		if err != nil {
@@ -116,5 +142,3 @@ func(bm *boundMapping[F, T]) Set(t T) error {
 	}
 	return nil
 }
-
-var test = binding.NewStringTree()

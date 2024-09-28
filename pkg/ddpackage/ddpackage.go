@@ -194,7 +194,7 @@ func (p *Package) LoadUnpackedFromFolder(dirPath string) error {
 		return err
 	}
 
-	if err := p.loadUnpackedPackJSON(dirPath); err != nil {
+	if err := p.LoadUnpackedPackJSON(dirPath); err != nil {
 		return err
 	}
 
@@ -235,7 +235,7 @@ func (p *Package) ReadPackJSON() error {
 	case PackageModePacked:
 		return p.loadPackedPackJSON(p.pkgFile)
 	case PackageModeUnpacked:
-		return p.loadUnpackedPackJSON(p.unpackedPath)
+		return p.LoadUnpackedPackJSON(p.unpackedPath)
 	}
 	return ErrPackageNotLoaded
 }

@@ -16,7 +16,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func (p *Package) loadUnpackedPackJSON(dirPath string) error {
+func (p *Package) LoadUnpackedPackJSON(dirPath string) error {
 	packJSONPath := filepath.Join(dirPath, `pack.json`)
 
 	packExists := utils.FileExists(packJSONPath)

@@ -29,9 +29,10 @@ func GenPackID() string {
 	return string(b)
 }
 
-type NewPackageJSONOptions struct {
+type SavePackageJSONOptions struct {
 	Path          string
 	Name          string
+	ID            *string
 	Author        string
 	Version       string
 	Keywords      []string
@@ -39,8 +40,26 @@ type NewPackageJSONOptions struct {
 	ColorOverides structures.CustomColorOverrides
 }
 
+func SavePackageJSONOptionsFromPkg(pkg *Package) SavePackageJSONOptions {
+	id := pkg.id
+	allowthirdParty := *pkg.info.Allow3rdParty
+	keywords := make([]string, len(pkg.info.Keywords))
+	copy(keywords, pkg.info.Keywords)
+	options := SavePackageJSONOptions{
+		Path: pkg.unpackedPath,
+		Name: pkg.name,
+		ID: &id,
+		Author: pkg.info.Author,
+		Version: pkg.info.Version,
+		Keywords: keywords,
+		Allow3rdParty: &allowthirdParty,
+		ColorOverides: pkg.info.ColorOverrides,
+	}
+	return options
+}
+
 // NewPackerFromFolder builds a new Packer from a folder with a valid pack.json
-func NewPackageJSON(log logrus.FieldLogger, options NewPackageJSONOptions, overwrite bool) (err error) {
+func SavePackageJSON(log logrus.FieldLogger, options SavePackageJSONOptions, overwrite bool) (err error) {
 	folderPath, err := filepath.Abs(options.Path)
 	if err != nil {
 		return
@@ -78,9 +97,14 @@ func NewPackageJSON(log logrus.FieldLogger, options NewPackageJSONOptions, overw
 		return
 	}
 
+	if options.ID == nil {
+		id := GenPackID()
+		options.ID = &id
+	}
+
 	pack := structures.PackageInfo{
 		Name:           options.Name,
-		ID:             GenPackID(),
+		ID:             *options.ID,
 		Author:         options.Author,
 		Version:        options.Version,
 		Keywords:       options.Keywords,

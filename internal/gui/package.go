@@ -12,10 +12,11 @@ import (
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/lang"
 	"fyne.io/fyne/v2/layout"
+	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-	"github.com/ryex/dungeondraft-gopackager/internal/gui/custom_binding"
-	"github.com/ryex/dungeondraft-gopackager/internal/gui/custom_layout"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/bindings"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddimage"
 	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
@@ -41,9 +42,9 @@ func (a *App) buildPackageTreeAndPreview() fyne.CanvasObject {
 	tree, treeSelected := a.buildPackageTree(filter)
 
 	leftSplit := container.New(
-		custom_layout.NewBottomExpandVBoxLayout(),
+		layouts.NewBottomExpandVBoxLayout(),
 		container.New(
-			custom_layout.NewRightExpandHBoxLayout(),
+			layouts.NewRightExpandHBoxLayout(),
 			widget.NewLabel(lang.X("tree.label", "Resources")),
 			filterEntry,
 		),
@@ -62,13 +63,7 @@ func (a *App) buildPackageTreeAndPreview() fyne.CanvasObject {
 
 	rightSplit := container.NewStack(defaultPreview)
 
-	treeSelected.AddListener(binding.NewDataListener(func() {
-		tni, err := treeSelected.Get()
-		if err != nil {
-			log.WithError(err).Error("error collecting bound tree node value")
-			return
-		}
-
+	bindings.Listen(treeSelected, func(tni string) {
 		content := func() fyne.CanvasObject {
 			info := a.pkg.FileList().Find(func(fi *structures.FileInfo) bool {
 				return fi.RelPath == tni
@@ -96,7 +91,7 @@ func (a *App) buildPackageTreeAndPreview() fyne.CanvasObject {
 			}
 			pathEntry.Refresh()
 			path := container.New(
-				custom_layout.NewRightExpandHBoxLayout(),
+				layouts.NewRightExpandHBoxLayout(),
 				pathLabel,
 				pathEntry,
 			)
@@ -115,7 +110,7 @@ func (a *App) buildPackageTreeAndPreview() fyne.CanvasObject {
 				})
 				content := container.NewPadded(
 					container.New(
-						custom_layout.NewBottomExpandVBoxLayout(),
+						layouts.NewBottomExpandVBoxLayout(),
 						path,
 						container.NewStack(
 							bg,
@@ -155,7 +150,7 @@ func (a *App) buildPackageTreeAndPreview() fyne.CanvasObject {
 			imgW.FillMode = canvas.ImageFillContain
 			imgW.ScaleMode = canvas.ImageScaleFastest
 			content := container.New(
-				custom_layout.NewBottomExpandVBoxLayout(),
+				layouts.NewBottomExpandVBoxLayout(),
 				path,
 				container.NewScroll(
 					imgW,
@@ -167,7 +162,7 @@ func (a *App) buildPackageTreeAndPreview() fyne.CanvasObject {
 		rightSplit.RemoveAll()
 		rightSplit.Add(content)
 		rightSplit.Refresh()
-	}))
+	})
 
 	split := container.NewPadded(container.NewHSplit(
 		leftSplit,
@@ -181,7 +176,7 @@ func (a *App) buildPackageTree(filter binding.String) (*widget.Tree, binding.Str
 	filterFunc := func(fi *structures.FileInfo) bool {
 		return !fi.IsThumbnail() && !strings.HasSuffix(fi.ResPath, ".json")
 	}
-	mappedList := custom_binding.NewMapping(
+	mappedList := bindings.NewMapping(
 		filter,
 		func(filter string) ([]structures.FileInfo, error) {
 			log.Tracef("filtering tree list with '%s'", filter)
@@ -195,7 +190,8 @@ func (a *App) buildPackageTree(filter binding.String) (*widget.Tree, binding.Str
 
 	selected := binding.NewString()
 
-	tree := widget.NewTree(
+	var tree *widget.Tree
+	tree = widget.NewTree(
 		func(tni widget.TreeNodeID) []widget.TreeNodeID {
 			nodes, ok := nodeTree[tni]
 			if ok {
@@ -214,29 +210,54 @@ func (a *App) buildPackageTree(filter binding.String) (*widget.Tree, binding.Str
 			return info == nil
 		},
 		func(b bool) fyne.CanvasObject {
-			return widget.NewLabel("label template")
+			var icon fyne.CanvasObject
+			if b {
+				icon = widget.NewIcon(nil)
+			} else {
+				icon = widget.NewFileIcon(nil)
+			}
+			return container.NewBorder(nil, nil, icon, nil, widget.NewLabel("label template"))
 		},
 		func(tni widget.TreeNodeID, b bool, obj fyne.CanvasObject) {
-			l := obj.(*widget.Label)
+			c := obj.(*fyne.Container)
+
+			l := c.Objects[0].(*widget.Label)
 			_, file := filepath.Split(tni)
 			if b {
+				var r fyne.Resource
+				if tree.IsBranchOpen(tni) {
+					r = theme.FolderOpenIcon()
+				} else {
+					r = theme.FolderIcon()
+				}
+				c.Objects[1].(*widget.Icon).SetResource(r)
 				l.SetText(file + "/")
 			} else {
+				c.Objects[1].(*widget.FileIcon).SetURI(storage.NewFileURI(tni))
 				l.SetText(file)
 			}
 		},
 	)
 
-	filter.AddListener(binding.NewDataListener(func() {
+	bindings.ListenErr(mappedList, func(fil []structures.FileInfo) {
 		log.Trace("rebuilding tree")
-		fil, err := mappedList.Get()
-		if err != nil {
-			log.WithError(err).Debug("file list fetch failure")
-			return
-		}
 		nodeTree = buildInfoMaps(fil)
 		tree.Refresh()
-	}))
+	}, func(err error) {
+		log.WithError(err).Debug("file list fetch failure")
+	})
+
+	// TODO: remove if safe
+	// filter.AddListener(binding.NewDataListener(func() {
+	// 	log.Trace("rebuilding tree")
+	// 	fil, err := mappedList.Get()
+	// 	if err != nil {
+	// 		log.WithError(err).Debug("file list fetch failure")
+	// 		return
+	// 	}
+	// 	nodeTree = buildInfoMaps(fil)
+	// 	tree.Refresh()
+	// }))
 
 	tree.OnSelected = func(uid widget.TreeNodeID) {
 		selected.Set(uid)
