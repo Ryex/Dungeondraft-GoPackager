@@ -46,12 +46,12 @@ func SavePackageJSONOptionsFromPkg(pkg *Package) SavePackageJSONOptions {
 	keywords := make([]string, len(pkg.info.Keywords))
 	copy(keywords, pkg.info.Keywords)
 	options := SavePackageJSONOptions{
-		Path: pkg.unpackedPath,
-		Name: pkg.name,
-		ID: &id,
-		Author: pkg.info.Author,
-		Version: pkg.info.Version,
-		Keywords: keywords,
+		Path:          pkg.unpackedPath,
+		Name:          pkg.name,
+		ID:            &id,
+		Author:        pkg.info.Author,
+		Version:       pkg.info.Version,
+		Keywords:      keywords,
 		Allow3rdParty: &allowthirdParty,
 		ColorOverides: pkg.info.ColorOverrides,
 	}

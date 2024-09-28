@@ -290,3 +290,98 @@ func (v bottomExpandVBoxLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
 	}
 	return minSize
 }
+
+
+// ** top expand VBox **
+
+type topExpandVBoxLayout struct {
+	paddingFunc func() float32
+}
+
+func NewTopExpandVBoxLayout() fyne.Layout {
+	return topExpandVBoxLayout{
+		paddingFunc: theme.Padding,
+	}
+}
+
+func NewTopExpandVBox(objs ...fyne.CanvasObject) *fyne.Container {
+	return container.New(NewTopExpandVBoxLayout(), objs...)
+}
+
+func (v topExpandVBoxLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
+	spacers := 0
+	visibleObjects := 0
+	// Size taken up by visible objects
+	bottommost := float32(0)
+
+	for i, child := range objects {
+		if !child.Visible() {
+			continue
+		}
+
+		if isVerticalSpacer(child) {
+			spacers++
+			continue
+		}
+
+		visibleObjects++
+		if i != 0 {
+			bottommost += child.MinSize().Height
+		}
+	}
+
+	padding := v.paddingFunc()
+
+	// Amount of space not taken up by visible objects and inter-object padding
+	topExtra := size.Height - bottommost - (float32(spacers) * padding) - (padding * float32(visibleObjects-1))
+	extra := size.Height - bottommost - topExtra - (padding * float32(visibleObjects-1))
+
+	// Spacers split extra space equally
+	spacerSize := float32(0)
+	if spacers > 0 {
+		spacerSize = extra / float32(spacers)
+	}
+
+	x, y := float32(0), float32(0)
+	for i, child := range objects {
+		if !child.Visible() {
+			continue
+		}
+
+		if isVerticalSpacer(child) {
+			y += spacerSize
+			continue
+		}
+		child.Move(fyne.NewPos(x, y))
+
+		height := child.MinSize().Height
+		if i == 0 {
+			height = topExtra
+		}
+		y += padding + height
+		child.Resize(fyne.NewSize(size.Width, height))
+	}
+}
+
+// MinSize finds the smallest size that satisfies all the child objects.
+// For a BoxLayout this is the width of the widest item and the height is
+// the sum of all children combined with padding between each.
+func (v topExpandVBoxLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
+	minSize := fyne.NewSize(0, 0)
+	addPadding := false
+	padding := v.paddingFunc()
+	for _, child := range objects {
+		if !child.Visible() || isVerticalSpacer(child) {
+			continue
+		}
+
+		childMin := child.MinSize()
+		minSize.Width = fyne.Max(childMin.Width, minSize.Width)
+		minSize.Height += childMin.Height
+		if addPadding {
+			minSize.Height += padding
+		}
+		addPadding = true
+	}
+	return minSize
+}

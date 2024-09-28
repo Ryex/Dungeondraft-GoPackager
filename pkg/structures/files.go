@@ -77,6 +77,10 @@ func (fi *FileInfo) IsMetadata() bool {
 	return !fi.IsData() && !fi.IsTexture()
 }
 
+func (fi *FileInfo) ShouldHaveMetadata() bool {
+	return fi.IsWall() || fi.IsTileset()
+}
+
 func (fi *FileInfo) IsData() bool {
 	return strings.HasPrefix(fi.CalcRelPath(), "data/")
 }

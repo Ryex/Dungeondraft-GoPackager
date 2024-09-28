@@ -42,6 +42,8 @@ type App struct {
 	disableButtons          binding.Bool
 	mainDisableListener     binding.DataListener
 	currentDisableListeners []binding.DataListener
+
+  tagSaveTimer *time.Timer
 }
 
 //go:embed translation
@@ -94,6 +96,7 @@ func (a *App) buildMainUI() {
 			inputTimer.Stop()
 		}
 		inputTimer = time.AfterFunc(500*time.Millisecond, func() {
+		  inputTimer = nil
 			_, err := os.Stat(path)
 			if err == nil {
 				a.operatingPath.Set(path)

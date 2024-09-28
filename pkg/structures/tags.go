@@ -1,6 +1,8 @@
 package structures
 
-import "github.com/ryex/dungeondraft-gopackager/internal/utils"
+import (
+	"github.com/ryex/dungeondraft-gopackager/internal/utils"
+)
 
 type PackageTags struct {
 	// map of tag names to array of relative resource paths
@@ -56,6 +58,17 @@ func (pt *PackageTags) Untag(tag string, resources ...string) {
 	s, ok := pt.Tags[tag]
 	if ok {
 		s.RemoveM(resources...)
+	}
+}
+
+func (pt *PackageTags) Retag(resource string, tags ...string) {
+	ts := SetFrom(tags)
+	for tag := range pt.Tags {
+		if ts.Has(tag) {
+			pt.Tags[tag].Add(resource)
+		} else {
+			pt.Tags[tag].Remove(resource)
+		}
 	}
 }
 

@@ -16,6 +16,9 @@
   "preview.defaultText": "Select a resource",
   "preview.tooLarge": "This file is too large!\nOpen it in a text editor.",
   "preview.path.label": "Path",
+  "preview.tab.resource": "Resource",
+  "preview.tab.tags": "Tags",
+  "preview.tab.metadata": "Settings",
   "unpack.wait": "Loading {{.Path}} ...",
   "unpack.outPath.placeholder": "Where to extract resources",
   "unpack.extractBtn.text": "Extract",
@@ -26,8 +29,8 @@
   "unpack.extract.error.text": "Error extracting {{.Pack}} to {{.Path}}",
   "unpack.success.dlg.title": "Extraction successful",
   "unpack.success.dlg.text": "{{.Pack}} extracted to {{.Path}} successfully",
-  "unpack.tags.error": "Failed to read tags",
-  "unpack.metadata.error": "Failed to read metadata",
+  "package.tags.error": "Failed to read tags",
+  "package.metadata.error": "Failed to read metadata",
   "pack.wait": "Loading unpacked resources from {{.Path}} ...",
   "pack.buildList.activity": "Loading {{.Path}} ...",
   "pack.refreshBtn.text": "Refresh",
@@ -59,5 +62,6 @@
   "packJson.dialog.title": "Package settings",
   "packJson.dialog.dismis": "Cancel",
   "packJson.dialog.save": "Save",
-  "packJson.dismis": "Close"
+  "packJson.dismis": "Close",
+  "tags.addBtn.text": "Add"
 }

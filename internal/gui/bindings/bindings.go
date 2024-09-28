@@ -1,6 +1,8 @@
 package bindings
 
 import (
+	"errors"
+
 	"fyne.io/fyne/v2/data/binding"
 )
 
@@ -141,4 +143,131 @@ func (bm *boundMapping[F, T]) Set(t T) error {
 		return bm.from.Set(rev)
 	}
 	return nil
+}
+
+type ExternalBound[T any] interface {
+	Bound[T]
+	Reload() error
+}
+
+var errWrongType = errors.New("wrong type provided")
+
+type mappedBinding[T any] struct {
+	Bound[T]
+	v    T
+
+	counter int
+	self binding.ExternalInt
+
+	set  func(T) error
+	get  func() (T, error)
+}
+
+func MappedBind[T any](get func() (T, error), set func(T) error) ExternalBound[T] {
+	b := &mappedBinding[T]{
+		get: get,
+		set: set,
+	}
+	val, err := b.get()
+	if err == nil {
+		b.v = val
+	}
+	b.self = binding.BindInt(&b.counter)
+	return b
+}
+
+func (m *mappedBinding[T]) AddListener(listener binding.DataListener) {
+	m.self.AddListener(listener)
+}
+
+func (m *mappedBinding[T]) RemoveListener(listener binding.DataListener) {
+	m.self.RemoveListener(listener)
+}
+
+func (m *mappedBinding[T]) Reload() error {
+	val, err := m.get()
+	if err != nil {
+		return err
+	}
+	m.v = val
+	m.self.Set(m.counter + 1)
+	return nil
+}
+
+func (m *mappedBinding[T]) Get() (T, error) {
+	val, err := m.get()
+	if err != nil {
+		var t T
+		return t, err
+	}
+	m.v = val
+	return val, nil
+}
+
+func (m *mappedBinding[T]) Set(val T) error {
+	err := m.set(val)
+	if err != nil {
+		return err
+	}
+	m.v = val
+	m.self.Set(m.counter + 1)
+	return nil
+}
+
+type ExternalBoundList[T any] interface {
+	ExternalBound[[]T]
+	GetItem(index int) (binding.DataItem, error)
+	Length() int
+}
+
+var errOutOfBounds = errors.New("index out of bounds")
+
+type mappedListBinding[T any] struct {
+	mappedBinding[[]T]
+}
+
+func MappedListBind[T any](get func() ([]T, error), set func([]T) error) ExternalBoundList[T] {
+	b := &mappedListBinding[T]{
+		mappedBinding: mappedBinding[[]T]{
+			get: get,
+			set: set,
+		},
+	}
+	val, err := b.get()
+	if err == nil {
+		b.v = val
+	}
+	b.self = binding.BindInt(&b.counter)
+	return b
+}
+
+func (ml *mappedListBinding[T]) GetItem(index int) (binding.DataItem, error) {
+	if index < 0 || index >= len(ml.v) {
+		return nil, errOutOfBounds
+	}
+	return NewReversableMapping(
+		ml,
+		func(l []T) (T, error) {
+			if index < 0 || index >= len(l) {
+				var t T
+				return t, errOutOfBounds
+			}
+			return l[index], nil
+		},
+		func(val T) ([]T, error) {
+			l, err := ml.Get()
+			if err != nil {
+				return nil, err
+			}
+			if index < 0 || index >= len(l) {
+				return nil, errOutOfBounds
+			}
+			l[index] = val
+			return l, nil
+		},
+	), nil
+}
+
+func (ml *mappedListBinding[T]) Length() int {
+	return len(ml.v)
 }
