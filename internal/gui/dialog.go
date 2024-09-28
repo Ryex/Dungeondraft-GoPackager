@@ -1,6 +1,8 @@
 package gui
 
 import (
+	"path/filepath"
+	"strconv"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -26,7 +28,7 @@ type PackJSONDialog struct {
 	Version  string
 	Keywords []string
 
-	id *string
+	ID string
 
 	Allow3rdParty     bool
 	sourceHas3rdParty bool
@@ -54,8 +56,7 @@ func NewPackJSONDialogPkg(
 		callback: callback,
 	}
 	if pkg != nil {
-		id := pkg.ID()
-		dlg.id = &id
+		dlg.ID = pkg.ID()
 		dlg.Path = pkg.UnpackedPath()
 		dlg.Name = pkg.Name()
 		dlg.Author = pkg.Info().Author
@@ -88,6 +89,8 @@ func NewPackJSONDialog(
 ) *PackJSONDialog {
 	dlg := &PackJSONDialog{
 		Path:           path,
+		Name:           filepath.Base(filepath.Dir(path)),
+		ID:             ddpackage.GenPackID(),
 		parent:         parent,
 		callback:       callback,
 		Version:        "1",
@@ -99,6 +102,9 @@ func NewPackJSONDialog(
 }
 
 func (dlg *PackJSONDialog) buildUi() {
+	IDLbl := widget.NewLabel(lang.X("packJson.id.label", "ID"))
+	IDEntry := widget.NewEntryWithData(binding.BindString(&dlg.ID))
+
 	nameLbl := widget.NewLabel(lang.X("packJson.name.label", "Name"))
 	nameEntry := widget.NewEntryWithData(binding.BindString(&dlg.Name))
 	nameEntry.SetPlaceHolder(lang.X("packJson.name.placeholder", "Package name"))
@@ -109,7 +115,14 @@ func (dlg *PackJSONDialog) buildUi() {
 
 	versionLbl := widget.NewLabel(lang.X("packJson.version.label", "Version"))
 	versionEntry := widgets.NewSpinner(1, 10000, 0.1)
-	versionEntry.Bind(binding.StringToFloat(binding.BindString(&dlg.Version)))
+	versionEntry.Bind(bindings.NewReversableMapping(
+		binding.BindString(&dlg.Version),
+		func(ver string) (float64, error) {
+			return strconv.ParseFloat(ver, 64)
+		}, func(val float64) (string, error) {
+			return strconv.FormatFloat(val, 'f', -1, 64), nil
+		},
+	))
 
 	keywordsLbl := widget.NewLabel(lang.X("packJson.keywords.label", "Keywords"))
 	keywordsEntry := widget.NewEntryWithData(bindings.NewReversableMapping(
@@ -180,6 +193,7 @@ func (dlg *PackJSONDialog) buildUi() {
 	customColorsCheck.SetChecked(dlg.ColorOverrides.Enabled)
 
 	if !dlg.editable {
+		IDEntry.Disable()
 		nameEntry.Disable()
 		authorEntry.Disable()
 		versionEntry.Disable()
@@ -194,6 +208,7 @@ func (dlg *PackJSONDialog) buildUi() {
 	dlg.content = container.NewVBox(
 		container.New(
 			layout.NewFormLayout(),
+			IDLbl, IDEntry,
 
 			nameLbl, nameEntry,
 			authorLbl, authorEntry,
@@ -228,7 +243,7 @@ func (dlg *PackJSONDialog) onSave() {
 	options := ddpackage.SavePackageJSONOptions{
 		Path:          dlg.Path,
 		Name:          dlg.Name,
-		ID:            dlg.id,
+		ID:            dlg.ID,
 		Author:        dlg.Author,
 		Version:       dlg.Version,
 		Keywords:      dlg.Keywords,

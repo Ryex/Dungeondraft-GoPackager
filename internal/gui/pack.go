@@ -36,7 +36,7 @@ func (a *App) loadUnpackedPath(path string) {
 
 	activity := a.setWaitContent(lang.X(
 		"pack.wait",
-		"Loading unpacked resources from {{.Path}} ...",
+		"Loading unpacked resources from {{.Path}} (building index) ...",
 		map[string]any{
 			"Path": utils.TruncatePathHumanFriendly(path, 80),
 		},

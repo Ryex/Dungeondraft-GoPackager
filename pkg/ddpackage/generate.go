@@ -32,7 +32,7 @@ func GenPackID() string {
 type SavePackageJSONOptions struct {
 	Path          string
 	Name          string
-	ID            *string
+	ID            string
 	Author        string
 	Version       string
 	Keywords      []string
@@ -48,7 +48,7 @@ func SavePackageJSONOptionsFromPkg(pkg *Package) SavePackageJSONOptions {
 	options := SavePackageJSONOptions{
 		Path:          pkg.unpackedPath,
 		Name:          pkg.name,
-		ID:            &id,
+		ID:            id,
 		Author:        pkg.info.Author,
 		Version:       pkg.info.Version,
 		Keywords:      keywords,
@@ -97,14 +97,9 @@ func SavePackageJSON(log logrus.FieldLogger, options SavePackageJSONOptions, ove
 		return
 	}
 
-	if options.ID == nil {
-		id := GenPackID()
-		options.ID = &id
-	}
-
 	pack := structures.PackageInfo{
 		Name:           options.Name,
-		ID:             *options.ID,
+		ID:             options.ID,
 		Author:         options.Author,
 		Version:        options.Version,
 		Keywords:       options.Keywords,
