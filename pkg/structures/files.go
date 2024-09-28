@@ -180,7 +180,7 @@ func (fil FileInfoList) Filter(P func(*FileInfo) bool) FileInfoList {
 	return res
 }
 
-var replaces = regexp.MustCompile(`(\.)|(\*\*/)|(\*\*$)|(\*)|(\[)|(\])|(\})|(\{)|(\+)|([^/\*])`)
+var replaces = regexp.MustCompile(`(\.)|(\*\*/)|(\*\*$)|(\*)|(\[)|(\])|(\})|(\{)|(\+)|(\()|(\))|([^/\*])`)
 
 func GlobToRelPathRegexp(pattern string) (*regexp.Regexp, error) {
 	pat := replaces.ReplaceAllStringFunc(pattern, func(s string) string {
@@ -201,6 +201,10 @@ func GlobToRelPathRegexp(pattern string) (*regexp.Regexp, error) {
 			return "\\{"
 		case "}":
 			return "\\}"
+		case "(":
+			return "\\)"
+		case ")":
+			return "\\)"
 		case "+":
 			return "\\+"
 		default:
