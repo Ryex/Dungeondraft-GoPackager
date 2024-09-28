@@ -12,19 +12,44 @@ type Color struct {
 	G uint8
 	B uint8
 	A uint8
-
-	useAlpha bool
 }
 
-func FromNRGBA(c color.NRGBA) Color {
-	return Color{R: c.R, G: c.G, B: c.B, A: c.A}
+func FromColor(c color.Color) Color {
+	r, g, b, a := unmultiplyAlpha(c)
+	return Color{
+		R: uint8(clamp(r, 0, 255)),
+		G: uint8(clamp(g, 0, 255)),
+		B: uint8(clamp(b, 0, 255)),
+		A: uint8(clamp(a, 0, 255)),
+	}
 }
 
-func (c *Color) UseAlpha(val bool) {
-	c.useAlpha = val
+func unmultiplyAlpha(c color.Color) (r, g, b, a int) {
+	red, green, blue, alpha := c.RGBA()
+	if alpha != 0 && alpha != 0xffff {
+		red = (red * 0xffff) / alpha
+		green = (green * 0xffff) / alpha
+		blue = (blue * 0xffff) / alpha
+	}
+	// Convert from range 0-65535 to range 0-255
+	r = int(red >> 8)
+	g = int(green >> 8)
+	b = int(blue >> 8)
+	a = int(alpha >> 8)
+	return
 }
 
-func (c *Color) ToNRGBA() color.NRGBA {
+func clamp(v, m, mx int) int {
+	if v < m {
+		return m
+	}
+	if v > mx {
+		return mx
+	}
+	return v
+}
+
+func (c *Color) ToColor() color.NRGBA {
 	return color.NRGBA{
 		R: c.R,
 		G: c.G,
@@ -34,7 +59,7 @@ func (c *Color) ToNRGBA() color.NRGBA {
 }
 
 func (c *Color) HexEncode() string {
-	if c.useAlpha {
+	if c.A != 255 {
 		return fmt.Sprintf("%.2x%.2x%.2x%.2x", c.R, c.G, c.B, c.A)
 	}
 	return fmt.Sprintf("%.2x%.2x%.2x", c.R, c.G, c.B)
@@ -75,7 +100,6 @@ func ParseHexColorFast(s string) (c Color, err error) {
 		c.G = hexToByte(s[2+off])<<4 + hexToByte(s[3+off])
 		c.B = hexToByte(s[4+off])<<4 + hexToByte(s[5+off])
 		c.A = hexToByte(s[6+off])<<4 + hexToByte(s[7+off])
-		c.useAlpha = true
 	case 7:
 		if s[0] != '#' {
 			return c, errInvalidFormat

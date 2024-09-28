@@ -2,6 +2,7 @@ package gui
 
 import (
 	"fmt"
+	"image/color"
 	"math"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/lang"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/storage"
@@ -19,9 +21,11 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/bindings"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/widgets"
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddimage"
 	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
+	ddcolor "github.com/ryex/dungeondraft-gopackager/pkg/structures/color"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -188,7 +192,7 @@ func (a *App) buildInfoPane(info *structures.FileInfo, editable bool) fyne.Canva
 		tabs.Append(container.NewTabItemWithIcon(
 			lang.X("preview.tab.metadata", "Settings"),
 			theme.ColorPaletteIcon(),
-			nil,
+			a.buildMetadataPane(info, editable),
 		))
 	}
 
@@ -361,6 +365,217 @@ func (a *App) saveUnpackedTags() {
 	a.tagSaveTimer = time.AfterFunc(500*time.Millisecond, func() {
 		a.tagSaveTimer = nil
 		err := a.pkg.SaveUnpackedTags()
+		if err != nil {
+			a.showErrorDialog(err)
+		}
+	})
+}
+
+func (a *App) buildMetadataPane(info *structures.FileInfo, editable bool) fyne.CanvasObject {
+	content := container.NewPadded()
+
+	metaContent := func() fyne.CanvasObject {
+		if info.IsWall() {
+			metaPath := info.MetadataPath
+
+			defaultColor := color.NRGBA{255, 0, 0, 255}
+			wallData := a.pkg.Walls()
+			if wallData != nil {
+				metaData, ok := (*wallData)[metaPath]
+				if ok {
+					defaultColor = metaData.Color.ToColor()
+				} else {
+					log.WithField("res", info.ResPath).
+						WithField("metaRes", metaPath).
+						Warn("Missing wall metadata")
+				}
+			} else {
+				log.Warn("Wall Metadata not loaded?")
+			}
+
+			colorLbl := widget.NewLabel(lang.X("metadata.color.label", "Color"))
+			colorRect := widgets.NewTappableRect(defaultColor, 4)
+			colorRect.SetMinSize(fyne.NewSize(48, 32))
+			colorRect.OnTapped = func(_ *fyne.PointEvent) {
+				dlg := dialog.NewColorPicker(
+					lang.X("metadata.colorPickDialog.title", "Pick a default color"),
+					"",
+					func(c color.Color) {
+						colorRect.SetColor(c)
+						if wallData != nil {
+							data, ok := (*wallData)[metaPath]
+							if !ok {
+								(*wallData)[metaPath] = structures.PackageWall{
+									Path:  info.RelPath,
+									Color: ddcolor.FromColor(c),
+								}
+							} else {
+								data.Color = ddcolor.FromColor(c)
+								(*wallData)[metaPath] = data
+							}
+							a.saveWallMetadata(metaPath)
+						}
+					},
+					a.window,
+				)
+				dlg.Advanced = true
+				dlg.SetColor(colorRect.GetColor())
+				dlg.Show()
+			}
+			form := container.New(
+				layout.NewFormLayout(),
+				colorLbl, colorRect,
+			)
+			return form
+
+		} else if info.IsTileset() {
+			metaPath := info.MetadataPath
+
+			defaultColor := color.NRGBA{255, 0, 0, 255}
+			tilesetName := ""
+			tilesetType := structures.TilesetNormal
+
+			tilesetData := a.pkg.Tilesets()
+			if tilesetData != nil {
+				metaData, ok := (*tilesetData)[metaPath]
+				if ok {
+					defaultColor = metaData.Color.ToColor()
+					tilesetName = metaData.Name
+					tilesetType = metaData.Type
+				} else {
+					log.WithField("res", info.ResPath).
+						WithField("metaRes", metaPath).
+						Warn("Missing tileset metadata")
+				}
+			} else {
+				log.Warn("Wall Metadata not loaded?")
+			}
+
+			colorLbl := widget.NewLabel(lang.X("metadata.color.label", "Color"))
+			colorRect := widgets.NewTappableRect(defaultColor, 4)
+			colorRect.SetMinSize(fyne.NewSize(48, 32))
+			colorRect.OnTapped = func(_ *fyne.PointEvent) {
+				dlg := dialog.NewColorPicker(
+					lang.X("metadata.colorPickDialog.title", "Pick a default color"),
+					"",
+					func(c color.Color) {
+						colorRect.SetColor(c)
+						if tilesetData != nil {
+							data, ok := (*tilesetData)[metaPath]
+							if !ok {
+								(*tilesetData)[metaPath] = structures.PackageTileset{
+									Path:  info.RelPath,
+									Name:  "",
+									Color: ddcolor.FromColor(c),
+									Type:  structures.TilesetNormal,
+								}
+							} else {
+								data.Color = ddcolor.FromColor(c)
+								(*tilesetData)[metaPath] = data
+							}
+							a.saveTilesetMetadata(metaPath)
+						}
+					},
+					a.window,
+				)
+				dlg.Advanced = true
+				dlg.SetColor(colorRect.GetColor())
+				dlg.Show()
+			}
+
+			nameLbl := widget.NewLabel(lang.X("metadata.name.label", "Name"))
+			nameEntry := widget.NewEntry()
+			nameEntry.SetText(tilesetName)
+			nameEntry.OnChanged = func(s string) {
+				data, ok := (*tilesetData)[metaPath]
+				if !ok {
+					(*tilesetData)[metaPath] = structures.PackageTileset{
+						Path:  info.RelPath,
+						Name:  s,
+						Color: ddcolor.FromColor(defaultColor),
+						Type:  structures.TilesetNormal,
+					}
+				} else {
+					data.Name = s
+					(*tilesetData)[metaPath] = data
+				}
+				a.saveTilesetMetadata(metaPath)
+			}
+
+			tilesetTypeLbl := widget.NewLabel(lang.X("metadata.tilesetType.label", "Tileset Type"))
+			tilesetTypeSelector := widget.NewSelect(
+				[]string{
+					string(structures.TilesetNormal),
+					string(structures.TilesetCustomColor),
+				},
+				func(s string) {
+					var typ structures.TilesetType
+					switch s {
+					case string(structures.TilesetNormal):
+						typ = structures.TilesetNormal
+					case string(structures.TilesetCustomColor):
+						typ = structures.TilesetCustomColor
+					}
+					data, ok := (*tilesetData)[metaPath]
+					if !ok {
+						(*tilesetData)[metaPath] = structures.PackageTileset{
+							Path:  info.RelPath,
+							Name:  "",
+							Color: ddcolor.FromColor(defaultColor),
+							Type:  typ,
+						}
+					} else {
+						data.Type = typ
+						(*tilesetData)[metaPath] = data
+					}
+					a.saveTilesetMetadata(metaPath)
+				},
+			)
+			tilesetTypeSelector.SetSelected(string(tilesetType))
+
+			form := container.New(
+				layout.NewFormLayout(),
+				nameLbl, nameEntry,
+				tilesetTypeLbl, tilesetTypeSelector,
+				colorLbl, colorRect,
+			)
+			return form
+
+		}
+		return nil
+	}()
+
+	if metaContent != nil {
+		content.Add(metaContent)
+	}
+
+	return content
+}
+
+func (a *App) saveWallMetadata(metaPath string) {
+	timer := a.resSaveTimers[metaPath]
+	if timer != nil {
+		timer.Stop()
+	}
+	a.resSaveTimers[metaPath] = time.AfterFunc(500*time.Millisecond, func() {
+		a.resSaveTimers[metaPath] = nil
+		log.Infof("save timer called for %s", metaPath)
+		err := a.pkg.SaveUnpackedWall(metaPath)
+		if err != nil {
+			a.showErrorDialog(err)
+		}
+	})
+}
+
+func (a *App) saveTilesetMetadata(metaPath string) {
+	timer := a.resSaveTimers[metaPath]
+	if timer != nil {
+		timer.Stop()
+	}
+	a.resSaveTimers[metaPath] = time.AfterFunc(500*time.Millisecond, func() {
+		a.resSaveTimers[metaPath] = nil
+		log.Infof("save timer called for %s", metaPath)
+		err := a.pkg.SaveUnpackedTileset(metaPath)
 		if err != nil {
 			a.showErrorDialog(err)
 		}
