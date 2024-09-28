@@ -1,7 +1,8 @@
-package custom_layout
+package layouts
 
 import (
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 )
@@ -26,6 +27,10 @@ func NewLeftExpandHBoxLayout() fyne.Layout {
 	return leftExpandHBoxLayout{
 		paddingFunc: theme.Padding,
 	}
+}
+
+func NewLeftExpandHBox(objs ...fyne.CanvasObject) *fyne.Container {
+	return container.New(NewLeftExpandHBoxLayout(), objs...)
 }
 
 func (g leftExpandHBoxLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
@@ -114,6 +119,10 @@ func NewRightExpandHBoxLayout() fyne.Layout {
 	}
 }
 
+func NewRightExpandHBox(objs ...fyne.CanvasObject) *fyne.Container {
+	return container.New(NewRightExpandHBoxLayout(), objs...)
+}
+
 func (g rightExpandHBoxLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
 	spacers := 0
 	visibleObjects := 0
@@ -198,6 +207,10 @@ func NewBottomExpandVBoxLayout() fyne.Layout {
 	return bottomExpandVBoxLayout{
 		paddingFunc: theme.Padding,
 	}
+}
+
+func NewBottomExpandVBox(objs ...fyne.CanvasObject) *fyne.Container {
+	return container.New(NewBottomExpandVBoxLayout(), objs...)
 }
 
 func (v bottomExpandVBoxLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {

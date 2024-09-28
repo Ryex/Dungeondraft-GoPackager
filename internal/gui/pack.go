@@ -9,17 +9,30 @@ import (
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/lang"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
-	"github.com/ryex/dungeondraft-gopackager/internal/gui/custom_binding"
-	"github.com/ryex/dungeondraft-gopackager/internal/gui/custom_layout"
+	"github.com/davecgh/go-spew/spew"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/bindings"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddpackage"
 	log "github.com/sirupsen/logrus"
 )
 
 func (a *App) loadUnpackedPath(path string) {
+	if a.pkg != nil {
+		a.pkg.Close()
+	}
+	a.pkg = nil
+
+	packjsonPath := filepath.Join(path, "pack.json")
+	if !utils.FileExists(packjsonPath) {
+		a.setNotAPackageContent(path)
+		return
+	}
+
 	activity := a.setWaitContent(lang.X(
 		"pack.wait",
 		"Loading unpacked resources from {{.Path}} ...",
@@ -28,11 +41,6 @@ func (a *App) loadUnpackedPath(path string) {
 		},
 	))
 	a.disableButtons.Set(true)
-
-	if a.pkg != nil {
-		a.pkg.Close()
-	}
-	a.pkg = nil
 
 	go func() {
 		l := log.WithFields(log.Fields{
@@ -81,9 +89,68 @@ func (a *App) loadUnpackedPath(path string) {
 	}()
 }
 
+func (a *App) setNotAPackageContent(path string) {
+	msgText := multilineCanvasText(
+		lang.X("notAPackage.message",
+			"No pack.json at {{.Path}}:\nThis does not appear to be a resource pack.",
+			map[string]string{
+				"Path": path,
+			},
+		),
+		16,
+		fyne.TextStyle{},
+		fyne.TextAlignCenter,
+		theme.Color(theme.ColorNameForeground),
+	)
+	errTxtContainer := container.NewVBox()
+
+	newPackBtn := widget.NewButton(
+		lang.X("notAPackage.newPackBtn.text", "Create a pack.json"),
+		func() {
+			dlg := NewPackJSONDialog(
+				path,
+				func(options ddpackage.SavePackageJSONOptions) {
+					log.Debug("pack json options: ", spew.Sdump(options))
+					err := ddpackage.SavePackageJSON(
+						log.WithField("path", path),
+						options,
+						true,
+					)
+					if err != nil {
+						errTxtContainer.RemoveAll()
+						errTxtContainer.Add(
+							multilineCanvasText(
+								err.Error(),
+								12,
+								fyne.TextStyle{Italic: true},
+								fyne.TextAlignCenter,
+								theme.Color(theme.ColorNameError),
+							),
+						)
+						return
+					}
+					a.loadUnpackedPath(path)
+				},
+				a.window,
+			)
+			dlg.Show()
+		},
+	)
+
+	a.setMainContent(
+		container.NewVBox(
+			layout.NewSpacer(),
+			msgText,
+			container.NewCenter(newPackBtn),
+			errTxtContainer,
+			layout.NewSpacer(),
+		),
+	)
+}
+
 func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
-  a.pkg = pkg
-	
+	a.pkg = pkg
+
 	split := a.buildPackageTreeAndPreview()
 
 	outputPath := binding.BindPreferenceString("pack.outPath", a.app.Preferences())
@@ -132,17 +199,52 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 			Overwrite: overwrite,
 		}, thumbnails)
 	})
-
-	disableButtonsListener := binding.NewDataListener(func() {
-		disable, _ := a.disableButtons.Get()
-		if disable {
-		} else {
-		}
-	})
+	editPackBtn := widget.NewButtonWithIcon(
+		lang.X("pack.editPackBtn.text", "Edit settings"),
+		theme.DocumentCreateIcon(),
+		func() {
+			dlg := NewPackJSONDialogPkg(a.pkg, true, func(options ddpackage.SavePackageJSONOptions) {
+				err := ddpackage.SavePackageJSON(
+					log.WithField("path", options.Path),
+					options,
+					true,
+				)
+				if err != nil {
+					errDlg := dialog.NewError(
+						errors.Join(err, errors.New(lang.X(
+							"pack.edit.error.text",
+							"Error saving {{.Path}}",
+							map[string]any{
+								"Path": filepath.Join(options.Path, "pack.json"),
+							},
+						))),
+						a.window,
+					)
+					errDlg.Show()
+					return
+				}
+				err = a.pkg.LoadUnpackedPackJSON(options.Path)
+				if err != nil {
+					errDlg := dialog.NewError(
+						errors.Join(err, errors.New(lang.X(
+							"pack.reload.error.text",
+							"Error loading {{.Path}}",
+							map[string]any{
+								"Path": filepath.Join(options.Path, "pack.json"),
+							},
+						))),
+						a.window,
+					)
+					errDlg.Show()
+				}
+			}, a.window)
+			dlg.Show()
+		},
+	)
 
 	packForm := container.NewVBox(
 		container.New(
-			custom_layout.NewLeftExpandHBoxLayout(),
+			layouts.NewLeftExpandHBoxLayout(),
 			outEntry,
 			outBrowseBtn,
 		),
@@ -150,16 +252,20 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 			overwriteCheck,
 			thumbnailsCheck,
 		),
-		packBtn,
+		container.NewBorder(nil, nil, editPackBtn, nil, packBtn),
 	)
 
 	a.setMainContent(
 		container.New(
-			custom_layout.NewBottomExpandVBoxLayout(),
+			layouts.NewBottomExpandVBoxLayout(),
 			packForm,
 			split,
 		),
-		disableButtonsListener,
+		func(disable bool) {
+			if disable {
+			} else {
+			}
+		},
 	)
 
 	a.disableButtons.Set(false)
@@ -170,7 +276,7 @@ func (a *App) packPackage(path string, options ddpackage.PackOptions, genThumbna
 
 	thumbProgresVal := binding.NewFloat()
 	packProgresVal := binding.NewFloat()
-	progressVal := custom_binding.FloatMath(
+	progressVal := bindings.FloatMath(
 		func(d ...float64) float64 {
 			thumbP := d[0]
 			packP := d[1]

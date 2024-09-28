@@ -149,7 +149,7 @@ func Align(n int64, alignment int) int64 {
 		return n
 	}
 
-	var rest = n % int64(alignment)
+	rest := n % int64(alignment)
 	if rest == 0 {
 		return n
 	} else {
@@ -194,9 +194,19 @@ func TruncatePathHumanFriendly(path string, maxLen int) string {
 }
 
 func Map[T, U any](ts []T, f func(T) U) []U {
-  us := make([]U, len(ts))
-  for i := range ts {
-    us[i] = f(ts[i])
-  }
-  return us
+	us := make([]U, len(ts))
+	for i := range ts {
+		us[i] = f(ts[i])
+	}
+	return us
+}
+
+func Filter[T any](ts []T, P func(T) bool) []T {
+	ret := []T{}
+	for _, t := range ts {
+		if P(t) {
+			ret = append(ret, t)
+		}
+	}
+	return ret
 }

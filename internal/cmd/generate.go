@@ -47,7 +47,7 @@ func (gpc *GenPackCmd) Run(ctx *Context) error {
 
 	l.Trace("Generateing pack.json")
 
-	err := ddpackage.NewPackageJSON(l, ddpackage.NewPackageJSONOptions{
+	err := ddpackage.SavePackageJSON(l, ddpackage.SavePackageJSONOptions{
 		Path:          packDirPath,
 		Name:          gpc.Name,
 		Author:        gpc.Author,

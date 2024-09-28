@@ -13,7 +13,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
-	"github.com/ryex/dungeondraft-gopackager/internal/gui/custom_layout"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddpackage"
 
 	log "github.com/sirupsen/logrus"
@@ -119,10 +119,18 @@ func (a *App) setPackContent(pkg *ddpackage.Package) {
 			Thumbnails:  thumbnails,
 		})
 	})
+	infoBtn := widget.NewButtonWithIcon(
+		lang.X("unpack.infoBtn.text", "Package Information"),
+		theme.DocumentIcon(),
+		func() {
+			dlg := NewPackJSONDialogPkg(a.pkg, false, nil, a.window)
+			dlg.Show()
+		},
+	)
 
 	extractForm := container.NewVBox(
 		container.New(
-			custom_layout.NewLeftExpandHBoxLayout(),
+			layouts.NewLeftExpandHBoxLayout(),
 			outEntry,
 			outBrowseBtn,
 		),
@@ -131,28 +139,25 @@ func (a *App) setPackContent(pkg *ddpackage.Package) {
 			ripTexCheck,
 			thumbnailsCheck,
 		),
-		extrctBtn,
+		container.NewBorder(nil, nil, infoBtn, nil, extrctBtn),
 	)
-
-	disableButtonsListener := binding.NewDataListener(func() {
-		disable, _ := a.disableButtons.Get()
-		log.Info("unpack buttons disable: ", disable)
-		if disable {
-			outBrowseBtn.Disable()
-			extrctBtn.Disable()
-		} else {
-			outBrowseBtn.Enable()
-			extrctBtn.Enable()
-		}
-	})
 
 	a.setMainContent(
 		container.New(
-			custom_layout.NewBottomExpandVBoxLayout(),
+			layouts.NewBottomExpandVBoxLayout(),
 			extractForm,
 			split,
 		),
-		disableButtonsListener,
+		func(disable bool) {
+			log.Info("unpack buttons disable: ", disable)
+			if disable {
+				outBrowseBtn.Disable()
+				extrctBtn.Disable()
+			} else {
+				outBrowseBtn.Enable()
+				extrctBtn.Enable()
+			}
+		},
 	)
 
 	a.disableButtons.Set(false)

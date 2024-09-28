@@ -28,6 +28,15 @@ type CustomColorOverrides struct {
 	RedTolerance  float64 `json:"red_tolerance"`
 }
 
+func DefaultCustomColorOverrides() *CustomColorOverrides {
+	return &CustomColorOverrides{
+		Enabled: false,
+		MinRedness: 0.1,
+		MinSaturation: 0.0,
+		RedTolerance: 0.04,
+	}
+}
+
 func (o *CustomColorOverrides) String() string {
 	return fmt.Sprintf("%v", *o)
 }
