@@ -26,8 +26,9 @@ func main() {
 		kong.UsageOnError(),
 		kong.ConfigureHelp(
 			kong.HelpOptions{
-				Compact: true,
+				Compact: false,
 				Summary: true,
+				Tree: false,
 			}),
 		kong.Bind(ctx),
 	)

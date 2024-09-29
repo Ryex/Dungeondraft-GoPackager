@@ -16,7 +16,7 @@ import (
 
 type ListCmd struct {
 	Files ListFilesCmd `cmd:"" help:"lists files in the pack"`
-	Tags  ListTagsCmd  `cmd:"" help:"lists all tags that match the provided resource patterns, with no patterns lists all tags"`
+	Tags  ListTagsCmd  `cmd:"" help:"lists all tags that match the provided resource patterns. with no patterns lists all tags"`
 }
 
 type ListFilesCmd struct {
