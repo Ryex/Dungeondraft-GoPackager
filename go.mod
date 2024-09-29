@@ -10,6 +10,7 @@ require (
 	github.com/dustin/go-humanize v1.0.1
 	github.com/schollz/progressbar/v3 v3.16.0
 	github.com/sirupsen/logrus v1.9.3
+	github.com/snowzach/rotatefilehook v0.0.0-20220211133110-53752135082d
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef
 	github.com/sunshineplan/imgconv v1.1.11
@@ -43,7 +44,6 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/rymdport/portal v0.2.6 // indirect
-	github.com/snowzach/rotatefilehook v0.0.0-20220211133110-53752135082d // indirect
 	github.com/stretchr/testify v1.9.0 // indirect
 	github.com/sunshineplan/pdf v1.0.7 // indirect
 	github.com/yuin/goldmark v1.7.1 // indirect

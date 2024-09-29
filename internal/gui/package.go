@@ -96,7 +96,7 @@ func (a *App) buildPackageTree(filter binding.String) (*widget.Tree, binding.Str
 	}
 	mappedList := bindings.NewMapping(
 		filter,
-		func(filter string) ([]structures.FileInfo, error) {
+		func(filter string) ([]*structures.FileInfo, error) {
 			log.Tracef("filtering tree list with '%s'", filter)
 			if filter == "" {
 				return a.pkg.FileList().Filter(filterFunc), nil
@@ -157,7 +157,7 @@ func (a *App) buildPackageTree(filter binding.String) (*widget.Tree, binding.Str
 		},
 	)
 
-	bindings.ListenErr(mappedList, func(fil []structures.FileInfo) {
+	bindings.ListenErr(mappedList, func(fil []*structures.FileInfo) {
 		log.Trace("rebuilding tree")
 		nodeTree = buildInfoMaps(fil)
 		tree.Refresh()
@@ -396,31 +396,33 @@ func (a *App) buildMetadataPane(info *structures.FileInfo, editable bool) fyne.C
 			colorLbl := widget.NewLabel(lang.X("metadata.color.label", "Color"))
 			colorRect := widgets.NewTappableRect(defaultColor, 4)
 			colorRect.SetMinSize(fyne.NewSize(48, 32))
-			colorRect.OnTapped = func(_ *fyne.PointEvent) {
-				dlg := dialog.NewColorPicker(
-					lang.X("metadata.colorPickDialog.title", "Pick a default color"),
-					"",
-					func(c color.Color) {
-						colorRect.SetColor(c)
-						if wallData != nil {
-							data, ok := (*wallData)[metaPath]
-							if !ok {
-								(*wallData)[metaPath] = structures.PackageWall{
-									Path:  info.RelPath,
-									Color: ddcolor.FromColor(c),
+			if editable {
+				colorRect.OnTapped = func(_ *fyne.PointEvent) {
+					dlg := dialog.NewColorPicker(
+						lang.X("metadata.colorPickDialog.title", "Pick a default color"),
+						"",
+						func(c color.Color) {
+							colorRect.SetColor(c)
+							if wallData != nil {
+								data, ok := (*wallData)[metaPath]
+								if !ok {
+									(*wallData)[metaPath] = structures.PackageWall{
+										Path:  info.RelPath,
+										Color: ddcolor.FromColor(c),
+									}
+								} else {
+									data.Color = ddcolor.FromColor(c)
+									(*wallData)[metaPath] = data
 								}
-							} else {
-								data.Color = ddcolor.FromColor(c)
-								(*wallData)[metaPath] = data
+								a.saveWallMetadata(metaPath)
 							}
-							a.saveWallMetadata(metaPath)
-						}
-					},
-					a.window,
-				)
-				dlg.Advanced = true
-				dlg.SetColor(colorRect.GetColor())
-				dlg.Show()
+						},
+						a.window,
+					)
+					dlg.Advanced = true
+					dlg.SetColor(colorRect.GetColor())
+					dlg.Show()
+				}
 			}
 			form := container.New(
 				layout.NewFormLayout(),
@@ -454,33 +456,35 @@ func (a *App) buildMetadataPane(info *structures.FileInfo, editable bool) fyne.C
 			colorLbl := widget.NewLabel(lang.X("metadata.color.label", "Color"))
 			colorRect := widgets.NewTappableRect(defaultColor, 4)
 			colorRect.SetMinSize(fyne.NewSize(48, 32))
-			colorRect.OnTapped = func(_ *fyne.PointEvent) {
-				dlg := dialog.NewColorPicker(
-					lang.X("metadata.colorPickDialog.title", "Pick a default color"),
-					"",
-					func(c color.Color) {
-						colorRect.SetColor(c)
-						if tilesetData != nil {
-							data, ok := (*tilesetData)[metaPath]
-							if !ok {
-								(*tilesetData)[metaPath] = structures.PackageTileset{
-									Path:  info.RelPath,
-									Name:  "",
-									Color: ddcolor.FromColor(c),
-									Type:  structures.TilesetNormal,
+			if editable {
+				colorRect.OnTapped = func(_ *fyne.PointEvent) {
+					dlg := dialog.NewColorPicker(
+						lang.X("metadata.colorPickDialog.title", "Pick a default color"),
+						"",
+						func(c color.Color) {
+							colorRect.SetColor(c)
+							if tilesetData != nil {
+								data, ok := (*tilesetData)[metaPath]
+								if !ok {
+									(*tilesetData)[metaPath] = structures.PackageTileset{
+										Path:  info.RelPath,
+										Name:  "",
+										Color: ddcolor.FromColor(c),
+										Type:  structures.TilesetNormal,
+									}
+								} else {
+									data.Color = ddcolor.FromColor(c)
+									(*tilesetData)[metaPath] = data
 								}
-							} else {
-								data.Color = ddcolor.FromColor(c)
-								(*tilesetData)[metaPath] = data
+								a.saveTilesetMetadata(metaPath)
 							}
-							a.saveTilesetMetadata(metaPath)
-						}
-					},
-					a.window,
-				)
-				dlg.Advanced = true
-				dlg.SetColor(colorRect.GetColor())
-				dlg.Show()
+						},
+						a.window,
+					)
+					dlg.Advanced = true
+					dlg.SetColor(colorRect.GetColor())
+					dlg.Show()
+				}
 			}
 
 			nameLbl := widget.NewLabel(lang.X("metadata.name.label", "Name"))
@@ -533,6 +537,11 @@ func (a *App) buildMetadataPane(info *structures.FileInfo, editable bool) fyne.C
 			)
 			tilesetTypeSelector.SetSelected(string(tilesetType))
 
+			if !editable {
+				nameEntry.Disable()
+				tilesetTypeSelector.Disable()
+			}
+
 			form := container.New(
 				layout.NewFormLayout(),
 				nameLbl, nameEntry,
@@ -582,14 +591,12 @@ func (a *App) saveTilesetMetadata(metaPath string) {
 	})
 }
 
-func buildInfoMaps(infoList []structures.FileInfo) map[string][]string {
+func buildInfoMaps(infoList []*structures.FileInfo) map[string][]string {
 	nodeTree := make(map[string][]string)
-	for i := 0; i < len(infoList); i++ {
-		info := &(infoList)[i]
-
-		dir, _ := filepath.Split(info.RelPath)
+	for _, fi := range infoList {
+		dir, _ := filepath.Split(fi.RelPath)
 		next := dir[:max(len(dir)-1, 0)]
-		path := info.RelPath
+		path := fi.RelPath
 		nodeTree[next] = append(nodeTree[next], path)
 		for next != "" {
 			path = next

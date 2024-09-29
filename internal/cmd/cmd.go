@@ -35,7 +35,7 @@ func (ctx *Context) LoadPkg(path string) error {
 			return err
 		}
 	} else {
-		err := ctx.Pkg.LoadFromPackedPath(ctx.InputPath)
+		err := ctx.Pkg.LoadFromPackedPath(ctx.InputPath, nil)
 		if err != nil {
 			ctx.Log.WithError(err).Error("failed to load package")
 			return err

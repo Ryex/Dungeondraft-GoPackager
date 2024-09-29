@@ -78,7 +78,7 @@ func NewPackJSONDialogPkg(
 	if dlg.Version == "" {
 		dlg.Version = "1"
 	}
-	dlg.buildUi()
+	dlg.buildUI()
 	return dlg
 }
 
@@ -97,11 +97,11 @@ func NewPackJSONDialog(
 		ColorOverrides: structures.DefaultCustomColorOverrides(),
 		editable:       true,
 	}
-	dlg.buildUi()
+	dlg.buildUI()
 	return dlg
 }
 
-func (dlg *PackJSONDialog) buildUi() {
+func (dlg *PackJSONDialog) buildUI() {
 	IDLbl := widget.NewLabel(lang.X("packJson.id.label", "ID"))
 	IDEntry := widget.NewEntryWithData(binding.BindString(&dlg.ID))
 

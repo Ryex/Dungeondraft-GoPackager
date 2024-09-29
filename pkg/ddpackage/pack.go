@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
@@ -141,79 +141,151 @@ func (p *Package) PackPackage(outDir string, options PackOptions, progressCallba
 	return
 }
 
-// BuildFileList builds a list of files at the target directory for inclusion in a .dungeondraft_pack file
-func (p *Package) BuildFileList(progressCallbacks ...func(path string)) (err error) {
+func (p *Package) BuildFileListProgress(progressCallback func(p float64, curPath string)) (errs []error) {
+	return p.buildFileList(progressCallback)
+}
+
+func (p *Package) BuildFileList() (errs []error) {
+	return p.buildFileList(nil)
+}
+
+func (p *Package) UpdateFromPathProgress(path string, progressCallback func(p float64, curPath string)) (errs []error) {
+	return p.updateFromPath(path, progressCallback)
+}
+
+func (p *Package) UpdateFromPath(path string) (errs []error) {
+	return p.updateFromPath(path, nil)
+}
+
+// Rebuilds the list of files at the target directory for inclusion in a .dungeondraft_pack file
+func (p *Package) buildFileList(progressCallback func(p float64, curPath string)) (errs []error) {
 	if p.unpackedPath == "" {
-		return ErrUnsetUnpackedPath
+		return []error{ErrUnsetUnpackedPath}
 	}
 	if p.mode != PackageModeUnpacked {
-		return ErrPackageNotUnpacked
+		return []error{ErrPackageNotUnpacked}
+	}
+	p.resetData()
+	return p.updateFromPath(p.unpackedPath, progressCallback)
+}
+
+// updates the current list of files at the target directory for inclusion in a .dungeondraft_pack file
+// on duplicate entries updates the current info
+func (p *Package) updateFromPath(path string, progressCallback func(p float64, curPath string)) (errs []error) {
+	if p.unpackedPath == "" {
+		return []error{ErrUnsetUnpackedPath}
+	}
+	if p.mode != PackageModeUnpacked {
+		return []error{ErrPackageNotUnpacked}
 	}
 
-	p.log.Debug("beginning directory traversal to collect file list")
+	p.log.WithField("listPath", path).Debug("beginning directory traversal to collect file list")
 
-	walkFunc := func(path string, dir fs.DirEntry, err error) error {
-		l := p.log.WithField("filePath", path)
-		if err != nil {
-			l.WithError(err).Error("can't access file")
-			return errors.Join(err, fmt.Errorf("can't access %s", path))
-		}
+	path, err := filepath.Abs(path)
+	if err != nil {
+		return []error{err}
+	}
 
-		if dir.IsDir() {
-			l.Trace("is directory, descending into...")
-		} else {
-			ext := strings.ToLower(filepath.Ext(path))
-			if utils.InSlice(ext, p.packOptions.ValidExts) {
-				if dir.Type().IsRegular() {
+	var toRemove []string
+	var files []string
+	pathIsDir := false
 
-					fInfo, err := p.NewFileInfo(NewFileInfoOptions{Path: path})
-					if err != nil {
-						return err
-					}
+	statInfo, err := os.Stat(path)
+	if err != nil {
+		return []error{err}
+	}
+	if statInfo.IsDir() {
+		pathIsDir = true
+		files, _, _ = utils.ListDir(path)
+	} else {
+		files = []string{path}
+	}
+	filesSet := structures.SetFrom(files)
 
-					l.Info("including")
-					p.fileList = append(p.fileList, *fInfo)
+	p.flLock.Lock()
+	defer p.flLock.Unlock()
 
-					for _, pcb := range progressCallbacks {
-						pcb(path)
-					}
-				}
-			} else {
-				l.WithField("ext", ext).WithField("validExts", p.packOptions.ValidExts).Debug("Invalid file ext, not including.")
+	if pathIsDir {
+		for _, fi := range p.fileList {
+			if isSub, _ := utils.PathIsSub(path, fi.Path); isSub && !filesSet.Has(fi.Path) {
+				toRemove = append(toRemove, fi.ResPath)
 			}
 		}
-
-		return nil
 	}
 
-	err = filepath.WalkDir(p.unpackedPath, walkFunc)
-	if err != nil {
-		p.log.WithError(err).Error("failed to walk directory")
-		return
+	for i, file := range files {
+		// filter extensions
+		ext := strings.ToLower(filepath.Ext(file))
+		if !utils.InSlice(ext, p.packOptions.ValidExts) {
+			continue
+		}
+		// construct resource path
+		relPath, err := filepath.Rel(p.unpackedPath, file)
+		if err != nil {
+			p.log.WithField("scanFile", file).Error("can not get path relative to package root")
+			errs = append(errs, err)
+			continue
+		}
+		resPath := fmt.Sprintf("res://packs/%s/%s", p.id, relPath)
+
+		// update or add
+		existing, ok := p.resourceMap[resPath]
+		if ok {
+			statInfo, err := os.Stat(file)
+			if err != nil {
+				p.log.WithError(err).Errorf("can't stat %s", file)
+				errs = append(errs, err)
+				continue
+			}
+			existing.Size = statInfo.Size()
+		} else {
+			fInfo, err := p.NewFileInfo(NewFileInfoOptions{Path: file})
+			if err != nil {
+				errs = append(errs, err)
+				continue
+			}
+			p.log.Infof("including %s", file)
+			p.addResource(fInfo)
+		}
+		if progressCallback != nil {
+			progressCallback(float64(i)/float64(len(files)), file)
+		}
+	}
+
+	for _, res := range toRemove {
+		p.log.Warnf("removing %s (file missing)", res)
+		p.removeResource(res)
 	}
 
 	// inject <GUID>.json
 
 	packJSONPath := filepath.Join(p.unpackedPath, `pack.json`)
-
 	packJSONName := fmt.Sprintf(`%s.json`, p.id)
 	packJSONResPath := "res://packs/" + packJSONName
 
-	GUIDJSONInfo, err := p.NewFileInfo(NewFileInfoOptions{
-		Path:    packJSONPath,
-		ResPath: &packJSONResPath,
-		RelPath: &packJSONName,
-	})
-	if err != nil {
-		return err
+	packJSONindex := p.fileList.IndexOfRes(packJSONResPath)
+	var packJSONInfo *structures.FileInfo
+	if packJSONindex != -1 {
+		packJSONInfo = p.fileList.Remove(packJSONindex)
+	} else {
+		fi, err := p.NewFileInfo(NewFileInfoOptions{
+			Path:    packJSONPath,
+			ResPath: &packJSONResPath,
+			RelPath: &packJSONName,
+		})
+		if err != nil {
+			p.log.WithError(err).Errorf("error adding base pack.json")
+			errs = append(errs, err)
+		}
+		packJSONInfo = fi
 	}
+	p.resourceMap[packJSONResPath] = packJSONInfo
 
-	// prepend the file to the list
-	p.fileList = append(p.fileList, structures.FileInfo{}) // make space with empty struct
-	copy(p.fileList[1:], p.fileList)                       // move things forward
-	p.fileList[0] = *GUIDJSONInfo                          // set to first spot
-
-	p.updateResourceMap()
+	// sort list and assure pack json it first
+	sort.Sort(p.fileList)
+	p.fileList = append(p.fileList, nil)
+	copy(p.fileList[1:], p.fileList)
+	p.fileList[0] = packJSONInfo
 
 	return
 }
@@ -257,14 +329,14 @@ func (p *Package) writePackage(l logrus.FieldLogger, out io.WriteSeeker, progres
 }
 
 func (p *Package) readUnpackedFileFromPackage(info *structures.FileInfo) ([]byte, error) {
-  l := p.log.
-    WithField("res", info.ResPath).
-    WithField("unpackedPath", info.Path)
+	l := p.log.
+		WithField("res", info.ResPath).
+		WithField("unpackedPath", info.Path)
 
-  fileData, err := os.ReadFile(info.Path)
-  if err != nil {
-    l.WithError(err).Error("failed to read unpacked resource")
-    return nil, errors.Join(err, ErrReadUnpacked, fmt.Errorf("failed to read %s", info.Path))
-  }
-  return fileData, nil
+	fileData, err := os.ReadFile(info.Path)
+	if err != nil {
+		l.WithError(err).Error("failed to read unpacked resource")
+		return nil, errors.Join(err, ErrReadUnpacked, fmt.Errorf("failed to read %s", info.Path))
+	}
+	return fileData, nil
 }

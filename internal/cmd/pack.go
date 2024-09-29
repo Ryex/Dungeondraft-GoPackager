@@ -42,10 +42,12 @@ func (pc *PackCmd) Run(ctx *Context) error {
 		return err
 	}
 
-	err = pkg.BuildFileList()
-	if err != nil {
-		l.WithError(err).Error("could not build file list")
-		return err
+	errs := pkg.BuildFileList()
+	if len(errs) != 0 {
+		for _, err := range errs {
+			l.WithField("task", "build file list").Errorf("err: %s", err.Error())
+		}
+		return errors.New("Failed to build file list")
 	}
 
 	bar := progressbar.Default(100, "Packing ...")

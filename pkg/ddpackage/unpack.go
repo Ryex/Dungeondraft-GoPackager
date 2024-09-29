@@ -25,10 +25,6 @@ func (p *Package) ExtractPackage(outDir string, options UnpackOptions, progressC
 	}
 	p.SetUnpackOptions(options)
 	p.unpackedPath = outDir
-	err = p.loadPackedFilelist(p.pkgFile)
-	if err != nil {
-		return
-	}
 
 	err = p.extractFilelist(outDir, progressCallbacks...)
 
@@ -36,8 +32,8 @@ func (p *Package) ExtractPackage(outDir string, options UnpackOptions, progressC
 }
 
 var (
-	packJSONPathRegex  = regexp.MustCompile(`^res://packs/([\w\-. ]+).json`)
-	idTrimPrefixRegex  = regexp.MustCompile(`^([\w\-. ]+)/`)
+	packJSONPathRegex = regexp.MustCompile(`^res://packs/([\w\-. ]+).json`)
+	idTrimPrefixRegex = regexp.MustCompile(`^([\w\-. ]+)/`)
 )
 
 func (p *Package) NormalizeResourcePath(resPath string) string {
@@ -50,9 +46,8 @@ func (p *Package) NormalizeResourcePath(resPath string) string {
 }
 
 func (p *Package) MapResourcePaths() {
-	for i := 0; i < len(p.fileList); i++ {
-		packedFile := &p.fileList[i]
-		packedFile.Path = p.NormalizeResourcePath(packedFile.ResPath)
+	for _, fi := range p.fileList {
+		fi.Path = p.NormalizeResourcePath(fi.ResPath)
 	}
 }
 
@@ -94,29 +89,28 @@ func (p *Package) extractFilelist(outDir string, progressCallbacks ...func(p flo
 
 	extractedPaths := make(map[string]string)
 
-	for i := 0; i < len(p.fileList); i++ {
-		packedFile := &p.fileList[i]
+	for i, fi := range p.fileList {
 
 		for _, pcb := range progressCallbacks {
 			pcb(float64(i) / float64(len(p.fileList)))
 		}
 
-		if strings.HasPrefix(packedFile.ResPath, thumbnailPrefix) && !p.unpackOptions.Thumbnails {
+		if strings.HasPrefix(fi.ResPath, thumbnailPrefix) && !p.unpackOptions.Thumbnails {
 			continue
 		}
 
-		if resPath, ok := extractedPaths[packedFile.Path]; ok {
+		if resPath, ok := extractedPaths[fi.Path]; ok {
 			p.log.
-				WithField("packedPath", packedFile.ResPath).
-				WithField("duplicateResPath", resPath == packedFile.ResPath).
-				Warnf("ignoring previously extracted path %s", packedFile.Path)
+				WithField("packedPath", fi.ResPath).
+				WithField("duplicateResPath", resPath == fi.ResPath).
+				Warnf("ignoring previously extracted path %s", fi.Path)
 			continue
 		}
 
-		path := filepath.Join(outDirPath, filepath.Dir(packedFile.Path))
-		p.log.WithField("mappedPath", packedFile.Path).Debugf("%s -> %s", packedFile.ResPath, path)
+		path := filepath.Join(outDirPath, filepath.Dir(fi.Path))
+		p.log.WithField("mappedPath", fi.Path).Debugf("%s -> %s", fi.ResPath, path)
 
-		fileNameFull := filepath.Base(packedFile.ResPath)
+		fileNameFull := filepath.Base(fi.ResPath)
 		fileExt := filepath.Ext(fileNameFull)
 
 		if fileExt == ".tex" && !p.unpackOptions.RipTextures {
@@ -124,8 +118,8 @@ func (p *Package) extractFilelist(outDir string, progressCallbacks ...func(p flo
 		}
 
 		l := p.log.
-			WithField("packedPath", packedFile.ResPath).
-			WithField("offset", packedFile.Offset)
+			WithField("packedPath", fi.ResPath).
+			WithField("offset", fi.Offset)
 
 		err = os.MkdirAll(path, 0o777)
 		if err != nil {
@@ -134,10 +128,10 @@ func (p *Package) extractFilelist(outDir string, progressCallbacks ...func(p flo
 			return err
 		}
 
-		if _, err = p.ExtractFile(packedFile, path); err != nil {
+		if _, err = p.ExtractFile(fi, path); err != nil {
 			return err
 		}
-		extractedPaths[packedFile.Path] = packedFile.ResPath
+		extractedPaths[fi.Path] = fi.ResPath
 	}
 
 	for _, pcb := range progressCallbacks {
@@ -247,7 +241,10 @@ func (p *Package) readPackedFileFromPackage(r io.ReadSeeker, info *structures.Fi
 }
 
 // loadPackedFilelist Takes an io.reader and attempts to extract a list of files stored in the package
-func (p *Package) loadPackedFilelist(r io.ReadSeeker) (err error) {
+func (p *Package) loadPackedFilelist(
+	r io.ReadSeeker,
+	progressCallback func(p float64, curRes string),
+) (err error) {
 	valid, err := p.isValidPackage(r)
 
 	if !valid {
@@ -255,7 +252,7 @@ func (p *Package) loadPackedFilelist(r io.ReadSeeker) (err error) {
 	}
 	// reader is in position, start extracting
 
-	err = p.getFileList(r)
+	err = p.getFileList(r, progressCallback)
 	if err != nil {
 		p.log.WithError(err).
 			Error("could not read file list")
@@ -270,11 +267,10 @@ func (p *Package) loadPackedPackJSON(r io.ReadSeeker) (err error) {
 		return ErrEmptyFileList
 	}
 	var packJSONInfo *structures.FileInfo
-	for i := 0; i < len(p.fileList); i++ {
-		packedFile := &p.fileList[i]
-		match := packJSONPathRegex.MatchString(packedFile.ResPath)
+	for _, fi := range p.fileList {
+		match := packJSONPathRegex.MatchString(fi.ResPath)
 		if match {
-			packJSONInfo = packedFile
+			packJSONInfo = fi
 			break
 		}
 	}
@@ -439,8 +435,8 @@ func (p *Package) readPackageHeaders(r io.ReadSeeker) (headers structures.Packag
 	return
 }
 
-func (p *Package) newFileInfoPacked(resPath []byte, infoBytes structures.FileInfoBytes) structures.FileInfo {
-	info := structures.FileInfo{
+func (p *Package) newFileInfoPacked(resPath []byte, infoBytes structures.FileInfoBytes) *structures.FileInfo {
+	info := &structures.FileInfo{
 		ResPath:     string(resPath),
 		ResPathSize: int32(len(resPath)),
 		Offset:      int64(infoBytes.Offset),
@@ -451,34 +447,33 @@ func (p *Package) newFileInfoPacked(resPath []byte, infoBytes structures.FileInf
 }
 
 func (p *Package) updatePackedFileInfoAfter() {
-	for i := 0; i < len(p.fileList); i++ {
-		info := &p.fileList[i]
-		p.log.Infof("unpdating info for %s", info.ResPath)
+	for _, fi := range p.fileList {
+		p.log.Infof("unpdating info for %s", fi.ResPath)
 
-		info.RelPath = strings.TrimPrefix(strings.TrimPrefix(info.ResPath, "res://packs/"), p.id+"/")
-		if info.IsTexture() {
-			hash := md5.Sum([]byte(info.ResPath))
+		fi.RelPath = strings.TrimPrefix(strings.TrimPrefix(fi.ResPath, "res://packs/"), p.id+"/")
+		if fi.IsTexture() {
+			hash := md5.Sum([]byte(fi.ResPath))
 			thumbnailName := hex.EncodeToString(hash[:]) + ".png"
-			info.ThumbnailResPath = fmt.Sprintf("res://packs/%s/thumbnails/%s", p.id, thumbnailName)
+			fi.ThumbnailResPath = fmt.Sprintf("res://packs/%s/thumbnails/%s", p.id, thumbnailName)
 		}
 
-		isWall := info.IsWall()
-		isTileset := info.IsTileset()
+		isWall := fi.IsWall()
+		isTileset := fi.IsTileset()
 
 		if isWall || isTileset {
-			fName := filepath.Base(info.RelPath)
+			fName := filepath.Base(fi.RelPath)
 			bName := fName[:len(fName)-len(filepath.Ext(fName))]
 
 			if isWall {
-				info.MetadataPath = fmt.Sprintf("res://packs/%s/data/walls/%s.dungeondraft_wall", p.id, bName)
+				fi.MetadataPath = fmt.Sprintf("res://packs/%s/data/walls/%s.dungeondraft_wall", p.id, bName)
 			} else {
-				info.MetadataPath = fmt.Sprintf("res://packs/%s/data/tilesets/%s.dungeondraft_tileset", p.id, bName)
+				fi.MetadataPath = fmt.Sprintf("res://packs/%s/data/tilesets/%s.dungeondraft_tileset", p.id, bName)
 			}
 		}
 	}
 }
 
-func (p *Package) getFileList(r io.ReadSeeker) (err error) {
+func (p *Package) getFileList(r io.ReadSeeker, progressCallback func(p float64, curRes string)) (err error) {
 	headers, err := p.readPackageHeaders(r)
 	if err != nil {
 		return
@@ -520,8 +515,11 @@ func (p *Package) getFileList(r io.ReadSeeker) (err error) {
 		p.log.
 			WithField("info", info).
 			Infof("found file [%v/%v]", fileNum, fileCount)
-		p.fileList = append(p.fileList, info)
+		p.addResource(info)
 
+		if progressCallback != nil {
+			progressCallback(float64(fileNum)/float64(fileCount), info.ResPath)
+		}
 	}
 
 	return

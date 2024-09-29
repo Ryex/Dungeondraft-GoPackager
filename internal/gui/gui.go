@@ -238,7 +238,6 @@ func (a *App) setupPathHandler() {
 		if err != nil {
 			log.WithError(err).Errorf("can not stat path %s", path)
 			a.setErrContent(
-				err,
 				lang.X(
 					"err.badPath",
 					"Can not open \"{{.Path}}\"",
@@ -246,6 +245,7 @@ func (a *App) setupPathHandler() {
 						"Path": path,
 					},
 				),
+				err,
 			)
 			return
 		}
@@ -258,24 +258,26 @@ func (a *App) setupPathHandler() {
 	})
 }
 
-func (a *App) setErrContent(err error, msg string) {
+func (a *App) setErrContent(msg string, errs ...error) {
 	msgText := canvas.NewText(msg, theme.Color(theme.ColorNameForeground))
 	msgText.TextSize = 16
 	msgText.Alignment = fyne.TextAlignCenter
 
-	errText := multilineCanvasText(
-		err.Error(),
-		14,
-		fyne.TextStyle{Italic: true},
-		fyne.TextAlignCenter,
-		theme.Color(theme.ColorNameError),
-	)
+	errContainer := container.NewVBox()
+	for i, err := range errs {
+		errText := multilineCanvasText(
+			fmt.Sprintf("%d) ", i)+err.Error(),
+			12,
+			fyne.TextStyle{Italic: true},
+			fyne.TextAlignLeading,
+			theme.Color(theme.ColorNameError),
+		)
+		errContainer.Add(errText)
+	}
 
-	msgContent := container.NewVBox(
-		layout.NewSpacer(),
+	msgContent := container.NewCenter(
 		msgText,
-		errText,
-		layout.NewSpacer(),
+		container.NewScroll(errContainer),
 	)
 
 	a.setMainContent(msgContent)
@@ -302,7 +304,7 @@ func multilineCanvasText(
 	return content
 }
 
-func (a *App) setWaitContent(msg string) binding.String {
+func (a *App) setWaitContent(msg string) (binding.Float, binding.String) {
 	activity := widget.NewActivity()
 	activity.Start()
 	msgText := canvas.NewText(msg, theme.Color(theme.ColorNameForeground))
@@ -316,6 +318,9 @@ func (a *App) setWaitContent(msg string) binding.String {
 		activityText.Text = str
 		activityText.Refresh()
 	})
+	progressBar := widget.NewProgressBar()
+	activityProgress := binding.NewFloat()
+	progressBar.Bind(activityProgress)
 
 	activityContent := container.NewVBox(
 		layout.NewSpacer(),
@@ -325,7 +330,7 @@ func (a *App) setWaitContent(msg string) binding.String {
 		layout.NewSpacer(),
 	)
 	a.setMainContent(activityContent)
-	return activityStr
+	return activityProgress, activityStr
 }
 
 func (a *App) showErrorDialog(err error) {
