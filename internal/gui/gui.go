@@ -99,12 +99,26 @@ func (a *App) clean() {
 }
 
 func (a *App) buildMainUI() {
-	welcomeText := canvas.NewText(
-		lang.X("greeting", "Dungeondraft-GoPackager - Package and edit Dungeondraft resource packs"),
-		theme.Color(theme.ColorNameForeground),
-	)
-	welcomeText.TextSize = 18
-	welcome := container.NewCenter(welcomeText)
+	welcome := container.NewPadded(container.NewStack(
+		&canvas.Rectangle{
+			FillColor:    theme.Color(theme.ColorNameHeaderBackground),
+			CornerRadius: 4,
+		},
+		container.NewPadded(container.NewVBox(
+			&canvas.Text{
+				Text:      lang.X("greeting.title", "Dungeondraft-GoPackager"),
+				Color:     theme.Color(theme.ColorNameForeground),
+				TextSize:  18,
+				Alignment: fyne.TextAlignCenter,
+			},
+			&canvas.Text{
+				Text:      lang.X("greeting.sub-title", "Package, edit, and prepare Dungeondraft resource packs"),
+				Color:     theme.Color(theme.ColorNameForeground),
+				TextSize:  14,
+				Alignment: fyne.TextAlignCenter,
+			},
+		)),
+	))
 
 	pathInput := widget.NewEntryWithData(a.operatingPath)
 	pathInput.SetPlaceHolder(lang.X("pathInput.placeholder", "Path to .dungeondraft_pack or folder"))
@@ -347,7 +361,7 @@ func (a *App) setWaitContent(msg string) (binding.Float, binding.String) {
 		activity,
 		msgText,
 		activityText,
-		progressBar,
+		container.NewPadded(progressBar),
 		layout.NewSpacer(),
 	)
 	a.setMainContent(activityContent)
