@@ -20,13 +20,21 @@ var CLI struct {
 
 func main() {
 	kong.Parse(&CLI,
+		kong.Configuration(kong.JSON, "./dd-gopackager.json", "~/.config/dd-gopackager.json"),
 		kong.Name("dungeondraft-packager"),
-		kong.Description("Pack, Unpack, Edit, and Prepare resources for .dungeondraft_pack files"),
+		kong.Description(
+			"Pack, Unpack, Edit, and Prepare resources for .dungeondraft_pack files\n\n"+
+				"log file and level can also be configured from a file.\n"+
+				"the first of the folowing will be loaded:\n"+
+				"\t./dd-gopackager.json\n"+
+				"\t~/.config/dd-gopackager.json",
+		),
 		kong.UsageOnError(),
 		kong.ConfigureHelp(
 			kong.HelpOptions{
 				Compact: true,
 				Summary: true,
+				Tree: true,
 			}),
 		// vars
 	)
