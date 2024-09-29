@@ -34,7 +34,7 @@ func (a *App) loadUnpackedPath(path string) {
 		return
 	}
 
-	activity := a.setWaitContent(lang.X(
+	activityProgress, activityStr := a.setWaitContent(lang.X(
 		"pack.wait",
 		"Loading unpacked resources from {{.Path}} (building index) ...",
 		map[string]any{
@@ -54,17 +54,19 @@ func (a *App) loadUnpackedPath(path string) {
 		if err != nil {
 			l.WithError(err).Error("could not load directory")
 			a.setErrContent(
-				err,
 				lang.X(
 					"err.badResources",
 					"Failed to load unpacked resources from {{.Path}}",
 					map[string]any{"Path": path}),
+
+				err,
 			)
 			return
 		}
 
-		err = pkg.BuildFileList(func(path string) {
-			activity.Set(lang.X(
+		errs := pkg.BuildFileListProgress(func(p float64, path string) {
+			activityProgress.Set(p)
+			activityStr.Set(lang.X(
 				"pack.buildList.activity",
 				"Loading {{.Path}} ...",
 				map[string]any{
@@ -72,10 +74,11 @@ func (a *App) loadUnpackedPath(path string) {
 				},
 			))
 		})
-		if err != nil {
-			l.WithError(err).Error("could not build file list")
+		if len(errs) != 0 {
+			for _, err := range errs {
+				l.WithField("task", "build file list").Errorf("error: %s", err)
+			}
 			a.setErrContent(
-				err,
 				lang.X(
 					"err.fileList",
 					"Failed to build file list from {{.Path}}",
@@ -83,13 +86,15 @@ func (a *App) loadUnpackedPath(path string) {
 						"Path": path,
 					},
 				),
+				err,
 			)
 			return
 		}
 
 		err = pkg.LoadTags()
 		if err != nil {
-			a.showErrorDialog(errors.Join(err, fmt.Errorf(lang.X("package.tags.error", "Failed to read tags"))))
+			a.showErrorDialog(
+				errors.Join(err, fmt.Errorf(lang.X("package.tags.error", "Failed to read tags"))))
 			err = nil
 		}
 		err = pkg.LoadResourceMetadata()

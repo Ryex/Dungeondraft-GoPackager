@@ -22,10 +22,9 @@ func (p *Package) loadPackedTags(r io.ReadSeeker) error {
 	tagsResPath := fmt.Sprintf("res://packs/%s/data/default.dungeondraft_tags", p.id)
 
 	var tagsInfo *structures.FileInfo
-	for i := 0; i < len(p.fileList); i++ {
-		packedFile := &p.fileList[i]
-		if packedFile.ResPath == tagsResPath {
-			tagsInfo = packedFile
+	for _, fi := range p.fileList {
+		if fi.ResPath == tagsResPath {
+			tagsInfo = fi
 			break
 		}
 	}
@@ -55,35 +54,34 @@ func (p *Package) loadPackedResourceMetadata(r io.ReadSeeker) error {
 		return ErrUnsetPackID
 	}
 
-	for i := 0; i < len(p.fileList); i++ {
-		info := &p.fileList[i]
+	for _, fi := range p.fileList {
 
-		if !info.IsWallData() && !info.IsTilesetData() {
+		if !fi.IsWallData() && !fi.IsTilesetData() {
 			continue
 		}
 
-		fileData, err := p.readPackedFileFromPackage(r, info)
+		fileData, err := p.readPackedFileFromPackage(r, fi)
 		if err != nil {
-			p.log.WithError(err).WithField("res", info.ResPath).Error("failed to read data file")
-			return errors.Join(err, ErrMetadataRead, fmt.Errorf("failed to read data file %s", info.ResPath))
+			p.log.WithError(err).WithField("res", fi.ResPath).Error("failed to read data file")
+			return errors.Join(err, ErrMetadataRead, fmt.Errorf("failed to read data file %s", fi.ResPath))
 		}
 
-		if info.IsWallData() {
+		if fi.IsWallData() {
 			wall := structures.NewPackageWall()
 			err = json.Unmarshal(fileData, wall)
 			if err != nil {
-				p.log.WithError(err).WithField("res", info.ResPath).Error("failed to parse data file")
-				return errors.Join(err, ErrWallParse, fmt.Errorf("failed to parse data file %s", info.ResPath))
+				p.log.WithError(err).WithField("res", fi.ResPath).Error("failed to parse data file")
+				return errors.Join(err, ErrWallParse, fmt.Errorf("failed to parse data file %s", fi.ResPath))
 			}
-			p.walls[info.ResPath] = *wall
-		} else if info.IsTilesetData() {
+			p.walls[fi.ResPath] = *wall
+		} else if fi.IsTilesetData() {
 			ts := structures.NewPackageTileset()
 			err = json.Unmarshal(fileData, ts)
 			if err != nil {
-				p.log.WithError(err).WithField("res", info.ResPath).Error("failed to parse data file")
-				return errors.Join(err, ErrTilesetParse, fmt.Errorf("failed to parse data file %s", info.ResPath))
+				p.log.WithError(err).WithField("res", fi.ResPath).Error("failed to parse data file")
+				return errors.Join(err, ErrTilesetParse, fmt.Errorf("failed to parse data file %s", fi.ResPath))
 			}
-			p.tilesets[info.ResPath] = *ts
+			p.tilesets[fi.ResPath] = *ts
 		}
 	}
 
@@ -230,35 +228,34 @@ func (p *Package) loadUnpackedResourceMetadata() error {
 		return ErrUnsetUnpackedPath
 	}
 
-	for i := 0; i < len(p.fileList); i++ {
-		info := &p.fileList[i]
+	for _, fi := range p.fileList {
 
-		if !info.IsWallData() && !info.IsTilesetData() {
+		if !fi.IsWallData() && !fi.IsTilesetData() {
 			continue
 		}
 
-		fileData, err := os.ReadFile(info.Path)
+		fileData, err := os.ReadFile(fi.Path)
 		if err != nil {
-			p.log.WithError(err).WithField("res", info.ResPath).Error("failed to read data file")
-			return errors.Join(err, ErrMetadataRead, fmt.Errorf("failed to read data file %s", info.Path))
+			p.log.WithError(err).WithField("res", fi.ResPath).Error("failed to read data file")
+			return errors.Join(err, ErrMetadataRead, fmt.Errorf("failed to read data file %s", fi.Path))
 		}
 
-		if info.IsWallData() {
+		if fi.IsWallData() {
 			wall := structures.NewPackageWall()
 			err = json.Unmarshal(fileData, wall)
 			if err != nil {
-				p.log.WithError(err).WithField("res", info.ResPath).Error("failed to parse data file")
-				return errors.Join(err, ErrWallParse, fmt.Errorf("failed to parse data file %s", info.Path))
+				p.log.WithError(err).WithField("res", fi.ResPath).Error("failed to parse data file")
+				return errors.Join(err, ErrWallParse, fmt.Errorf("failed to parse data file %s", fi.Path))
 			}
-			p.walls[info.ResPath] = *wall
-		} else if info.IsTilesetData() {
+			p.walls[fi.ResPath] = *wall
+		} else if fi.IsTilesetData() {
 			ts := structures.NewPackageTileset()
 			err = json.Unmarshal(fileData, ts)
 			if err != nil {
-				p.log.WithError(err).WithField("res", info.ResPath).Error("failed to parse data file")
-				return errors.Join(err, ErrTilesetParse, fmt.Errorf("failed to parse data file %s", info.Path))
+				p.log.WithError(err).WithField("res", fi.ResPath).Error("failed to parse data file")
+				return errors.Join(err, ErrTilesetParse, fmt.Errorf("failed to parse data file %s", fi.Path))
 			}
-			p.tilesets[info.ResPath] = *ts
+			p.tilesets[fi.ResPath] = *ts
 		}
 	}
 
@@ -302,14 +299,13 @@ func (p *Package) WriteResourceMetadata() error {
 		return ErrUnsetUnpackedPath
 	}
 
-	for i := 0; i < len(p.fileList); i++ {
-		info := &p.fileList[i]
+	for _, fi := range p.fileList {
 
-		if !info.IsWallData() && !info.IsTilesetData() {
+		if !fi.IsWallData() && !fi.IsTilesetData() {
 			continue
 		}
 
-		dirPath := filepath.Dir(info.Path)
+		dirPath := filepath.Dir(fi.Path)
 
 		if dirExists := utils.DirExists(dirPath); !dirExists {
 			err := os.MkdirAll(dirPath, 0o777)
@@ -320,32 +316,32 @@ func (p *Package) WriteResourceMetadata() error {
 
 		var fileBytes []byte
 		var err error
-		if info.IsWallData() {
-			wall := p.walls[info.ResPath]
+		if fi.IsWallData() {
+			wall := p.walls[fi.ResPath]
 			fileBytes, err = json.MarshalIndent(&wall, "", "  ")
 			if err != nil {
 				p.log.WithError(err).
-					WithField("res", info.ResPath).
+					WithField("res", fi.ResPath).
 					Error("failed to create wall json")
-				return errors.Join(err, fmt.Errorf("failed to create wall json for %s", info.ResPath))
+				return errors.Join(err, fmt.Errorf("failed to create wall json for %s", fi.ResPath))
 			}
 		} else {
-			tileset := p.tilesets[info.ResPath]
+			tileset := p.tilesets[fi.ResPath]
 			fileBytes, err = json.MarshalIndent(&tileset, "", "  ")
 			if err != nil {
 				p.log.WithError(err).
-					WithField("res", info.ResPath).
+					WithField("res", fi.ResPath).
 					Error("failed to create tileset json")
-				return errors.Join(err, fmt.Errorf("failed to create tileset json for %s", info.ResPath))
+				return errors.Join(err, fmt.Errorf("failed to create tileset json for %s", fi.ResPath))
 			}
 		}
 
 		if len(fileBytes) > 0 {
-			err = os.WriteFile(info.Path, fileBytes, 0o644)
+			err = os.WriteFile(fi.Path, fileBytes, 0o644)
 			if err != nil {
 				p.log.WithError(err).
 					Error("failed to write metadata file")
-				return errors.Join(err, fmt.Errorf("failed to write metadata file for %s", info.ResPath))
+				return errors.Join(err, fmt.Errorf("failed to write metadata file for %s", fi.ResPath))
 			}
 		}
 	}

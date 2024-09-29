@@ -32,7 +32,7 @@ func MapKeys[K comparable, V any](m map[K]V) []K {
 // FileExists tests if a file  exists and is not a Directory
 func FileExists(filename string) bool {
 	info, err := os.Stat(filename)
-	if os.IsNotExist(err) {
+	if errors.Is(err,  os.ErrNotExist) {
 		return false
 	}
 	return !info.IsDir()
@@ -209,4 +209,40 @@ func Filter[T any](ts []T, P func(T) bool) []T {
 		}
 	}
 	return ret
+}
+
+func ListDir(path string) (files []string, dirs []string, errs []error) {
+	paths := []string{path}
+
+	for len(paths) > 0 {
+		current := paths[0]
+		paths = paths[1:]
+
+		d, err := os.ReadDir(current)
+		if err != nil {
+			errs = append(errs, err)
+		}
+		for _, entry := range d {
+			curPath := filepath.Join(current, entry.Name())
+			if entry.IsDir() {
+				paths = append(paths, curPath)
+				dirs = append(dirs, curPath)
+			} else {
+				files = append(files, curPath)
+			}
+		}
+	}
+	return
+}
+
+func PathIsSub(parent string, sub string) (bool, error) {
+	up := ".." + string(os.PathSeparator)
+	rel, err := filepath.Rel(filepath.Clean(parent), filepath.Clean(sub))
+	if err != nil {
+		return false, err
+	}
+	if !strings.HasPrefix(rel, up) && rel != ".." {
+		return true, nil
+	}
+	return false, nil
 }

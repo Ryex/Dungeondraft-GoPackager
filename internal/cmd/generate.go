@@ -105,10 +105,12 @@ func (gtc *GenTumbCmd) Run(ctx *Context) error {
 		return err
 	}
 
-	err = pkg.BuildFileList()
-	if err != nil {
-		l.WithError(err).Error("could not build file list")
-		return err
+	errs := pkg.BuildFileList()
+	if len(errs) != 0 {
+		for _, err := range errs {
+			l.WithField("task", "build file list").Errorf("error: %s", err.Error())
+		}
+		return errors.New("Failed to build file list")
 	}
 
 	err = pkg.GenerateThumbnails()

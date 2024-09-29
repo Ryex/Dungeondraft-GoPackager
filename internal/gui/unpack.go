@@ -20,7 +20,15 @@ import (
 )
 
 func (a *App) loadPack(path string) {
-	a.setWaitContent(lang.X("unpack.wait", "Loading {{.Path}} ...", map[string]any{"Path": path}))
+	activityProgress, activityStr := a.setWaitContent(
+		lang.X(
+			"unpack.wait",
+			"Loading {{.Path}} ...",
+			map[string]any{
+				"Path": path,
+			},
+		),
+	)
 	a.disableButtons.Set(true)
 
 	if a.pkg != nil {
@@ -35,12 +43,15 @@ func (a *App) loadPack(path string) {
 
 		pkg := ddpackage.NewPackage(l)
 
-		err := pkg.LoadFromPackedPath(path)
+		err := pkg.LoadFromPackedPath(path, func(p float64, curRes string) {
+			activityProgress.Set(p)
+			activityStr.Set(curRes)
+		})
 		if err != nil {
 			l.WithError(err).Error("could not load path")
 			a.setErrContent(
-				err,
 				lang.X("err.badPack", "Failed to load {{.Path}}", map[string]any{"Path": path}),
+				err,
 			)
 			return
 		}

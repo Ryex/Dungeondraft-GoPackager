@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddimage"
@@ -46,9 +47,12 @@ type Package struct {
 	unpackedPath  string
 	packedPath    string
 	alignment     int
-	fileList      structures.FileInfoList
-	resourceMap   map[string]*structures.FileInfo
-	info          structures.PackageInfo
+
+	flLock      sync.RWMutex // guards the resourceMap and fileList
+	fileList    structures.FileInfoList
+	resourceMap map[string]*structures.FileInfo
+
+	info structures.PackageInfo
 
 	walls    map[string]structures.PackageWall
 	tilesets map[string]structures.PackageTileset
@@ -81,7 +85,11 @@ func (p *Package) PackedPath() string {
 }
 
 func (p *Package) FileList() structures.FileInfoList {
-	return p.fileList
+	p.flLock.RLock()
+	defer p.flLock.RUnlock()
+	res := make(structures.FileInfoList, len(p.fileList))
+	copy(res, p.fileList)
+	return res
 }
 
 func (p *Package) Info() structures.PackageInfo {
@@ -142,7 +150,10 @@ func DefaultValidExt() []string {
 	}
 }
 
-func (p *Package) LoadFromPackedPath(path string) error {
+func (p *Package) LoadFromPackedPath(
+	path string,
+	progressCallback func(p float64, curRes string),
+) error {
 	packFilePath, pathErr := filepath.Abs(path)
 	if pathErr != nil {
 		p.log.WithField("path", packFilePath).WithError(pathErr).Error("could not get absolute path for package file")
@@ -156,7 +167,7 @@ func (p *Package) LoadFromPackedPath(path string) error {
 
 	p.SetUnpackOptions(UnpackOptions{})
 
-	err := p.loadPackedFilelist(file)
+	err := p.loadPackedFilelist(file, progressCallback)
 	if err != nil {
 		p.log.WithError(err).Error("failed to read file list")
 		file.Close()
@@ -171,9 +182,6 @@ func (p *Package) LoadFromPackedPath(path string) error {
 	p.packedPath = packFilePath
 	p.pkgFile = file
 	p.mode = PackageModePacked
-
-
-	p.updateResourceMap()
 
 	return nil
 }
@@ -207,12 +215,38 @@ func (p *Package) LoadUnpackedFromFolder(dirPath string) error {
 	return nil
 }
 
-func (p *Package) updateResourceMap() {
-	p.resourceMap = make(map[string]*structures.FileInfo, len(p.fileList))
-	for i := 0; i < len(p.fileList); i++ {
-		info := &p.fileList[i]
-		p.resourceMap[info.ResPath] = info
-	}
+func (p *Package) RemoveResource(res string) {
+	p.flLock.Lock()
+	defer p.flLock.Unlock()
+	p.removeResource(res)
+}
+
+// DO NOT USE WITHOUT flLock
+func (p *Package) removeResource(res string) {
+	p.fileList.RemoveRes(res)
+	delete(p.resourceMap, res)
+}
+
+func (p *Package) AddResource(fInfo *structures.FileInfo) {
+	p.flLock.Lock()
+	defer p.flLock.Unlock()
+	p.addResource(fInfo)
+}
+
+// DO NOT USE WITHOUT flLock
+func (p *Package) addResource(fInfo *structures.FileInfo) {
+	p.fileList = append(p.fileList, fInfo)
+	p.resourceMap[fInfo.ResPath] = fInfo
+}
+
+func (p *Package) resetData() {
+	p.flLock.Lock()
+	defer p.flLock.Unlock()
+	p.fileList = structures.FileInfoList{}
+	p.resourceMap = make(map[string]*structures.FileInfo)
+	p.walls = make(map[string]structures.PackageWall)
+	p.tilesets = make(map[string]structures.PackageTileset)
+	p.tags = *structures.NewPackageTags()
 }
 
 // get the *FileInfo for a resource identified by the passed 'res://' path
@@ -222,6 +256,8 @@ func (p *Package) GetResourceInfo(resPath string) (*structures.FileInfo, error) 
 		return info, nil
 	}
 
+	p.flLock.RLock()
+	defer p.flLock.RUnlock()
 	info = p.fileList.Find(func(fi *structures.FileInfo) bool {
 		return fi.ResPath == resPath
 	})

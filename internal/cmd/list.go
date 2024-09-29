@@ -71,26 +71,25 @@ func (lsf *ListFilesCmd) printTree(l logrus.FieldLogger, pkg *ddpackage.Package)
 		}
 	}
 	fileList := pkg.FileList()
-	for i := 0; i < len(fileList); i++ {
-		info := &fileList[i]
-		if info.IsMetadata() && !lsf.All {
+	for i, fi := range fileList {
+		if fi.IsMetadata() && !lsf.All {
 			continue
 		}
-		if info.IsTexture() && (!lsf.Textures && !lsf.All) {
+		if fi.IsTexture() && (!lsf.Textures && !lsf.All) {
 			continue
 		}
-		if info.IsThumbnail() && (!lsf.Thumbnails && !lsf.All) {
+		if fi.IsThumbnail() && (!lsf.Thumbnails && !lsf.All) {
 			continue
 		}
-		if info.IsData() && (!lsf.Data && !lsf.All) {
+		if fi.IsData() && (!lsf.Data && !lsf.All) {
 			continue
 		}
-		path := pkg.NormalizeResourcePath(info.ResPath)
-		l.WithField("res", info.ResPath).
-			WithField("size", info.Size).
+		path := pkg.NormalizeResourcePath(fi.ResPath)
+		l.WithField("res", fi.ResPath).
+			WithField("size", fi.Size).
 			WithField("index", i).
 			Trace("building tree node")
-		nodeForPath(path, info)
+		nodeForPath(path, fi)
 	}
 
 	fmt.Println(tree.String())
