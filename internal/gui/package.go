@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"math"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -22,7 +23,6 @@ import (
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/bindings"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/widgets"
-	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddimage"
 	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
 	ddcolor "github.com/ryex/dungeondraft-gopackager/pkg/structures/color"
@@ -47,16 +47,17 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
 
 	tree, treeSelected := a.buildPackageTree(filter)
 
-	leftSplit := container.New(
-		layouts.NewBottomExpandVBoxLayout(),
-		container.New(
-			layouts.NewRightExpandHBoxLayout(),
-			widget.NewLabel(lang.X("tree.label", "Resources")),
-			filterEntry,
-		),
-		container.NewStack(
-			canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground)),
-			tree,
+	leftSplit := container.NewPadded(
+		layouts.NewBottomExpandVBox(
+			container.New(
+				layouts.NewRightExpandHBoxLayout(),
+				widget.NewLabel(lang.X("tree.label", "Resources")),
+				filterEntry,
+			),
+			container.NewStack(
+				canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground)),
+				tree,
+			),
 		),
 	)
 
@@ -83,7 +84,7 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
 	})
 
 	split := container.NewPadded(container.NewHSplit(
-		leftSplit,
+		container.NewPadded(leftSplit),
 		container.NewPadded(rightSplit),
 	))
 
@@ -94,16 +95,6 @@ func (a *App) buildPackageTree(filter binding.String) (*widget.Tree, binding.Str
 	filterFunc := func(fi *structures.FileInfo) bool {
 		return !fi.IsThumbnail() && !strings.HasSuffix(fi.ResPath, ".json")
 	}
-	mappedList := bindings.NewMapping(
-		filter,
-		func(filter string) ([]*structures.FileInfo, error) {
-			log.Tracef("filtering tree list with '%s'", filter)
-			if filter == "" {
-				return a.pkg.FileList().Filter(filterFunc), nil
-			}
-			return a.pkg.FileList().Glob(filterFunc, filter)
-		},
-	)
 	nodeTree := make(map[string][]string)
 
 	selected := binding.NewString()
@@ -157,13 +148,30 @@ func (a *App) buildPackageTree(filter binding.String) (*widget.Tree, binding.Str
 		},
 	)
 
-	bindings.ListenErr(mappedList, func(fil []*structures.FileInfo) {
+	filteredList := func() ([]*structures.FileInfo, error) {
+		val, err := filter.Get()
+		if err != nil {
+			return a.pkg.FileList().Filter(filterFunc), err
+		}
+		log.Tracef("filtering tree list with '%s'", val)
+		if val == "" {
+			return a.pkg.FileList().Filter(filterFunc), nil
+		}
+		return a.pkg.FileList().Glob(filterFunc, val)
+	}
+
+	rebuildTree := func() {
+		fil, err := filteredList()
+		if err != nil {
+			log.WithError(err).Error("failed to retrieve filtered file list")
+		}
 		log.Trace("rebuilding tree")
 		nodeTree = buildInfoMaps(fil)
 		tree.Refresh()
-	}, func(err error) {
-		log.WithError(err).Debug("file list fetch failure")
-	})
+	}
+
+	filter.AddListener(binding.NewDataListener(rebuildTree))
+	a.packageUpdated.AddListener(binding.NewDataListener(rebuildTree))
 
 	tree.OnSelected = func(uid widget.TreeNodeID) {
 		selected.Set(uid)
@@ -207,29 +215,42 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 		return widget.NewLabel(fmt.Sprintf("Failed to read image data for %s", info.ResPath))
 	}
 
-	pathLabel := widget.NewLabel(
-		lang.X(
-			"preview.path.label",
-			"Path",
+	path := container.NewStack(
+		&canvas.Rectangle{
+			FillColor:    theme.Color(theme.ColorNameHeaderBackground),
+			CornerRadius: 4,
+		},
+		layouts.NewRightExpandHBox(
+			container.NewCenter(
+				widget.NewLabel(lang.X(
+					"preview.path.label",
+					"Path",
+				)),
+			),
+			container.NewPadded(
+				container.NewStack(
+					&canvas.Rectangle{
+						FillColor:    theme.Color(theme.ColorNameInputBackground),
+						CornerRadius: 4,
+					},
+					container.NewPadded(
+						container.NewHScroll(
+							canvas.NewText(info.ResPath, theme.Color(theme.ColorNameForeground)),
+						),
+					),
+				),
+			),
 		),
-	)
-	pathEntry := widget.NewEntry()
-	pathEntry.SetText(info.CalcRelPath())
-	pathEntry.OnChanged = func(_ string) {
-		pathEntry.SetText(info.CalcRelPath())
-	}
-	pathEntry.Refresh()
-	path := container.New(
-		layouts.NewRightExpandHBoxLayout(),
-		pathLabel,
-		pathEntry,
 	)
 
 	tooLarge := container.NewCenter(
 		widget.NewLabel(lang.X("preview.tooLarge", "This file is too large!\nOpen it in a text editor.")),
 	)
 
-	bg := canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
+	bg := &canvas.Rectangle{
+		FillColor:    theme.Color(theme.ColorNameInputBackground),
+		CornerRadius: 4,
+	}
 	if !ddimage.PathIsSupportedImage(info.RelPath) {
 		textContent := string(fileData)
 		if len(strings.Split(textContent, "\n")) > 200 {
@@ -248,7 +269,7 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 				path,
 				container.NewStack(
 					bg,
-					textEntry,
+					container.NewPadded(textEntry),
 					container.NewPadded(
 						container.NewVBox(
 							container.NewHBox(layout.NewSpacer(), copyBtn),
@@ -288,8 +309,11 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 		path,
 		container.NewPadded(container.NewStack(
 			bg,
-			container.NewScroll(
-				imgW,
+			container.New(
+				layout.NewCustomPaddedLayout(8, 8, 8, 8),
+				container.NewScroll(
+					imgW,
+				),
 			),
 		)),
 	))
@@ -336,7 +360,39 @@ func (a *App) buildTagInfo(info *structures.FileInfo, editable bool) fyne.Canvas
 			}
 		},
 	)
-	content := layouts.NewTopExpandVBox(tagsList)
+
+	content := layouts.NewTopExpandVBox(
+		layouts.NewBottomExpandVBox(
+			container.NewStack(
+				&canvas.Rectangle{
+					FillColor:    theme.Color(theme.ColorNameHeaderBackground),
+					CornerRadius: 4,
+				},
+				layouts.NewRightExpandHBox(
+					container.NewCenter(
+						widget.NewLabel(lang.X(
+							"preview.tab.tags.label",
+							"Tags for",
+						)),
+					),
+					container.NewPadded(
+						container.NewStack(
+							&canvas.Rectangle{
+								FillColor:    theme.Color(theme.ColorNameInputBackground),
+								CornerRadius: 4,
+							},
+							container.NewPadded(
+								container.NewHScroll(
+									canvas.NewText(info.ResPath, theme.Color(theme.ColorNameForeground)),
+								),
+							),
+						),
+					),
+				),
+			),
+			tagsList,
+		),
+	)
 
 	if editable {
 		tagSelecter := widget.NewSelectEntry(a.pkg.Tags().AllTags())
@@ -354,7 +410,7 @@ func (a *App) buildTagInfo(info *structures.FileInfo, editable bool) fyne.Canvas
 		content.Add(layouts.NewLeftExpandHBox(tagSelecter, addBtn))
 	}
 
-	return content
+	return container.NewPadded(content)
 }
 
 func (a *App) saveUnpackedTags() {
@@ -364,7 +420,7 @@ func (a *App) saveUnpackedTags() {
 	}
 	a.tagSaveTimer = time.AfterFunc(500*time.Millisecond, func() {
 		a.tagSaveTimer = nil
-		err := a.pkg.SaveUnpackedTags()
+		err := a.pkg.WriteUnpackedTags()
 		if err != nil {
 			a.showErrorDialog(err)
 		}
@@ -602,11 +658,11 @@ func buildInfoMaps(infoList []*structures.FileInfo) map[string][]string {
 			path = next
 			dir, _ = filepath.Split(next)
 			next = dir[:max(len(dir)-1, 0)]
-			if !utils.InSlice(path, nodeTree[next]) {
+			if !slices.Contains(nodeTree[next], path) {
 				nodeTree[next] = append(nodeTree[next], path)
 			}
 		}
-		if !utils.InSlice(path, nodeTree[next]) {
+		if !slices.Contains(nodeTree[next], path) {
 			nodeTree[next] = append(nodeTree[next], path)
 		}
 	}

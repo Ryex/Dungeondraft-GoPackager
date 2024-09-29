@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
+	"slices"
 	"strings"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
@@ -149,12 +149,12 @@ func (p *Package) BuildFileList() (errs []error) {
 	return p.buildFileList(nil)
 }
 
-func (p *Package) UpdateFromPathProgress(path string, progressCallback func(p float64, curPath string)) (errs []error) {
-	return p.updateFromPath(path, progressCallback)
+func (p *Package) UpdateFromPathsProgress(paths []string, progressCallback func(p float64, curPath string)) (errs []error) {
+	return p.updateFromPaths(paths, progressCallback)
 }
 
-func (p *Package) UpdateFromPath(path string) (errs []error) {
-	return p.updateFromPath(path, nil)
+func (p *Package) UpdateFromPaths(paths []string) (errs []error) {
+	return p.updateFromPaths(paths, nil)
 }
 
 // Rebuilds the list of files at the target directory for inclusion in a .dungeondraft_pack file
@@ -166,12 +166,12 @@ func (p *Package) buildFileList(progressCallback func(p float64, curPath string)
 		return []error{ErrPackageNotUnpacked}
 	}
 	p.resetData()
-	return p.updateFromPath(p.unpackedPath, progressCallback)
+	return p.updateFromPaths([]string{p.unpackedPath}, progressCallback)
 }
 
 // updates the current list of files at the target directory for inclusion in a .dungeondraft_pack file
 // on duplicate entries updates the current info
-func (p *Package) updateFromPath(path string, progressCallback func(p float64, curPath string)) (errs []error) {
+func (p *Package) updateFromPaths(paths []string, progressCallback func(p float64, curPath string)) (errs []error) {
 	if p.unpackedPath == "" {
 		return []error{ErrUnsetUnpackedPath}
 	}
@@ -179,44 +179,47 @@ func (p *Package) updateFromPath(path string, progressCallback func(p float64, c
 		return []error{ErrPackageNotUnpacked}
 	}
 
-	p.log.WithField("listPath", path).Debug("beginning directory traversal to collect file list")
+	dirs := structures.NewSet[string]()
+	files := structures.NewSet[string]()
+	toRemove := structures.NewSet[string]()
 
-	path, err := filepath.Abs(path)
-	if err != nil {
-		return []error{err}
-	}
+	for _, path := range paths {
+		absPath, err := filepath.Abs(path)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		statInfo, err := os.Stat(absPath)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		if statInfo.IsDir() {
+			dirs.Add(absPath)
+			p.log.WithField("listPath", absPath).Debug("beginning directory traversal to collect file list")
+			toAdd, _, _ := utils.ListDir(absPath)
+			files.AddM(toAdd...)
+		} else {
+			files.Add(absPath)
+		}
 
-	var toRemove []string
-	var files []string
-	pathIsDir := false
-
-	statInfo, err := os.Stat(path)
-	if err != nil {
-		return []error{err}
 	}
-	if statInfo.IsDir() {
-		pathIsDir = true
-		files, _, _ = utils.ListDir(path)
-	} else {
-		files = []string{path}
-	}
-	filesSet := structures.SetFrom(files)
 
 	p.flLock.Lock()
 	defer p.flLock.Unlock()
 
-	if pathIsDir {
+	for _, dir := range dirs.AsSlice() {
 		for _, fi := range p.fileList {
-			if isSub, _ := utils.PathIsSub(path, fi.Path); isSub && !filesSet.Has(fi.Path) {
-				toRemove = append(toRemove, fi.ResPath)
+			if isSub, _ := utils.PathIsSub(dir, fi.Path); isSub && !files.Has(fi.Path) {
+				toRemove.Add(fi.ResPath)
 			}
 		}
 	}
 
-	for i, file := range files {
+	for i, file := range files.AsSlice() {
 		// filter extensions
 		ext := strings.ToLower(filepath.Ext(file))
-		if !utils.InSlice(ext, p.packOptions.ValidExts) {
+		if !slices.Contains(p.packOptions.ValidExts, ext) {
 			continue
 		}
 		// construct resource path
@@ -225,6 +228,10 @@ func (p *Package) updateFromPath(path string, progressCallback func(p float64, c
 			p.log.WithField("scanFile", file).Error("can not get path relative to package root")
 			errs = append(errs, err)
 			continue
+		}
+
+		if runtime.GOOS == "windows" { // windows path separators.....
+			relPath = strings.ReplaceAll(relPath, "\\", "/")
 		}
 		resPath := fmt.Sprintf("res://packs/%s/%s", p.id, relPath)
 
@@ -237,9 +244,13 @@ func (p *Package) updateFromPath(path string, progressCallback func(p float64, c
 				errs = append(errs, err)
 				continue
 			}
-			existing.Size = statInfo.Size()
+			size := statInfo.Size()
+			if size != existing.Size {
+				existing.Size = size
+				p.log.WithField("res", existing.ResPath).Infof("Updating resource size to %d", size)
+			}
 		} else {
-			fInfo, err := p.NewFileInfo(NewFileInfoOptions{Path: file})
+			fInfo, err := p.NewFileInfo(NewFileInfoOptions{Path: file, ResPath: &resPath, RelPath: &relPath})
 			if err != nil {
 				errs = append(errs, err)
 				continue
@@ -248,11 +259,11 @@ func (p *Package) updateFromPath(path string, progressCallback func(p float64, c
 			p.addResource(fInfo)
 		}
 		if progressCallback != nil {
-			progressCallback(float64(i)/float64(len(files)), file)
+			progressCallback(float64(i)/float64(files.Size()), file)
 		}
 	}
 
-	for _, res := range toRemove {
+	for _, res := range toRemove.AsSlice() {
 		p.log.Warnf("removing %s (file missing)", res)
 		p.removeResource(res)
 	}
@@ -281,12 +292,20 @@ func (p *Package) updateFromPath(path string, progressCallback func(p float64, c
 	}
 	p.resourceMap[packJSONResPath] = packJSONInfo
 
-	// sort list and assure pack json it first
-	sort.Sort(p.fileList)
-	p.fileList = append(p.fileList, nil)
-	copy(p.fileList[1:], p.fileList)
-	p.fileList[0] = packJSONInfo
-
+	// sort list and assure pack json is first
+	slices.SortFunc(p.fileList, func(a, b *structures.FileInfo) int {
+		if a.ResPath < b.ResPath {
+			return -1
+		}
+		if a.ResPath > b.ResPath {
+			return 1
+		}
+		return 0
+	})
+	p.fileList = slices.CompactFunc(p.fileList, func(a, b *structures.FileInfo) bool {
+		return a.ResPath == b.ResPath
+	})
+	p.fileList = slices.Insert(p.fileList, 0, packJSONInfo)
 	return
 }
 

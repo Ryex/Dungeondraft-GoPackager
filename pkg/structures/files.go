@@ -213,11 +213,6 @@ func(fil FileInfoList) RemoveRes(res string) *FileInfo {
 	return nil
 }
 
-// sort.Interface
-
-func (fil FileInfoList) Len() int           { return len(fil) }
-func (fil FileInfoList) Swap(i, j int)      { fil[i], fil[j] = fil[j], fil[i] }
-func (fil FileInfoList) Less(i, j int) bool { return fil[i].ResPath < fil[j].ResPath }
 
 var replaces = regexp.MustCompile(`(\.)|(\*\*/)|(\*\*$)|(\*)|(\[)|(\])|(\})|(\{)|(\+)|(\()|(\))|([^/\*])`)
 

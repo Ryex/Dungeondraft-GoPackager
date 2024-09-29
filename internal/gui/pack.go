@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"sync"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -15,25 +17,20 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/ryex/dungeondraft-gopackager/internal/gui/bindings"
+	"github.com/fsnotify/fsnotify"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddpackage"
+	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
 	log "github.com/sirupsen/logrus"
 )
 
 func (a *App) loadUnpackedPath(path string) {
-	if a.pkg != nil {
-		a.pkg.Close()
-	}
-	a.pkg = nil
-
 	packjsonPath := filepath.Join(path, "pack.json")
 	if !utils.FileExists(packjsonPath) {
 		a.setNotAPackageContent(path)
 		return
 	}
-
 	activityProgress, activityStr := a.setWaitContent(lang.X(
 		"pack.wait",
 		"Loading unpacked resources from {{.Path}} (building index) ...",
@@ -42,6 +39,8 @@ func (a *App) loadUnpackedPath(path string) {
 		},
 	))
 	a.disableButtons.Set(true)
+
+	a.resetPkg()
 
 	go func() {
 		l := log.WithFields(log.Fields{
@@ -103,7 +102,81 @@ func (a *App) loadUnpackedPath(path string) {
 			err = nil
 		}
 		a.setUnpackedContent(pkg)
+		a.setupPackageWatcher()
 	}()
+}
+
+func (a *App) setupPackageWatcher() {
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		log.WithError(err).Error("failed to setup filesystem watcher")
+		return
+	}
+	a.packageWatcher = watcher
+	paths := structures.NewSet[string]()
+	var eventTimer *time.Timer
+	lock := &sync.RWMutex{}
+
+	updatePackage := func() {
+		lock.Lock()
+		defer lock.Unlock()
+		eventTimer = nil
+		toUpdate := paths.AsSlice()
+		paths = structures.NewSet[string]()
+		if a.pkg != nil {
+			a.pkg.UpdateFromPaths(toUpdate)
+		}
+		a.packageUpdated.Set(a.pkgUpdateCounter + 1)
+	}
+
+	go func() {
+		for {
+			select {
+			case event, ok := <-watcher.Events:
+				if !ok {
+					return
+				}
+				if !event.Has(fsnotify.Chmod) {
+					path := event.Name
+					func() {
+						lock.Lock()
+						defer lock.Unlock()
+						if eventTimer != nil {
+							eventTimer.Stop()
+						}
+						paths.Add(path)
+						eventTimer = time.AfterFunc(
+							2*time.Second,
+							updatePackage,
+						)
+					}()
+				}
+			case err, ok := <-watcher.Errors:
+				if !ok {
+					return
+				}
+				log.WithError(err).Warn("filesystem watcher error")
+			}
+		}
+	}()
+
+	toWatchPath := a.pkg.UnpackedPath()
+	if toWatchPath != "" {
+		_, dirs, _ := utils.ListDir(toWatchPath)
+		for _, dir := range dirs {
+			log.WithField("package", toWatchPath).Infof("watching %s", dir)
+			err := watcher.Add(dir)
+			if err != nil {
+				log.WithError(err).WithField("package", toWatchPath).Warnf("failed to watch %s", dir)
+			}
+		}
+	}
+}
+
+func (a *App) teardownPackageWatcher() {
+	if a.packageWatcher != nil {
+		a.packageWatcher.Close()
+	}
 }
 
 func (a *App) setNotAPackageContent(path string) {
@@ -240,6 +313,7 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 					errDlg.Show()
 					return
 				}
+				a.pkg.UpdateFromPaths([]string{filepath.Join(options.Path, "pack.json")})
 				err = a.pkg.LoadUnpackedPackJSON(options.Path)
 				if err != nil {
 					errDlg := dialog.NewError(
@@ -291,31 +365,24 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 func (a *App) packPackage(path string, options ddpackage.PackOptions, genThumbnails bool) {
 	a.disableButtons.Set(true)
 
-	thumbProgresVal := binding.NewFloat()
-	packProgresVal := binding.NewFloat()
-	progressVal := bindings.FloatMath(
-		func(d ...float64) float64 {
-			thumbP := d[0]
-			packP := d[1]
-			return thumbP*0.2 + packP*0.8
-		},
-		thumbProgresVal,
-		packProgresVal,
-	)
+	progressVal := binding.NewFloat()
+	taskStr := binding.NewString()
 	progressBar := widget.NewProgressBarWithData(progressVal)
+	taskLbl := widget.NewLabelWithData(taskStr)
 
 	targetPath := filepath.Join(path, a.pkg.Name()+".dungeondraft_pack")
 
 	progressDlg := dialog.NewCustomWithoutButtons(
 		lang.X("pack.packageProgressDlg.title", "Packing to {{.Path}}", map[string]any{"Path": targetPath}),
-		progressBar,
+		container.NewVBox(taskLbl, progressBar),
 		a.window,
 	)
 	progressDlg.Show()
 	go func() {
 		if genThumbnails {
+			taskStr.Set(lang.X("task.genthumbnails.text", "Generating thumbnails ..."))
 			err := a.pkg.GenerateThumbnails(func(p float64) {
-				thumbProgresVal.Set(p)
+				progressVal.Set(p)
 			})
 			if err != nil {
 				progressDlg.Hide()
@@ -332,11 +399,12 @@ func (a *App) packPackage(path string, options ddpackage.PackOptions, genThumbna
 				errDlg.Show()
 				return
 			}
+			progressVal.Set(1.0)
 		}
-		thumbProgresVal.Set(1.0)
 
+		taskStr.Set(lang.X("task.package.text", "Packaging resources ..."))
 		err := a.pkg.PackPackage(path, options, func(p float64) {
-			packProgresVal.Set(p)
+			progressVal.Set(p)
 		})
 		progressDlg.Hide()
 		if err != nil {

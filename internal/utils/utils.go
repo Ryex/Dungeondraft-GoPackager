@@ -12,13 +12,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func AssertTrue(condition bool, msg string) {
-	if condition {
-		return
-	}
-	logrus.Fatalf("assertion failure: %s", msg)
-}
-
 func MapKeys[K comparable, V any](m map[K]V) []K {
 	keys := make([]K, len(m))
 	i := 0
@@ -32,7 +25,7 @@ func MapKeys[K comparable, V any](m map[K]V) []K {
 // FileExists tests if a file  exists and is not a Directory
 func FileExists(filename string) bool {
 	info, err := os.Stat(filename)
-	if errors.Is(err,  os.ErrNotExist) {
+	if errors.Is(err, os.ErrNotExist) {
 		return false
 	}
 	return !info.IsDir()
@@ -90,16 +83,6 @@ func RipTexture(data []byte) (fileExt string, fileData []byte, err error) {
 
 	err = errors.New("no valid image data found")
 	return
-}
-
-// InSlice tests inclusion of a string in a slice
-func InSlice[T comparable](a T, list []T) bool {
-	for i := 0; i < len(list); i++ {
-		if list[i] == a {
-			return true
-		}
-	}
-	return false
 }
 
 func SplitOne(s string, sep string) (string, string) {
@@ -169,7 +152,6 @@ func Pad(out io.Writer, bytes int64) error {
 }
 
 func TruncatePathHumanFriendly(path string, maxLen int) string {
-	path = filepath.Clean(path)
 	repeat := false
 	depth := 1
 	for len(path) > maxLen && !repeat {

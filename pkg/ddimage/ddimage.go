@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	_ "golang.org/x/image/bmp"
@@ -27,7 +28,6 @@ import (
 	// for webp 1.4.0
 	_ "github.com/chai2010/webp"
 
-	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/sunshineplan/imgconv"
 
 	"github.com/srwiley/oksvg"
@@ -107,14 +107,14 @@ func ResizeVirticalAndCropWidth(img image.Image, height int, width int) image.Im
 
 func PathIsSupportedImage(path string) bool {
 	ext := strings.ToLower(filepath.Ext(path))
-	return utils.InSlice(ext, []string{
+	return slices.Contains([]string{
 		".jpg", ".jpeg", ".png", ".webp", ".gif", ".tif", ".tiff", ".bmp", ".svg",
-	})
+	}, ext)
 }
 
 func PathIsSupportedDDImage(path string) bool {
 	ext := strings.ToLower(filepath.Ext(path))
-	return utils.InSlice(ext, []string{
+	return slices.Contains([]string{
 		".jpg", ".jpeg", ".png", ".webp", ".bmp", ".svg",
-	})
+	}, ext)
 }
