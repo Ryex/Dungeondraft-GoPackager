@@ -1,6 +1,7 @@
 {
   "window.title": "Dungeondraft-GoPackager",
-  "greeting": "Dungeondraft-GoPackager - Package and edit Dungeondraft resource packs",
+  "greeting.title": "Dungeondraft-GoPackager",
+  "greeting.sub-title": "Package, edit, and prepare Dungeondraft resource packs",
   "browse": "Browse",
   "pathInput.placeholder": "Path to .dungeondraft_pack or folder",
   "packBtn.text": "Open pack",
