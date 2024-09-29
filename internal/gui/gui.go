@@ -20,6 +20,7 @@ import (
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/fsnotify/fsnotify"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/bindings"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
@@ -45,17 +46,24 @@ type App struct {
 
 	tagSaveTimer  *time.Timer
 	resSaveTimers map[string]*time.Timer
+
+	packageWatcher *fsnotify.Watcher
+
+	pkgUpdateCounter int
+	packageUpdated   binding.Int
 }
 
 //go:embed translation
 var translations embed.FS
 
 func NewApp() *App {
-	return &App{
+	app := &App{
 		operatingPath:  binding.NewString(),
 		disableButtons: binding.NewBool(),
 		resSaveTimers:  make(map[string]*time.Timer),
 	}
+	app.packageUpdated = binding.BindInt(&app.pkgUpdateCounter)
+	return app
 }
 
 func (a *App) Main() {
@@ -77,10 +85,16 @@ func (a *App) Main() {
 	a.clean()
 }
 
-func (a *App) clean() {
+func (a *App) resetPkg() {
+	a.teardownPackageWatcher()
 	if a.pkg != nil {
 		a.pkg.Close()
 	}
+	a.pkg = nil
+}
+
+func (a *App) clean() {
+	a.resetPkg()
 	fmt.Println("Exited")
 }
 
@@ -266,8 +280,8 @@ func (a *App) setErrContent(msg string, errs ...error) {
 	errContainer := container.NewVBox()
 	for i, err := range errs {
 		errText := multilineCanvasText(
-			fmt.Sprintf("%d) ", i)+err.Error(),
-			12,
+			fmt.Sprintf("%d) ", i+1)+err.Error(),
+			14,
 			fyne.TextStyle{Italic: true},
 			fyne.TextAlignLeading,
 			theme.Color(theme.ColorNameError),
@@ -275,9 +289,15 @@ func (a *App) setErrContent(msg string, errs ...error) {
 		errContainer.Add(errText)
 	}
 
-	msgContent := container.NewCenter(
+	msgContent := container.NewVBox(
+		layout.NewSpacer(),
 		msgText,
-		container.NewScroll(errContainer),
+		container.NewHBox(
+			layout.NewSpacer(),
+			container.NewVScroll(errContainer),
+			layout.NewSpacer(),
+		),
+		layout.NewSpacer(),
 	)
 
 	a.setMainContent(msgContent)
@@ -327,6 +347,7 @@ func (a *App) setWaitContent(msg string) (binding.Float, binding.String) {
 		activity,
 		msgText,
 		activityText,
+		progressBar,
 		layout.NewSpacer(),
 	)
 	a.setMainContent(activityContent)

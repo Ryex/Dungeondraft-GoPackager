@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -14,6 +15,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
+	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddpackage"
 
 	log "github.com/sirupsen/logrus"
@@ -31,10 +33,7 @@ func (a *App) loadPack(path string) {
 	)
 	a.disableButtons.Set(true)
 
-	if a.pkg != nil {
-		a.pkg.Close()
-	}
-	a.pkg = nil
+	a.resetPkg()
 
 	go func() {
 		l := log.WithFields(log.Fields{
@@ -45,7 +44,12 @@ func (a *App) loadPack(path string) {
 
 		err := pkg.LoadFromPackedPath(path, func(p float64, curRes string) {
 			activityProgress.Set(p)
-			activityStr.Set(curRes)
+			activityStr.Set(
+				"res://" + utils.TruncatePathHumanFriendly(
+					strings.TrimPrefix(curRes, "res://"),
+					80,
+				),
+			)
 		})
 		if err != nil {
 			l.WithError(err).Error("could not load path")

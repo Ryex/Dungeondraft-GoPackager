@@ -448,8 +448,6 @@ func (p *Package) newFileInfoPacked(resPath []byte, infoBytes structures.FileInf
 
 func (p *Package) updatePackedFileInfoAfter() {
 	for _, fi := range p.fileList {
-		p.log.Infof("unpdating info for %s", fi.ResPath)
-
 		fi.RelPath = strings.TrimPrefix(strings.TrimPrefix(fi.ResPath, "res://packs/"), p.id+"/")
 		if fi.IsTexture() {
 			hash := md5.Sum([]byte(fi.ResPath))

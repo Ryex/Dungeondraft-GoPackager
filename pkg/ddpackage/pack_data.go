@@ -118,37 +118,6 @@ func (p *Package) loadUnpackedTags() error {
 	return nil
 }
 
-func (p *Package) SaveUnpackedTags() error {
-	if p.mode != PackageModeUnpacked {
-		return ErrPackageNotUnpacked
-	}
-	tagsPath := filepath.Join(p.unpackedPath, "data", "default.dungeondraft_tags")
-
-	l := p.log.
-		WithField("path", p.unpackedPath).
-		WithField("tagsPath", tagsPath)
-	tagsBytes, err := json.MarshalIndent(&p.tags, "", "  ")
-	if err != nil {
-		l.WithError(err).
-			Error("can't save tags file")
-		return errors.Join(err, ErrTagsWrite)
-	}
-
-	err = os.MkdirAll(filepath.Dir(tagsPath), 0o777)
-	if err != nil {
-		l.WithError(err).Error("can't save wall data")
-		return errors.Join(err, ErrTagsWrite)
-	}
-
-	err = os.WriteFile(tagsPath, tagsBytes, 0o644)
-	if err != nil {
-		l.WithError(err).
-			Error("can't save tags file")
-		return errors.Join(err, ErrTagsWrite)
-	}
-	return nil
-}
-
 func (p *Package) SaveUnpackedWall(resPath string) error {
 	if p.mode != PackageModeUnpacked {
 		return ErrPackageNotUnpacked
@@ -182,6 +151,10 @@ func (p *Package) SaveUnpackedWall(resPath string) error {
 	if err != nil {
 		l.WithError(err).Error("can't save wall data")
 		return errors.Join(err, ErrWallSave)
+	}
+	errs := p.updateFromPaths([]string{wallDataPath}, nil)
+	if len(errs) != 0 {
+		return errors.Join(errs...)
 	}
 
 	return nil
@@ -218,6 +191,10 @@ func (p *Package) SaveUnpackedTileset(resPath string) error {
 	if err != nil {
 		l.WithError(err).Error("can't save wall data")
 		return errors.Join(err, ErrTilesetSave)
+	}
+	errs := p.updateFromPaths([]string{tilesetDataPath}, nil)
+	if len(errs) != 0 {
+		return errors.Join(errs...)
 	}
 
 	return nil
@@ -290,6 +267,10 @@ func (p *Package) WriteUnpackedTags() error {
 			Error("failed to write tags file")
 		return errors.Join(err, errors.New("failed to write tags file"))
 	}
+	errs := p.updateFromPaths([]string{tagsPath}, nil)
+	if len(errs) != 0 {
+		return errors.Join(errs...)
+	}
 
 	return nil
 }
@@ -342,6 +323,10 @@ func (p *Package) WriteResourceMetadata() error {
 				p.log.WithError(err).
 					Error("failed to write metadata file")
 				return errors.Join(err, fmt.Errorf("failed to write metadata file for %s", fi.ResPath))
+			}
+			errs := p.updateFromPaths([]string{fi.Path}, nil)
+			if len(errs) != 0 {
+				return errors.Join(errs...)
 			}
 		}
 	}
