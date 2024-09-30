@@ -2,8 +2,14 @@
 Website = "https://ryex.github.io/Dungeondraft-GoPackager/"
 
 [Details]
-Icon = "Icon.png"
-Name = "Dungeondraft GoPackager"
-ID = "io.github.ryex.dungondraft-gopackager"
-Version = "2.0.0"
-Build = 1
+  Icon = "Icon.png"
+  Name = "Dungeondraft GoPackager"
+  ID = "io.github.ryex.dungondraft-gopackager"
+  Version = "2.0.0"
+  Build = 1
+
+[LinuxAndBSD]
+  Categories = []
+  Comment = "Package, edit, and prepare Dungeondraft resource packs"
+  Keywords = ["dungeondraft"]
+  

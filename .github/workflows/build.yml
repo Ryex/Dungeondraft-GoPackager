@@ -47,6 +47,7 @@ jobs:
         run: go mod download
       - name: Build gui
         run: |
+          cp FyneApp.toml ./cmd/dungeondraft-packager
           fyne package -src ./cmd/dungeondraft-packager -appID io.github.ryex.dungondraft-gopackager
       - name: Build cli
         run: |
