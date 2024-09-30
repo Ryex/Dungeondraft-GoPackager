@@ -24,6 +24,7 @@ type ListFilesCmd struct {
 	Textures   bool   `short:"X" default:"true" negatable:"" help:"list texture files. default is true but negatable with --no-textures"`
 	Thumbnails bool   `short:"T" default:"false" negatable:"" help:"list thumbnail files"`
 	Data       bool   `short:"D" default:"false" negatable:"" help:"list Data files (tags, and wall/terrain metadata )"`
+	Type       string `enum:"tree,list" default:"tree" help:"print the files in a resource path tree or a list as packed"`
 	InputPath  string `arg:"" type:"path" help:"the .dungeondraft_pack file or resource directory to work with"`
 }
 
@@ -32,8 +33,28 @@ func (lsf *ListFilesCmd) Run(ctx *Context) error {
 	if err != nil {
 		return err
 	}
-	lsf.printTree(ctx.Log, ctx.Pkg)
+	if lsf.Type == "tree" {
+		lsf.printTree(ctx.Log, ctx.Pkg)
+	} else {
+		lsf.printList(ctx.Pkg)
+	}
 	return nil
+}
+
+func (lsf *ListFilesCmd) printList(pkg *ddpackage.Package) {
+	fileList := pkg.FileList()
+	filesCount := len(fileList)
+	for i, fi := range fileList {
+		fmt.Printf(
+			"File [%d/%d] Name: %s Size: %d Offset %d ResourcePath: %s\n",
+			i+1,
+			filesCount,
+			filepath.Base(fi.ResPath),
+			fi.Size,
+			fi.Offset,
+			fi.ResPath,
+		)
+	}
 }
 
 func (lsf *ListFilesCmd) printTree(l logrus.FieldLogger, pkg *ddpackage.Package) {
