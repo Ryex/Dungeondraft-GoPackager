@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -116,14 +117,20 @@ func (a *App) setupPackageWatcher() {
 	a.packageWatcher = watcher
 	paths := structures.NewSet[string]()
 	var eventTimer *time.Timer
-	lock := &sync.RWMutex{}
+	timerLock := &sync.RWMutex{}
 
 	updatePackage := func() {
-		lock.Lock()
-		defer lock.Unlock()
+		timerLock.Lock()
+		defer timerLock.Unlock()
 		eventTimer = nil
 		toUpdate := paths.AsSlice()
 		paths = structures.NewSet[string]()
+		if a.packageWatcherIgnoreThumbnails {
+			thumbnailPrefix := filepath.Join(a.pkg.UnpackedPath(), "thumbnails")
+			toUpdate = utils.Filter(toUpdate, func(path string) bool {
+				return !strings.HasPrefix(path, thumbnailPrefix)
+			})
+		}
 		if a.pkg != nil {
 			a.pkg.UpdateFromPaths(toUpdate)
 		}
@@ -140,8 +147,8 @@ func (a *App) setupPackageWatcher() {
 				if !event.Has(fsnotify.Chmod) {
 					path := event.Name
 					func() {
-						lock.Lock()
-						defer lock.Unlock()
+						timerLock.Lock()
+						defer timerLock.Unlock()
 						if eventTimer != nil {
 							eventTimer.Stop()
 						}
@@ -388,6 +395,7 @@ func (a *App) packPackage(path string, options ddpackage.PackOptions, genThumbna
 	go func() {
 		if genThumbnails {
 			taskStr.Set(lang.X("task.genthumbnails.text", "Generating thumbnails ..."))
+			a.packageWatcherIgnoreThumbnails = true
 			err := a.pkg.GenerateThumbnails(func(p float64) {
 				progressVal.Set(p)
 			})
@@ -406,6 +414,8 @@ func (a *App) packPackage(path string, options ddpackage.PackOptions, genThumbna
 				errDlg.Show()
 				return
 			}
+			a.pkg.UpdateFromPaths([]string{filepath.Join(a.pkg.UnpackedPath(), "thumbnails")})
+			a.packageWatcherIgnoreThumbnails = true
 			progressVal.Set(1.0)
 		}
 

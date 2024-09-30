@@ -54,6 +54,8 @@ type App struct {
 
 	packageWatcher *fsnotify.Watcher
 
+	packageWatcherIgnoreThumbnails bool
+
 	pkgUpdateCounter int
 	packageUpdated   binding.Int
 }
