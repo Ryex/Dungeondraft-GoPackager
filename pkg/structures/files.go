@@ -8,6 +8,7 @@ import (
 	"os"
 	"regexp"
 	"runtime"
+	"slices"
 	"strings"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
@@ -53,6 +54,7 @@ type FileInfo struct {
 	ThumbnailPath    string
 	ThumbnailResPath string
 	ImageFormat      string
+	ThubnailFor      string
 
 	// used internally for conversion of non dungeondraft supported image formats
 	Image    image.Image
@@ -304,14 +306,67 @@ func (fil FileInfoList) RelPaths() (paths []string) {
 	return
 }
 
+func (fil FileInfoList) UpdateThumbnailRefrences() {
+	thumbnailMap := make(map[string]string)
+	for _, fi := range fil {
+		if fi.IsTexture() && fi.ThumbnailPath != "" {
+			thumbnailMap[fi.ThumbnailPath] = fi.ResPath
+		}
+	}
+	for _, fi := range fil {
+		if fi.IsThumbnail() {
+			forRes, ok := thumbnailMap[fi.ResPath]
+			if ok {
+				fi.ThubnailFor = forRes
+			}
+		}
+	}
+}
+
+// places the file list
+func (fil FileInfoList) Sort() {
+	fil.UpdateThumbnailRefrences()
+	cmpResPaths := func(a, b string) int {
+		if a < b {
+			return -1
+		}
+		if a > b {
+			return 1
+		}
+		return 0
+	}
+	slices.SortFunc(fil, func(a, b *FileInfo) int {
+		aIsThumb := a.IsThumbnail()
+		bIsThumb := b.IsThumbnail()
+		if (aIsThumb && bIsThumb) || (!aIsThumb && !bIsThumb) {
+			return cmpResPaths(a.ResPath, b.ResPath)
+		} else if aIsThumb && !bIsThumb {
+			if a.ThubnailFor != "" {
+				if a.ThubnailFor == b.ResPath {
+					return -1
+				}
+				return cmpResPaths(a.ThubnailFor, b.ResPath)
+			}
+			return -1
+		} else if !aIsThumb && bIsThumb {
+			if b.ThubnailFor != "" {
+				if a.ResPath == b.ThubnailFor {
+					return 1
+				}
+				return cmpResPaths(a.ResPath, b.ThubnailFor)
+			}
+			return -1
+		}
+		return 0
+	})
+}
+
 func (fil FileInfoList) Write(
 	log log.FieldLogger,
 	out io.WriteSeeker,
 	alignment int,
 	progressCallbacks ...func(p float64),
 ) error {
-	// fipl := fil.ToInfoPairList()
-	// return fipl.Write(log, out, offset, alignment, progressCallbacks...)
 	err := fil.WriteHeaders(log, out, alignment, progressCallbacks...)
 	if err != nil {
 		return err

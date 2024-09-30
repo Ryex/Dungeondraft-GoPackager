@@ -443,6 +443,12 @@ func (p *Package) newFileInfoPacked(resPath []byte, infoBytes structures.FileInf
 		Size:        int64(infoBytes.Size),
 		Md5:         hex.EncodeToString(infoBytes.Md5[:]),
 	}
+
+	if info.IsTexture() {
+		hash := md5.Sum([]byte(info.ResPath))
+		thumbnailName := hex.EncodeToString(hash[:]) + ".png"
+		info.ThumbnailResPath = fmt.Sprintf("res://packs/%s/thumbnails/%s", p.id, thumbnailName)
+	}
 	return info
 }
 
