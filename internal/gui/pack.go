@@ -13,6 +13,7 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/lang"
 	"fyne.io/fyne/v2/layout"
+	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
@@ -260,6 +261,12 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 				fyne.Min(a.window.Canvas().Size().Height, 580),
 			),
 		)
+		outPath := a.app.Preferences().String("pack.outPath")
+		outPathURI := storage.NewFileURI(outPath)
+		lisableOutPath, err := storage.ListerForURI(outPathURI)
+		if err == nil {
+			dlg.SetLocation(lisableOutPath)
+		}
 		dlg.Show()
 	})
 

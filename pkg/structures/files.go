@@ -114,7 +114,7 @@ func (fi *FileInfo) IsMaterial() bool {
 }
 
 func (fi *FileInfo) IsObject() bool {
-	return strings.HasPrefix(fi.CalcRelPath(), "textures/paths/")
+	return strings.HasPrefix(fi.CalcRelPath(), "textures/objects/")
 }
 
 func (fi *FileInfo) IsPath() bool {

@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -186,6 +187,7 @@ func (a *App) buildMainUI() {
 		dlg := dialog.NewFileOpen(func(uc fyne.URIReadCloser, err error) {
 			if err == nil && uc != nil {
 				log.Infof("open path %s", uc.URI().Path())
+				a.app.Preferences().SetString("lastPack.path", uc.URI().Path())
 				a.operatingPath.Set(uc.URI().Path())
 			}
 		}, a.window)
@@ -196,6 +198,12 @@ func (a *App) buildMainUI() {
 				fyne.Min(a.window.Canvas().Size().Height, 580),
 			),
 		)
+		lastOpen := a.app.Preferences().String("lastPack.path")
+		lastOpenURI := storage.NewFileURI(filepath.Dir(lastOpen))
+		lisableLastOpen, err := storage.ListerForURI(lastOpenURI)
+		if err == nil {
+			dlg.SetLocation(lisableLastOpen)
+		}
 		dlg.Show()
 	})
 
@@ -203,6 +211,7 @@ func (a *App) buildMainUI() {
 		dlg := dialog.NewFolderOpen(func(lu fyne.ListableURI, err error) {
 			if err == nil && lu != nil {
 				log.Infof("open path %s", lu.Path())
+				a.app.Preferences().SetString("lastFolder.path", lu.Path())
 				a.operatingPath.Set(lu.Path())
 			}
 		}, a.window)
@@ -212,6 +221,12 @@ func (a *App) buildMainUI() {
 				fyne.Min(a.window.Canvas().Size().Height, 580),
 			),
 		)
+		lastOpen := a.app.Preferences().String("lastFolder.path")
+		lastOpenURI := storage.NewFileURI(lastOpen)
+		lisableLastOpen, err := storage.ListerForURI(lastOpenURI)
+		if err == nil {
+			dlg.SetLocation(lisableLastOpen)
+		}
 		dlg.Show()
 	})
 
