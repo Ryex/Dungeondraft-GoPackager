@@ -4,6 +4,7 @@ import (
 	"embed"
 	"fmt"
 	"image/color"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -20,8 +21,11 @@ import (
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	xdialog "fyne.io/x/fyne/dialog"
 	"github.com/fsnotify/fsnotify"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/assets"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/bindings"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/credits"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddpackage"
@@ -75,6 +79,7 @@ func (a *App) Main() {
 		log.WithError(translationErr).Error("Failed to load translations")
 	}
 	a.window = a.app.NewWindow(lang.X("window.title", "Dungeondraft-GoPackager"))
+	a.window.SetIcon(assets.Icon)
 	a.window.Resize(fyne.NewSize(1200, 800))
 
 	a.buildMainUI()
@@ -99,6 +104,8 @@ func (a *App) clean() {
 }
 
 func (a *App) buildMainUI() {
+	siteUrl, _ := url.Parse("https://ryex.github.io/Dungeondraft-GoPackager/")
+	githubUrl, _ := url.Parse("https://github.com/Ryex/Dungeondraft-GoPackager")
 	welcome := container.NewPadded(container.NewStack(
 		&canvas.Rectangle{
 			FillColor:    theme.Color(theme.ColorNameHeaderBackground),
@@ -118,6 +125,41 @@ func (a *App) buildMainUI() {
 				Alignment: fyne.TextAlignCenter,
 			},
 		)),
+		container.NewVBox(
+			layout.NewSpacer(),
+			container.NewHBox(
+				layout.NewSpacer(),
+				widget.NewButtonWithIcon("", assets.Icon, func() {
+					aboutDlg := xdialog.NewAbout(
+						lang.X(
+							"greeting.sub-title",
+							"Package, edit, and prepare Dungeondraft resource packs",
+						), []*widget.Hyperlink{
+							widget.NewHyperlink(
+								lang.X("website.link", "Website"),
+								siteUrl,
+							),
+						}, a.app, a.window)
+					aboutDlg.Resize(
+						fyne.NewSize(
+							fyne.Min(a.window.Canvas().Size().Width, 640),
+							fyne.Min(a.window.Canvas().Size().Height, 480),
+						),
+					)
+					aboutDlg.Show()
+				}),
+				widget.NewButtonWithIcon("", assets.GithubWhite, func() {
+					a.app.OpenURL(githubUrl)
+				}),
+				widget.NewButtonWithIcon("", theme.InfoIcon(), func() {
+					crdWin := credits.CreditsWindow(a.app, fyne.NewSize(800, 400))
+					crdWin.SetIcon(assets.Icon)
+					crdWin.SetTitle(lang.X("creditsWindow.title", "Credits"))
+					crdWin.Show()
+				}),
+			),
+			layout.NewSpacer(),
+		),
 	))
 
 	pathInput := widget.NewEntryWithData(a.operatingPath)

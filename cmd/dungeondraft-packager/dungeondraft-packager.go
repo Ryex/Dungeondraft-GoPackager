@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-	"io"
 	"os"
 	"time"
 
@@ -14,7 +12,7 @@ import (
 )
 
 var CLI struct {
-	LogLevel string ` enum:"debug,info,warn,error" default:"info"`
+	LogLevel string `enum:"debug,info,warn,error" default:"info"`
 	LogFile  string `short:"L" type:"path" default:"./logs/packager.log"`
 }
 
@@ -34,17 +32,10 @@ func main() {
 			kong.HelpOptions{
 				Compact: true,
 				Summary: true,
-				Tree: true,
+				Tree:    true,
 			}),
 		// vars
 	)
-	f, err := os.OpenFile(CLI.LogFile, os.O_CREATE|os.O_RDWR, 0o666)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error opening log file: %v", err)
-	} else {
-		defer f.Close()
-		log.SetOutput(io.MultiWriter(f, os.Stderr))
-	}
 
 	var logLevel log.Level
 	switch CLI.LogLevel {
@@ -84,6 +75,7 @@ func main() {
 		log.AddHook(rotateFileHook)
 	}
 	log.Infof("Log level %s", logLevel.String())
+	log.Infof("Logging to %s", CLI.LogFile)
 
 	app := gui.NewApp()
 	app.Main()
