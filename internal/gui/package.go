@@ -443,7 +443,7 @@ func (a *App) saveUnpackedTags() {
 	}
 	a.tagSaveTimer = time.AfterFunc(500*time.Millisecond, func() {
 		a.tagSaveTimer = nil
-		err := a.pkg.WriteUnpackedTags()
+		err := a.pkg.SaveUnpackedTags()
 		if err != nil {
 			a.showErrorDialog(err)
 		}
