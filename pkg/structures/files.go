@@ -101,40 +101,52 @@ func (fi *FileInfo) IsThumbnail() bool {
 	return strings.HasPrefix(fi.CalcRelPath(), "thumbnails/")
 }
 
-func (fi *FileInfo) IsObject() bool {
-	return strings.HasPrefix(fi.CalcRelPath(), "textures/paths/")
+func (fi *FileInfo) IsCave() bool {
+	return strings.HasPrefix(fi.CalcRelPath(), "textures/caves/")
 }
 
-func (fi *FileInfo) IsTerrain() bool {
-	return strings.HasPrefix(fi.CalcRelPath(), "textures/terrain/")
+func (fi *FileInfo) IsLight() bool {
+	return strings.HasPrefix(fi.CalcRelPath(), "textures/lights/")
 }
 
 func (fi *FileInfo) IsMaterial() bool {
 	return strings.HasPrefix(fi.CalcRelPath(), "textures/materials/")
 }
 
-func (fi *FileInfo) IsTileset() bool {
-	return strings.HasPrefix(fi.CalcRelPath(), "textures/tilesets/")
-}
-
-func (fi *FileInfo) IsPattern() bool {
-	return strings.HasPrefix(fi.CalcRelPath(), "textures/patterns/")
-}
-
-func (fi *FileInfo) IsWall() bool {
-	return strings.HasPrefix(fi.CalcRelPath(), "textures/walls/")
+func (fi *FileInfo) IsObject() bool {
+	return strings.HasPrefix(fi.CalcRelPath(), "textures/paths/")
 }
 
 func (fi *FileInfo) IsPath() bool {
 	return strings.HasPrefix(fi.CalcRelPath(), "textures/paths/")
 }
 
+func (fi *FileInfo) IsPattern() bool {
+	return strings.HasPrefix(fi.CalcRelPath(), "textures/patterns/")
+}
+
 func (fi *FileInfo) IsPortal() bool {
 	return strings.HasPrefix(fi.CalcRelPath(), "textures/portals/")
 }
 
-func (fi *FileInfo) IsLight() bool {
-	return strings.HasPrefix(fi.CalcRelPath(), "textures/lights/")
+func (fi *FileInfo) IsRoof() bool {
+	return strings.HasPrefix(fi.CalcRelPath(), "textures/roofs/")
+}
+
+func (fi *FileInfo) IsTerrain() bool {
+	return strings.HasPrefix(fi.CalcRelPath(), "textures/terrain/")
+}
+
+func (fi *FileInfo) IsTileset() bool {
+	return strings.HasPrefix(fi.CalcRelPath(), "textures/tilesets/")
+}
+
+func (fi *FileInfo) IsWall() bool {
+	return strings.HasPrefix(fi.CalcRelPath(), "textures/walls/")
+}
+
+func (fi *FileInfo) IsTaggable() bool {
+	return fi.IsObject()
 }
 
 type FileInfoList []*FileInfo
@@ -197,7 +209,7 @@ func (fil FileInfoList) IndexOf(info *FileInfo) int {
 }
 
 func (fil FileInfoList) IndexOfRes(res string) int {
-for i, fi := range fil {
+	for i, fi := range fil {
 		if fi.ResPath == res {
 			return i
 		}
@@ -205,14 +217,13 @@ for i, fi := range fil {
 	return -1
 }
 
-func(fil FileInfoList) RemoveRes(res string) *FileInfo {
+func (fil FileInfoList) RemoveRes(res string) *FileInfo {
 	index := fil.IndexOfRes(res)
 	if index != -1 {
 		return fil.Remove(index)
 	}
 	return nil
 }
-
 
 var replaces = regexp.MustCompile(`(\.)|(\*\*/)|(\*\*$)|(\*)|(\[)|(\])|(\})|(\{)|(\+)|(\()|(\))|([^/\*])`)
 
