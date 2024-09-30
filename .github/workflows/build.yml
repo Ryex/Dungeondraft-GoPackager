@@ -74,24 +74,20 @@ jobs:
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4
-      - name: Grab and store version
-        run: |
-          tag_name=$(echo ${{ github.ref }} | grep -oE "[^/]+$")
-          echo "VERSION=$tag_name" >> $GITHUB_ENV
       - name: List dir
         run: ls
       - name: Package
         run: |
-          pushd Dungeondraft-GoPackager-Linux ; tar -czf ../Dungeondraft-GoPackager-Linux-${{ env.VERSION }}.tar.gz * ; popd
-          pushd Dungeondraft-GoPackager-macOS ; zip -r ../Dungeondraft-GoPackager-macOS-${{ env.VERSION }}.zip * ; popd
-          pushd Dungeondraft-GoPackager-Windows ; zip -r ../Dungeondraft-GoPackager-Windows-${{ env.VERSION }}.zip * ; popd
+          pushd Dungeondraft-GoPackager-Linux ; tar -czf ../Dungeondraft-GoPackager-Linux.tgz * ; popd
+          pushd Dungeondraft-GoPackager-macOS ; zip -r ../Dungeondraft-GoPackager-macOS.zip * ; popd
+          pushd Dungeondraft-GoPackager-Windows ; zip -r ../Dungeondraft-GoPackager-Windows.zip * ; popd
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
           body_path: Dungeondraft-GoPackager-Linux/CHANGELOG.md
           draft: true
           files: |
-            Dungeondraft-GoPackager-Linux-${{ env.VERSION }}.tar.gz
-            Dungeondraft-GoPackager-macOS-${{ env.VERSION }}.zip
-            Dungeondraft-GoPackager-Windows-${{ env.VERSION }}.zip
+            Dungeondraft-GoPackager-Linux.tar.gz
+            Dungeondraft-GoPackager-macOS.zip
+            Dungeondraft-GoPackager-Windows.zip
 
