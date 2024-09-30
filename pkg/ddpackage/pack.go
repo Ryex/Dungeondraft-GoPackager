@@ -280,19 +280,13 @@ func (p *Package) updateFromPaths(paths []string, progressCallback func(p float6
 	}
 	p.resourceMap[packJSONResPath] = packJSONInfo
 
-	// sort list and assure pack json is first
-	slices.SortFunc(p.fileList, func(a, b *structures.FileInfo) int {
-		if a.ResPath < b.ResPath {
-			return -1
-		}
-		if a.ResPath > b.ResPath {
-			return 1
-		}
-		return 0
-	})
+  //remove duplicates
 	p.fileList = slices.CompactFunc(p.fileList, func(a, b *structures.FileInfo) bool {
 		return a.ResPath == b.ResPath
 	})
+
+	// sort list and assure pack json is first
+	p.fileList.Sort()
 	p.fileList = slices.Insert(p.fileList, 0, packJSONInfo)
 	return
 }
