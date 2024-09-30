@@ -216,6 +216,10 @@ func (p *Package) updateFromPaths(paths []string, progressCallback func(p float6
 		}
 	}
 
+	p.fileList.SetCapacity(files.Size())
+
+	cbPoint := max(files.Size()/200, 1)
+
 	for i, file := range files.AsSlice() {
 		// filter extensions
 		ext := strings.ToLower(filepath.Ext(file))
@@ -246,8 +250,10 @@ func (p *Package) updateFromPaths(paths []string, progressCallback func(p float6
 			p.log.Infof("including %s", file)
 			p.addResource(fInfo)
 		}
-		if progressCallback != nil {
-			progressCallback(float64(i)/float64(files.Size()), file)
+		if i%cbPoint == 0 {
+			if progressCallback != nil {
+				progressCallback(float64(i)/float64(files.Size()), file)
+			}
 		}
 	}
 
@@ -280,7 +286,7 @@ func (p *Package) updateFromPaths(paths []string, progressCallback func(p float6
 	}
 	p.resourceMap[packJSONResPath] = packJSONInfo
 
-  //remove duplicates
+	// remove duplicates
 	p.fileList = slices.CompactFunc(p.fileList, func(a, b *structures.FileInfo) bool {
 		return a.ResPath == b.ResPath
 	})

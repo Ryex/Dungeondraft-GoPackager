@@ -330,7 +330,7 @@ func (p *Package) NewFileInfo(options NewFileInfoOptions) (*structures.FileInfo,
 		return nil, ErrUnsetUnpackedPath
 	}
 
-	if options.Path != "" {
+	if options.Path != "" && (options.ResPath == nil || options.RelPath == nil) {
 
 		l := p.log.WithField("filePath", options.Path)
 		relPath, err := filepath.Rel(p.unpackedPath, options.Path)
@@ -365,7 +365,7 @@ func (p *Package) NewFileInfo(options NewFileInfoOptions) (*structures.FileInfo,
 		Size:        options.Size,
 	}
 
-	if options.Path != "" && ddimage.PathIsSupportedImage(options.Path) {
+	if options.Path != "" && info.IsTexture() && ddimage.PathIsSupportedImage(options.Path) {
 
 		l := p.log.WithField("filePath", options.Path)
 
@@ -376,16 +376,16 @@ func (p *Package) NewFileInfo(options NewFileInfoOptions) (*structures.FileInfo,
 		info.ThumbnailPath = thumbnailPath
 		info.ThumbnailResPath = fmt.Sprintf("res://packs/%s/thumbnails/%s", p.id, thumbnailName)
 
-		img, format, err := ddimage.OpenImage(options.Path)
-		if err != nil {
-			l.WithError(err).Error("can not open path with image extension as image")
-			err = errors.Join(err, fmt.Errorf("failed to open %s as an image", options.Path))
-			// log but let info construction continue
-		} else {
-			l.WithField("imageFormat", format).Trace("read image")
-			info.ImageFormat = format
+		if !ddimage.PathIsSupportedDDImage(options.Path) {
+			img, format, err := ddimage.OpenImage(options.Path)
+			if err != nil {
+				l.WithError(err).Error("can not open path with image extension as image")
+				err = errors.Join(err, fmt.Errorf("failed to open %s as an image", options.Path))
+				// log but let info construction continue
+			} else {
+				l.WithField("imageFormat", format).Trace("read image")
+				info.ImageFormat = format
 
-			if !ddimage.PathIsSupportedDDImage(options.Path) {
 				info.Image = img
 				l.WithField("imageFormat", format).
 					Info("format is not supported by dungeondraft, converting to png")

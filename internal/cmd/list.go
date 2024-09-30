@@ -46,7 +46,7 @@ func (lsf *ListFilesCmd) printList(pkg *ddpackage.Package) {
 	filesCount := len(fileList)
 	for i, fi := range fileList {
 		fmt.Printf(
-			"File [%d/%d] Name: %s Size: %d Offset %d ResourcePath: %s\n",
+			"File [%-5d/%-5d] Name: %-38s Size: %-8d Offset %-8d ResourcePath: %s\n",
 			i+1,
 			filesCount,
 			filepath.Base(fi.ResPath),

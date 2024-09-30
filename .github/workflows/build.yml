@@ -48,7 +48,7 @@ jobs:
       - name: Build gui
         run: |
           cp FyneApp.toml ./cmd/dungeondraft-packager
-          fyne package -src ./cmd/dungeondraft-packager -appID io.github.ryex.dungondraft-gopackager
+          fyne package -src ./cmd/dungeondraft-packager --release -appID io.github.ryex.dungondraft-gopackager
       - name: Build cli
         run: |
           go build -ldflags "-s -w" ./cmd/dungeondraft-packager-cli
