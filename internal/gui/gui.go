@@ -107,8 +107,8 @@ func (a *App) clean() {
 }
 
 func (a *App) buildMainUI() {
-	siteUrl, _ := url.Parse("https://ryex.github.io/Dungeondraft-GoPackager/")
-	githubUrl, _ := url.Parse("https://github.com/Ryex/Dungeondraft-GoPackager")
+	siteURL, _ := url.Parse("https://ryex.github.io/Dungeondraft-GoPackager/")
+	githubURL, _ := url.Parse("https://github.com/Ryex/Dungeondraft-GoPackager")
 	welcome := container.NewPadded(container.NewStack(
 		&canvas.Rectangle{
 			FillColor:    theme.Color(theme.ColorNameHeaderBackground),
@@ -140,7 +140,7 @@ func (a *App) buildMainUI() {
 						), []*widget.Hyperlink{
 							widget.NewHyperlink(
 								lang.X("website.link", "Website"),
-								siteUrl,
+								siteURL,
 							),
 						}, a.app, a.window)
 					aboutDlg.Resize(
@@ -152,7 +152,7 @@ func (a *App) buildMainUI() {
 					aboutDlg.Show()
 				}),
 				widget.NewButtonWithIcon("", assets.GithubWhite, func() {
-					a.app.OpenURL(githubUrl)
+					a.app.OpenURL(githubURL)
 				}),
 				widget.NewButtonWithIcon("", theme.InfoIcon(), func() {
 					crdWin := credits.CreditsWindow(a.app, fyne.NewSize(800, 400))

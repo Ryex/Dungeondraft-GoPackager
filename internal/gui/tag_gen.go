@@ -110,7 +110,7 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 		stripTagSetPrefix     = true
 		stripExtraPrefix      = ""
 	)
-	var generateOptions *ddpackage.GenerateTagsOptions = &ddpackage.GenerateTagsOptions{
+	var generateOptions  = &ddpackage.GenerateTagsOptions{
 			BuildGlobalTagSet:      buildGlobalTagSet,
 			GlobalTagSet:           globalTagSet,
 			BuildTagSetsFromPrefix: buildTagSetFrpmPrefix,
@@ -119,7 +119,7 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 			StripTagSetPrefix: stripTagSetPrefix,
 			StripExtraPrefix:  stripExtraPrefix,
 	}
-	var generator *ddpackage.GenerateTags = ddpackage.NewGenerateTags(generateOptions)
+	var generator  = ddpackage.NewGenerateTags(generateOptions)
 
 	boundBuildGlobalTagSet := binding.BindBool(&buildGlobalTagSet)
 	boundGlobalTagSet := binding.BindString(&globalTagSet)
