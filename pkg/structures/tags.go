@@ -72,6 +72,20 @@ func (pt *PackageTags) Retag(resource string, tags ...string) {
 	}
 }
 
+func (pt *PackageTags) AddTag(tag string) {
+	_, ok := pt.Tags[tag]
+	if !ok {
+		pt.Tags[tag] = NewSet[string]()
+	}
+}
+
+func (pt *PackageTags) AddSet(set string) {
+	_, ok := pt.Sets[set]
+	if !ok {
+		pt.Sets[set] = NewSet[string]()
+	}
+}
+
 func (pt *PackageTags) AddTagToSet(set string, tags ...string) {
 	s, ok := pt.Sets[set]
 	if !ok {

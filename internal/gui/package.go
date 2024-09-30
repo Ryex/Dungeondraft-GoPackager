@@ -47,17 +47,30 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
 
 	tree, treeSelected := a.buildPackageTree(filter)
 
+	tagSetsBtn := widget.NewButton(
+		lang.X("tagSetsBtn.text", "Edit Tag Sets"),
+		func() {
+			dlg := a.createTagSetsDialog(editable)
+			dlg.Show()
+		},
+	)
+
 	leftSplit := container.NewPadded(
-		layouts.NewBottomExpandVBox(
-			container.New(
-				layouts.NewRightExpandHBoxLayout(),
-				widget.NewLabel(lang.X("tree.label", "Resources")),
-				filterEntry,
+		layouts.NewTopExpandVBox(
+			layouts.NewBottomExpandVBox(
+				container.New(
+					layouts.NewRightExpandHBoxLayout(),
+					widget.NewLabel(lang.X("tree.label", "Resources")),
+					filterEntry,
+				),
+				container.NewStack(
+					&canvas.Rectangle{
+						FillColor: theme.Color(theme.ColorNameInputBackground),
+					},
+					container.NewPadded(tree),
+				),
 			),
-			container.NewStack(
-				canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground)),
-				tree,
-			),
+			tagSetsBtn,
 		),
 	)
 
@@ -406,6 +419,8 @@ func (a *App) buildTagInfo(info *structures.FileInfo, editable bool) fyne.Canvas
 				a.pkg.Tags().Tag(tagSelecter.Text, info.RelPath)
 				updateTags()
 				a.saveUnpackedTags()
+				tagSelecter.SetText("")
+				tagSelecter.SetOptions(a.pkg.Tags().AllTags())
 			})
 		content.Add(layouts.NewLeftExpandHBox(tagSelecter, addBtn))
 	}

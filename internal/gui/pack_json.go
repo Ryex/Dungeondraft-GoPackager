@@ -223,7 +223,7 @@ func (dlg *PackJSONDialog) buildUI() {
 
 	dlg.dialog = dialog.NewCustom(
 		lang.X("packJson.dialog.title", "Package settings"),
-		lang.X("packJson.dismis", "Close"),
+		lang.X("packJson.dismiss", "Close"),
 		dlg.content,
 		dlg.parent,
 	)
