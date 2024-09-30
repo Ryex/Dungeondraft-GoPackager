@@ -236,20 +236,8 @@ func (p *Package) updateFromPaths(paths []string, progressCallback func(p float6
 		resPath := fmt.Sprintf("res://packs/%s/%s", p.id, relPath)
 
 		// update or add
-		existing, ok := p.resourceMap[resPath]
-		if ok {
-			statInfo, err := os.Stat(file)
-			if err != nil {
-				p.log.WithError(err).Errorf("can't stat %s", file)
-				errs = append(errs, err)
-				continue
-			}
-			size := statInfo.Size()
-			if size != existing.Size {
-				existing.Size = size
-				p.log.WithField("res", existing.ResPath).Infof("Updating resource size to %d", size)
-			}
-		} else {
+		_, ok := p.resourceMap[resPath]
+		if !ok {
 			fInfo, err := p.NewFileInfo(NewFileInfoOptions{Path: file, ResPath: &resPath, RelPath: &relPath})
 			if err != nil {
 				errs = append(errs, err)
@@ -339,7 +327,7 @@ func (p *Package) writePackage(l logrus.FieldLogger, out io.WriteSeeker, progres
 		return
 	}
 
-	err = p.fileList.Write(l, out, headers.SizeOf(), p.alignment, progressCallbacks...)
+	err = p.fileList.Write(l, out, p.alignment, progressCallbacks...)
 	if !utils.CheckErrorWrite(l, err) {
 		return
 	}

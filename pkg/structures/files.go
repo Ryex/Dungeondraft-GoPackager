@@ -3,7 +3,6 @@ package structures
 import (
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"image"
 	"io"
 	"os"
@@ -23,9 +22,8 @@ type FileInfoBytes struct {
 }
 
 // Write out binary bytes to io
-func (fi *FileInfoBytes) Write(out io.Writer) (err error) {
-	err = binary.Write(out, binary.LittleEndian, fi)
-	return
+func (fi *FileInfoBytes) Write(out io.Writer) error {
+	return binary.Write(out, binary.LittleEndian, fi)
 }
 
 // SizeOf the headers in bytes
@@ -35,13 +33,17 @@ func (fi *FileInfoBytes) SizeOf() int64 {
 
 // FileInfo stores file information
 type FileInfo struct {
-	Path        string
-	Offset      int64
+	Path string
+
 	Size        int64
 	Md5         string
 	ResPath     string
 	ResPathSize int32
 	RelPath     string
+
+	// used whenreading and writing files
+	Offset       int64
+	HeaderOffset int64
 
 	// if the file should have metadata this resource path points to that metadata
 	// but that resource may not exist
@@ -150,15 +152,6 @@ func (fi *FileInfo) IsTaggable() bool {
 }
 
 type FileInfoList []*FileInfo
-
-func (fil FileInfoList) ToInfoPairList() *FileInfoPairList {
-	return NewFileInfoPairList(fil)
-}
-
-func (fil FileInfoList) Write(log log.FieldLogger, out io.WriteSeeker, offset int64, alignment int, progressCallbacks ...func(p float64)) (err error) {
-	fipl := fil.ToInfoPairList()
-	return fipl.Write(log, out, offset, alignment, progressCallbacks...)
-}
 
 func (fil FileInfoList) AsSlice() []*FileInfo {
 	return fil
@@ -311,99 +304,70 @@ func (fil FileInfoList) RelPaths() (paths []string) {
 	return
 }
 
-// FileInfoPair groups a FileInfo and iot's Bytes equivalent
-type FileInfoPair struct {
-	Info      *FileInfo
-	InfoBytes FileInfoBytes
-}
-
-// FileInfoPairList used to calculate the size of the list and properly set offsets in the info
-type FileInfoPairList struct {
-	FileList []*FileInfoPair
-	Size     int64
-}
-
-// NewFileInfoPairList builds a valid FileInfoList with size information
-func NewFileInfoPairList(fileList []*FileInfo) *FileInfoPairList {
-	pairList := &FileInfoPairList{}
-
-	var totalSize int64
-
-	for _, fInfo := range fileList {
-		fInfoBytes := FileInfoBytes{}
-
-		fInfoBytes.Size = uint64(fInfo.Size)
-		fInfoBytes.Offset = uint64(fInfo.Offset)
-
-		fInfo.ResPathSize = int32(binary.Size([]byte(fInfo.ResPath)))
-		totalSize += int64(binary.Size(fInfo.ResPathSize))
-		totalSize += int64(fInfo.ResPathSize)
-		totalSize += int64(binary.Size(fInfoBytes))
-
-		pairList.FileList = append(pairList.FileList, &FileInfoPair{
-			Info:      fInfo,
-			InfoBytes: fInfoBytes,
-		})
-	}
-
-	pairList.Size = totalSize
-
-	return pairList
-}
-
-// UpdateOffsets updates all offset information to start from the passed point
-// Gogot has the ability to control alignment of packed file data.
-// this function tries to handle this
-func (fipl *FileInfoPairList) UpdateOffsets(offset int64, alignment int) {
-	for _, pair := range fipl.FileList {
-		offset = utils.Align(offset, alignment)
-		pair.Info.Offset = offset
-		pair.InfoBytes.Offset = uint64(offset)
-
-		offset += pair.Info.Size
-	}
-}
-
-// Write out headers and file contents to io
-func (fipl *FileInfoPairList) Write(log log.FieldLogger, out io.WriteSeeker, offset int64, alignment int, progressCallbacks ...func(p float64)) (err error) {
-	log.Debug("updating offsets...")
-	fipl.UpdateOffsets(fipl.Size+offset, alignment)
-
-	log.Debug("writing files...")
-	err = fipl.WriteHeaders(log, out, alignment)
+func (fil FileInfoList) Write(
+	log log.FieldLogger,
+	out io.WriteSeeker,
+	alignment int,
+	progressCallbacks ...func(p float64),
+) error {
+	// fipl := fil.ToInfoPairList()
+	// return fipl.Write(log, out, offset, alignment, progressCallbacks...)
+	err := fil.WriteHeaders(log, out, alignment, progressCallbacks...)
 	if err != nil {
-		return
+		return err
 	}
 
-	err = fipl.WriteFiles(log, out, alignment, progressCallbacks...)
-
-	return
+	return fil.WriteFiles(log, out, alignment, progressCallbacks...)
 }
 
-// WriteHeaders write out the headers to io
-func (fipl *FileInfoPairList) WriteHeaders(log log.FieldLogger, out io.WriteSeeker, alignment int) error {
-	log.Debug("writing file headers")
-	for _, pair := range fipl.FileList {
+func (fil FileInfoList) WriteHeaders(
+	log log.FieldLogger,
+	out io.WriteSeeker,
+	alignment int,
+	progressCallbacks ...func(p float64),
+) error {
+	log.Debug("writing headers...")
+	for _, fi := range fil {
 		// write path length
-		err := binary.Write(out, binary.LittleEndian, pair.Info.ResPathSize)
+		err := binary.Write(out, binary.LittleEndian, fi.ResPathSize)
 		if !utils.CheckErrorWrite(log, err) {
 			return err
 		}
 
 		// write filepath
-		err = binary.Write(out, binary.LittleEndian, []byte(pair.Info.ResPath))
+		err = binary.Write(out, binary.LittleEndian, []byte(fi.ResPath))
 		if !utils.CheckErrorWrite(log, err) {
 			return err
 		}
+
+		fInfoBytes := FileInfoBytes{}
+
+		curPos, err := utils.Tell(out)
+		if err != nil {
+			return err
+		}
+		fi.HeaderOffset = curPos
+
+		fInfoBytes.Size = uint64(fi.Size)
+		fInfoBytes.Offset = uint64(fi.Offset)
 
 		// write fileinfo
-		err = pair.InfoBytes.Write(out)
+		err = fInfoBytes.Write(out)
 		if !utils.CheckErrorWrite(log, err) {
 			return err
 		}
-
 	}
 
+	return nil
+}
+
+func (fil FileInfoList) WriteFiles(
+	log log.FieldLogger,
+	out io.WriteSeeker,
+	alignment int,
+	progressCallbacks ...func(p float64),
+) error {
+	// alignment
 	curPos, err := utils.Tell(out)
 	if err != nil {
 		return err
@@ -414,76 +378,83 @@ func (fipl *FileInfoPairList) WriteHeaders(log log.FieldLogger, out io.WriteSeek
 		return err
 	}
 
-	return nil
-}
+	for i, fi := range fil {
 
-var ErrAlignment = errors.New("alignment error")
+		{
 
-// WriteFiles write the contents of the files in the list to io
-func (fipl *FileInfoPairList) WriteFiles(log log.FieldLogger, out io.WriteSeeker, alignment int, progressCallbacks ...func(p float64)) error {
-	log.Debug("writing file data")
-	for i, pair := range fipl.FileList {
+			// collect file data
+			var data []byte
+			if fi.Image != nil && fi.PngImage != nil {
+				log.Debug("using png image data")
+				data = fi.PngImage
+			} else {
+				var err error
+				data, err = os.ReadFile(fi.Path)
+				if err != nil {
+					log.WithError(err).Error("error reading file")
+					return err
+				}
+			}
+			// store the size of the data
+			fi.Size = int64(len(data))
 
+			// write out the data
+			n, err := out.Write(data)
+			if !utils.CheckErrorWrite(log, err) {
+				return err
+			}
+			if int64(n) != fi.Size {
+				err = errors.New("write of wrong size")
+				log.WithField("expectedWriteSize", fi.Size).
+					WithField("writeSize", n).
+					WithError(err).Error("failed to write file")
+				return err
+			}
+
+			curPos, err = utils.Tell(out)
+			if err != nil {
+				return err
+			}
+
+			// go back to update the stored size and offset
+			_, err = out.Seek(fi.HeaderOffset, io.SeekStart)
+			if err != nil {
+				return err
+			}
+
+			err = binary.Write(out, binary.LittleEndian, offset)
+			if !utils.CheckErrorWrite(log, err) {
+				return err
+			}
+			err = binary.Write(out, binary.LittleEndian, fi.Size)
+			if !utils.CheckErrorWrite(log, err) {
+				return err
+			}
+
+			// return to post file position
+			_, err = out.Seek(curPos, io.SeekStart)
+			if err != nil {
+				return err
+			}
+
+		}
+
+		// alignment
 		curPos, err := utils.Tell(out)
 		if err != nil {
 			return err
 		}
-		if pair.Info.Offset != curPos {
-			err = errors.Join(ErrAlignment, fmt.Errorf("%v != %v", curPos, pair.Info.Offset))
-			log.WithError(err).WithField("file", pair.Info.Path).Error("misaligment of writer")
-			return err
-		}
 
-		err = fipl.writeFile(log.WithField("file", pair.Info.Path), out, pair.Info)
-		if err != nil {
-			return err
-		}
-
-		curPos, err = utils.Tell(out)
-		if err != nil {
-			return err
-		}
-
-		offset := utils.Align(curPos, alignment)
+		offset = utils.Align(curPos, alignment)
 		err = utils.Pad(out, offset-curPos)
 		if err != nil {
 			return err
 		}
 
 		for _, pcb := range progressCallbacks {
-			pcb(float64(i+1) / float64(len(fipl.FileList)))
+			pcb(float64(i+1) / float64(len(fil)))
 		}
 	}
 
 	return nil
-}
-
-func (fipl *FileInfoPairList) writeFile(l log.FieldLogger, out io.Writer, info *FileInfo) (err error) {
-	l.Debug("writing")
-
-	var data []byte
-	if info.Image != nil && info.PngImage != nil {
-		l.Debug("using png image data")
-		data = info.PngImage
-	} else {
-		data, err = os.ReadFile(info.Path)
-		if err != nil {
-			l.WithError(err).Error("error reading file")
-			return
-		}
-	}
-
-	n, err := out.Write(data)
-	if !utils.CheckErrorWrite(l, err) {
-		return
-	}
-	if int64(n) != info.Size {
-		err = errors.New("write of wrong size")
-		l.WithField("expectedWriteSize", info.Size).
-			WithField("writeSize", n).
-			WithError(err).Error("failed to write file")
-		return
-	}
-
-	return
 }

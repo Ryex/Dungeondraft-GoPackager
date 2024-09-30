@@ -322,7 +322,7 @@ type NewFileInfoOptions struct {
 	Path    string
 	ResPath *string
 	RelPath *string
-	Size    *int64
+	Size    int64
 }
 
 func (p *Package) NewFileInfo(options NewFileInfoOptions) (*structures.FileInfo, error) {
@@ -331,16 +331,6 @@ func (p *Package) NewFileInfo(options NewFileInfoOptions) (*structures.FileInfo,
 	}
 
 	if options.Path != "" {
-
-		if options.Size == nil {
-			fileInfo, err := os.Stat(options.Path)
-			if err != nil {
-				p.log.WithError(err).Errorf("can't stat %s", options.Path)
-				return nil, err
-			}
-			options.Size = new(int64)
-			*options.Size = fileInfo.Size()
-		}
 
 		l := p.log.WithField("filePath", options.Path)
 		relPath, err := filepath.Rel(p.unpackedPath, options.Path)
@@ -372,7 +362,7 @@ func (p *Package) NewFileInfo(options NewFileInfoOptions) (*structures.FileInfo,
 		ResPath:     *options.ResPath,
 		RelPath:     *options.RelPath,
 		ResPathSize: int32(len([]byte(*options.ResPath))),
-		Size:        *options.Size,
+		Size:        options.Size,
 	}
 
 	if options.Path != "" && ddimage.PathIsSupportedImage(options.Path) {
