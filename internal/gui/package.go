@@ -55,24 +55,32 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
 		},
 	)
 
-	leftSplit := container.NewPadded(
-		layouts.NewTopExpandVBox(
-			layouts.NewBottomExpandVBox(
-				container.New(
-					layouts.NewRightExpandHBoxLayout(),
-					widget.NewLabel(lang.X("tree.label", "Resources")),
-					filterEntry,
-				),
-				container.NewStack(
-					&canvas.Rectangle{
-						FillColor: theme.Color(theme.ColorNameInputBackground),
-					},
-					container.NewPadded(tree),
-				),
+	leftSplit := layouts.NewTopExpandVBox(
+		layouts.NewBottomExpandVBox(
+			container.New(
+				layouts.NewRightExpandHBoxLayout(),
+				widget.NewLabel(lang.X("tree.label", "Resources")),
+				filterEntry,
 			),
-			tagSetsBtn,
+			container.NewStack(
+				&canvas.Rectangle{
+					FillColor: theme.Color(theme.ColorNameInputBackground),
+				},
+				container.NewPadded(tree),
+			),
 		),
+		tagSetsBtn,
 	)
+
+	if editable {
+		generateTageBtn := widget.NewButton(
+			lang.X("generateTageBtn.label", "Generate Tags"),
+			func() {
+				dlg := a.createTagGenDialog()
+				dlg.Show()
+		})
+		leftSplit.Add(generateTageBtn)
+	}
 
 	defaultPreview := container.NewCenter(
 		widget.NewLabel(lang.X("preview.defaultText", "Select a resource")),

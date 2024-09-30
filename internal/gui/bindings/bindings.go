@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"fyne.io/fyne/v2/data/binding"
+	log "github.com/sirupsen/logrus"
 )
 
 type proxyBinding[B binding.DataItem] struct {
@@ -76,12 +77,21 @@ func Listen[T any](data Bound[T], f func(T)) binding.DataListener {
 	listener := binding.NewDataListener(func() {
 		val, err := data.Get()
 		if err != nil {
+			log.Errorf("listen bind get error %s", err.Error())
 			return
 		}
 		f(val)
 	})
 	data.AddListener(listener)
 	return listener
+}
+
+func AddListenerToAll(f func(), items ...binding.DataItem) {
+
+	listener := binding.NewDataListener(f)
+	for _, item := range items {
+		item.AddListener(listener)
+	}
 }
 
 func ListenErr[T any](data Bound[T], f func(T), e func(error)) binding.DataListener {
@@ -99,8 +109,8 @@ func ListenErr[T any](data Bound[T], f func(T), e func(error)) binding.DataListe
 
 type boundMapping[F any, T any] struct {
 	proxyBinding[Bound[F]]
-	f func(F) (T, error)
-	r func(T) (F, error)
+	get func(F) (T, error)
+	set func(T) (F, error)
 }
 
 func NewMapping[F any, T any](
@@ -109,19 +119,19 @@ func NewMapping[F any, T any](
 ) Bound[T] {
 	return &boundMapping[F, T]{
 		proxyBinding: proxyBinding[Bound[F]]{from: from},
-		f:            f,
+		get:          f,
 	}
 }
 
 func NewReversableMapping[F any, T any](
 	from Bound[F],
-	f func(F) (T, error),
-	r func(T) (F, error),
+	get func(F) (T, error),
+	set func(T) (F, error),
 ) Bound[T] {
 	return &boundMapping[F, T]{
 		proxyBinding: proxyBinding[Bound[F]]{from: from},
-		f:            f,
-		r:            r,
+		get:          get,
+		set:          set,
 	}
 }
 
@@ -129,15 +139,17 @@ func (bm *boundMapping[F, T]) Get() (T, error) {
 	v, err := bm.from.Get()
 	if err != nil {
 		var t T
+		log.Errorf("mapped bind get err %s", err.Error())
 		return t, err
 	}
-	return bm.f(v)
+	return bm.get(v)
 }
 
 func (bm *boundMapping[F, T]) Set(t T) error {
-	if bm.r != nil {
-		rev, err := bm.r(t)
+	if bm.set != nil {
+		rev, err := bm.set(t)
 		if err != nil {
+			log.Errorf("mapped bind set err %s", err.Error())
 			return err
 		}
 		return bm.from.Set(rev)
@@ -154,13 +166,13 @@ var errWrongType = errors.New("wrong type provided")
 
 type mappedBinding[T any] struct {
 	Bound[T]
-	v    T
+	v T
 
 	counter int
-	self binding.ExternalInt
+	self    binding.ExternalInt
 
-	set  func(T) error
-	get  func() (T, error)
+	set func(T) error
+	get func() (T, error)
 }
 
 func MappedBind[T any](get func() (T, error), set func(T) error) ExternalBound[T] {
