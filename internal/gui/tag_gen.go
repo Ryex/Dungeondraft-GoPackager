@@ -24,7 +24,7 @@ import (
 )
 
 func (a *App) createTagGenDialog() dialog.Dialog {
-	examplePathParts := []string{"textures", "objects", "[Set A] Tag A", "[Set B] [Set C] Long Tag B", "Tag C", "object.png"}
+	examplePathParts := []string{"textures", "objects", "{Set A} Tag A", "{Set B} {Set C} Long Tag B", "Tag C", "object.png"}
 
 	var (
 		tags    []string
@@ -106,7 +106,7 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 		buildTagSetFrpmPrefix = true
 		prefixSplitMode       = false
 		prefixSplitSeparator  = "|"
-		tagSetPrefixDelimiter = [2]string{"[", "]"}
+		tagSetPrefixDelimiter = [2]string{"{", "}"}
 		stripTagSetPrefix     = true
 		stripExtraPrefix      = ""
 	)
