@@ -201,7 +201,7 @@ func (a *App) buildInfoPane(info *structures.FileInfo, editable bool) fyne.Canva
 			a.buildFilePreview(info)),
 	)
 
-	if info.IsTexture() {
+	if info.IsTaggable() {
 		tabs.Append(container.NewTabItemWithIcon(
 			lang.X("preview.tab.tags", "Tags"),
 			theme.ListIcon(),
