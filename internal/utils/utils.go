@@ -86,7 +86,10 @@ func RipTexture(data []byte) (fileExt string, fileData []byte, err error) {
 }
 
 func SplitOne(s string, sep string) (string, string) {
-	x := strings.SplitN(s, sep, 1)
+	x := strings.SplitN(s, sep, 2)
+	if len(x) < 2 {
+		return x[0], ""
+	}
 	return x[0], x[1]
 }
 

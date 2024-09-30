@@ -239,7 +239,7 @@ func (p *Package) loadUnpackedResourceMetadata() error {
 	return nil
 }
 
-func (p *Package) WriteUnpackedTags() error {
+func (p *Package) SaveUnpackedTags() error {
 	if p.unpackedPath == "" {
 		return ErrUnsetUnpackedPath
 	}

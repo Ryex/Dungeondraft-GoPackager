@@ -110,7 +110,16 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 		stripTagSetPrefix     = true
 		stripExtraPrefix      = ""
 	)
-	var generateOptions *ddpackage.GenerateTagsOptions = &ddpackage.GenerateTagsOptions{}
+	var generateOptions *ddpackage.GenerateTagsOptions = &ddpackage.GenerateTagsOptions{
+			BuildGlobalTagSet:      buildGlobalTagSet,
+			GlobalTagSet:           globalTagSet,
+			BuildTagSetsFromPrefix: buildTagSetFrpmPrefix,
+			PrefixSplitMode:        prefixSplitMode,
+			TagSetPrefrixDelimiter:  tagSetPrefixDelimiter,
+			StripTagSetPrefix: stripTagSetPrefix,
+			StripExtraPrefix:  stripExtraPrefix,
+	}
+	var generator *ddpackage.GenerateTags = ddpackage.NewGenerateTags(generateOptions)
 
 	boundBuildGlobalTagSet := binding.BindBool(&buildGlobalTagSet)
 	boundGlobalTagSet := binding.BindString(&globalTagSet)
@@ -141,7 +150,7 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 			StripTagSetPrefix: stripTagSetPrefix,
 			StripExtraPrefix:  stripExtraPrefix,
 		}
-		generator := ddpackage.NewGenerateTags(generateOptions)
+		generator = ddpackage.NewGenerateTags(generateOptions)
 		tagsMap = generator.TagsFromPath(strings.Join(examplePathParts, "/"))
 		updateTags()
 		updateSets()
@@ -333,7 +342,6 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 				a.window,
 			)
 			progressDlg.Show()
-			generator := ddpackage.NewGenerateTags(generateOptions)
 			a.pkg.GenerateTagsProgress(generator, func(p float64) {
 				progressVal.Set(p)
 			})

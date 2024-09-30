@@ -34,6 +34,7 @@ func (p *Package) generateTags(generator *GenerateTags, pcb func(p float64)) {
 			pcb(float64(i) / float64(len(p.fileList)))
 		}
 	}
+	p.SaveUnpackedTags()
 }
 
 type GenerateTagsOptions struct {
