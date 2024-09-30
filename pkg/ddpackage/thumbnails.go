@@ -25,14 +25,6 @@ func (p *Package) GenerateThumbnails(progressCallbacks ...func(p float64)) error
 		}
 	}
 
-	thumbnailPrefix := fmt.Sprintf("res://packs/%s/thumbnails/", p.id)
-	terrainPrefix := fmt.Sprintf("res://packs/%s/%s/textures/terrain/", p.id, p.name)
-	wallsPrefix := fmt.Sprintf("res://packs/%s/%s/textures/walls/", p.id, p.name)
-	pathsPrefix := fmt.Sprintf("res://packs/%s/%s/textures/paths/", p.id, p.name)
-	fmt.Println(thumbnailPrefix)
-	fmt.Println(terrainPrefix)
-	fmt.Println(wallsPrefix)
-	fmt.Println(pathsPrefix)
 	for i, info := range p.fileList {
 		if info.IsTexture() {
 			p.log.WithField("res", info.ResPath).Trace("generating thumbnail")

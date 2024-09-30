@@ -125,5 +125,6 @@
   "Redo": "Redo",
   "Cut": "Cut",
   "file.parent": "Parent",
-  "file.name": "Name"
+  "file.name": "Name",
+  "OK": "Ok"
 }

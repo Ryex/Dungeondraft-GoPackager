@@ -306,6 +306,17 @@ func (fil FileInfoList) RelPaths() (paths []string) {
 	return
 }
 
+func (fil FileInfoList) SetCapacity(capacity int) {
+	if capacity < len(fil) {
+		capacity = len(fil)
+	}
+	if capacity > cap(fil) {
+		sized := make([]*FileInfo, len(fil), capacity)
+		copy(sized, fil)
+		fil = sized
+	}
+}
+
 func (fil FileInfoList) UpdateThumbnailRefrences() {
 	thumbnailMap := make(map[string]string)
 	for _, fi := range fil {
@@ -323,41 +334,47 @@ func (fil FileInfoList) UpdateThumbnailRefrences() {
 	}
 }
 
+func cmpResPaths(a, b string) int {
+	if a < b {
+		return -1
+	}
+	if a > b {
+		return 1
+	}
+	return 0
+}
+
+func cmpResAndThumb(a, b *FileInfo) int {
+	aIsThumb := a.IsThumbnail()
+	bIsThumb := b.IsThumbnail()
+	if (aIsThumb && bIsThumb) || (!aIsThumb && !bIsThumb) {
+		return cmpResPaths(a.ResPath, b.ResPath)
+	} else if aIsThumb && !bIsThumb {
+		if a.ThubnailFor != "" {
+			if a.ThubnailFor == b.ResPath {
+				return -1
+			}
+			return cmpResPaths(a.ThubnailFor, b.ResPath)
+		}
+		return -1
+	} else if !aIsThumb && bIsThumb {
+		if b.ThubnailFor != "" {
+			if a.ResPath == b.ThubnailFor {
+				return 1
+			}
+			return cmpResPaths(a.ResPath, b.ThubnailFor)
+		}
+		return -1
+	}
+	return 0
+}
+
 // places the file list
 func (fil FileInfoList) Sort() {
 	fil.UpdateThumbnailRefrences()
-	cmpResPaths := func(a, b string) int {
-		if a < b {
-			return -1
-		}
-		if a > b {
-			return 1
-		}
-		return 0
-	}
+
 	slices.SortFunc(fil, func(a, b *FileInfo) int {
-		aIsThumb := a.IsThumbnail()
-		bIsThumb := b.IsThumbnail()
-		if (aIsThumb && bIsThumb) || (!aIsThumb && !bIsThumb) {
-			return cmpResPaths(a.ResPath, b.ResPath)
-		} else if aIsThumb && !bIsThumb {
-			if a.ThubnailFor != "" {
-				if a.ThubnailFor == b.ResPath {
-					return -1
-				}
-				return cmpResPaths(a.ThubnailFor, b.ResPath)
-			}
-			return -1
-		} else if !aIsThumb && bIsThumb {
-			if b.ThubnailFor != "" {
-				if a.ResPath == b.ThubnailFor {
-					return 1
-				}
-				return cmpResPaths(a.ResPath, b.ThubnailFor)
-			}
-			return -1
-		}
-		return 0
+		return cmpResPaths(a.ResPath, b.ResPath)
 	})
 }
 

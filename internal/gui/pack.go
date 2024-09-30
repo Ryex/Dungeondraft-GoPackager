@@ -406,7 +406,7 @@ func (a *App) packPackage(path string, options ddpackage.PackOptions, genThumbna
 						"pack.thumbnails.error.text",
 						"Error generating thumbnails for {{.Path}}",
 						map[string]any{
-							"Path": a.pkg.UnpackedPath,
+							"Path": a.pkg.UnpackedPath(),
 						},
 					))),
 					a.window,
@@ -430,7 +430,7 @@ func (a *App) packPackage(path string, options ddpackage.PackOptions, genThumbna
 					"pack.package.error.text",
 					"Error packing {{.Path}} to {{.Pack}}",
 					map[string]any{
-						"Path": a.pkg.UnpackedPath,
+						"Path": a.pkg.UnpackedPath(),
 						"Pack": targetPath,
 					},
 				))),
@@ -446,7 +446,7 @@ func (a *App) packPackage(path string, options ddpackage.PackOptions, genThumbna
 				"pack.success.dlg.text",
 				"{{.Path}} Packaged to {{.Pack}} successfully",
 				map[string]any{
-					"Path": a.pkg.UnpackedPath,
+					"Path": a.pkg.UnpackedPath(),
 					"Pack": targetPath,
 				}),
 			a.window,
