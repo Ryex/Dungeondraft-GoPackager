@@ -89,7 +89,7 @@ func NewPackJSONDialog(
 ) *PackJSONDialog {
 	dlg := &PackJSONDialog{
 		Path:           path,
-		Name:           filepath.Base(filepath.Dir(path)),
+		Name:           filepath.Base(path),
 		ID:             ddpackage.GenPackID(),
 		parent:         parent,
 		callback:       callback,
