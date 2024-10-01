@@ -16,6 +16,7 @@ type PackCmd struct {
 
 	Overwrite  bool `short:"O" help:"overwrite output files at destination"`
 	Thumbnails bool `short:"T" help:"generate thumbnails"`
+	Progress   bool `default:"true" negatable:"" help:"show progressbar"`
 }
 
 func (pc *PackCmd) Run(ctx *Context) error {
@@ -50,10 +51,15 @@ func (pc *PackCmd) Run(ctx *Context) error {
 		return errors.New("Failed to build file list")
 	}
 
-	bar := progressbar.Default(100, "Packing ...")
-	err = pkg.PackPackage(outDirPath, ddpackage.PackOptions{Overwrite: pc.Overwrite}, func(p float64) {
-		bar.Set(int(p * 100))
-	})
+	if pc.Progress {
+		total := int64(len(pkg.FileList()))
+		bar := progressbar.Default(total, "Packing ...")
+		err = pkg.PackPackageProgress(outDirPath, ddpackage.PackOptions{Overwrite: pc.Overwrite}, func(p float64) {
+			bar.Set(int(p * float64(total)))
+		})
+	} else {
+		err = pkg.PackPackage(outDirPath, ddpackage.PackOptions{Overwrite: pc.Overwrite})
+	}
 	if err != nil {
 		l.WithError(err).Error("packing failure")
 		return err

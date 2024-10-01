@@ -12,7 +12,15 @@ import (
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddimage"
 )
 
-func (p *Package) GenerateThumbnails(progressCallbacks ...func(p float64)) error {
+func (p *Package) GenerateThumbnails() error {
+	return p.generateThumbnails(nil)
+}
+
+func (p *Package) GenerateThumbnailsProgress(progressCallback func(p float64)) error {
+	return p.generateThumbnails(progressCallback)
+}
+
+func (p *Package) generateThumbnails(progressCallback func(p float64)) error {
 	if p.unpackedPath == "" {
 		return ErrUnsetUnpackedPath
 	}
@@ -94,8 +102,8 @@ func (p *Package) GenerateThumbnails(progressCallbacks ...func(p float64)) error
 			}
 
 			thumbCount += 1
-			for _, pcb := range progressCallbacks {
-				pcb(thumbCount / texCount)
+			if progressCallback != nil {
+				progressCallback(thumbCount / texCount)
 			}
 		}
 	}

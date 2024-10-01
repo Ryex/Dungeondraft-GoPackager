@@ -19,14 +19,33 @@ import (
 )
 
 // ExtractPackage extracts the package contents to the filesystem
-func (p *Package) ExtractPackage(outDir string, options UnpackOptions, progressCallbacks ...func(p float64)) (err error) {
+func (p *Package) ExtractPackage(
+	outDir string,
+	options UnpackOptions,
+) (err error) {
+	return p.extractPackage(outDir, options, nil)
+}
+
+func (p *Package) ExtractPackageProgress(
+	outDir string,
+	options UnpackOptions,
+	progressCallback func(p float64),
+) (err error) {
+	return p.extractPackage(outDir, options, progressCallback)
+}
+
+func (p *Package) extractPackage(
+	outDir string,
+	options UnpackOptions,
+	progressCallback func(p float64),
+) (err error) {
 	if p.mode != PackageModePacked {
 		return ErrPackageNotPacked
 	}
 	p.SetUnpackOptions(options)
 	p.unpackedPath = outDir
 
-	err = p.extractFilelist(outDir, progressCallbacks...)
+	err = p.extractFilelist(outDir, progressCallback)
 
 	return
 }
@@ -52,7 +71,7 @@ func (p *Package) MapResourcePaths() {
 }
 
 // extractFilelist takes a slice of FileInfo and extracts the files from the package at the reader
-func (p *Package) extractFilelist(outDir string, progressCallbacks ...func(p float64)) (err error) {
+func (p *Package) extractFilelist(outDir string, progressCallback func(p float64)) (err error) {
 	outDirPath, err := filepath.Abs(outDir)
 	if err != nil {
 		return
@@ -91,8 +110,8 @@ func (p *Package) extractFilelist(outDir string, progressCallbacks ...func(p flo
 
 	for i, fi := range p.fileList {
 
-		for _, pcb := range progressCallbacks {
-			pcb(float64(i) / float64(len(p.fileList)))
+		if progressCallback != nil {
+			progressCallback(float64(i) / float64(len(p.fileList)))
 		}
 
 		if strings.HasPrefix(fi.ResPath, thumbnailPrefix) && !p.unpackOptions.Thumbnails {
@@ -134,8 +153,8 @@ func (p *Package) extractFilelist(outDir string, progressCallbacks ...func(p flo
 		extractedPaths[fi.Path] = fi.ResPath
 	}
 
-	for _, pcb := range progressCallbacks {
-		pcb(1.0)
+	if progressCallback != nil {
+		progressCallback(1.0)
 	}
 
 	p.log.Info("unpacking complete")

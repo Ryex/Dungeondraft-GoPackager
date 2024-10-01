@@ -18,6 +18,7 @@ type UnpackCmd struct {
 	Overwrite   bool `short:"O" help:"overwrite output files at destination"`
 	RipTextures bool `short:"R" help:"convert .tex files in the package to normal image formats (probably never needed)" `
 	Thumbnails  bool `short:"T" help:"don't ignore resource thumbnails"`
+	Progress    bool `default:"true" negatable:"" help:"show progressbar"`
 }
 
 func (uc *UnpackCmd) Run(ctx *Context) error {
@@ -48,14 +49,21 @@ func (uc *UnpackCmd) Run(ctx *Context) error {
 
 	defer file.Close()
 
-	bar := progressbar.Default(100, "Unpacking ...")
-	err := pkg.ExtractPackage(outDirPath, ddpackage.UnpackOptions{
+	options := ddpackage.UnpackOptions{
 		Overwrite:   uc.Overwrite,
 		RipTextures: uc.RipTextures,
 		Thumbnails:  uc.Thumbnails,
-	}, func(p float64) {
-		bar.Set(int(p * 100))
-	})
+	}
+	var err error
+	if uc.Progress {
+		total := int64(len(pkg.FileList()))
+		bar := progressbar.Default(total, "Unpacking ...")
+		err = pkg.ExtractPackageProgress(outDirPath, options, func(p float64) {
+			bar.Set(int(p * float64(total)))
+		})
+	} else {
+		err = pkg.ExtractPackage(outDirPath, options)
+	}
 	if err != nil {
 		l.WithError(err).Error("failed to extract package")
 		return err
