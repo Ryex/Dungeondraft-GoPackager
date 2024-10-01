@@ -19,13 +19,22 @@ func (p *Package) GenerateThumbnails(progressCallbacks ...func(p float64)) error
 	thumbnailDir := filepath.Join(p.unpackedPath, "thumbnails")
 
 	if dirExists := utils.DirExists(thumbnailDir); !dirExists {
-		err := os.MkdirAll(thumbnailDir, 0777)
+		err := os.MkdirAll(thumbnailDir, 0o777)
 		if err != nil {
 			return errors.Join(err, fmt.Errorf("failed to create thumbnail directory %s", thumbnailDir))
 		}
 	}
 
-	for i, info := range p.fileList {
+	var texCount float64
+
+	for _, info := range p.fileList {
+		if info.IsTexture() {
+			texCount += 1
+		}
+	}
+
+	var thumbCount float64
+	for _, info := range p.fileList {
 		if info.IsTexture() {
 			p.log.WithField("res", info.ResPath).Trace("generating thumbnail")
 
@@ -57,7 +66,7 @@ func (p *Package) GenerateThumbnails(progressCallbacks ...func(p float64)) error
 			file, err := os.OpenFile(
 				info.ThumbnailPath,
 				os.O_RDWR|os.O_CREATE,
-				0644,
+				0o644,
 			)
 			if err != nil {
 				p.log.WithError(err).
@@ -83,10 +92,11 @@ func (p *Package) GenerateThumbnails(progressCallbacks ...func(p float64)) error
 					fmt.Errorf("failed generate thumbnail for %s", info.RelPath),
 				)
 			}
-		}
 
-		for _, pcb := range progressCallbacks {
-			pcb(float64(i+1) / float64(len(p.fileList)))
+			thumbCount += 1
+			for _, pcb := range progressCallbacks {
+				pcb(thumbCount / texCount)
+			}
 		}
 	}
 

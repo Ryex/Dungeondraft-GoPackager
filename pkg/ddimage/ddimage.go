@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
 	_ "image/gif"
 	_ "image/jpeg"
 	"image/png"
@@ -28,11 +29,62 @@ import (
 	// for webp 1.4.0
 	_ "github.com/chai2010/webp"
 
-	"github.com/sunshineplan/imgconv"
+	// "github.com/sunshineplan/imgconv"
+	"github.com/nfnt/resize"
 
 	"github.com/srwiley/oksvg"
 	"github.com/srwiley/rasterx"
 )
+
+func unmultiplyAlpha(c color.Color) (r, g, b, a int) {
+	red, green, blue, alpha := c.RGBA()
+	if alpha != 0 && alpha != 0xffff {
+		red = (red * 0xffff) / alpha
+		green = (green * 0xffff) / alpha
+		blue = (blue * 0xffff) / alpha
+	}
+	// Convert from range 0-65535 to range 0-255
+	r = int(red >> 8)
+	g = int(green >> 8)
+	b = int(blue >> 8)
+	a = int(alpha >> 8)
+	return
+}
+
+type Signed interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64
+}
+type Unsigned interface {
+	~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr
+}
+type Integer interface {
+	Signed | Unsigned
+}
+
+func clamp[T Integer](v, m, mx T) T {
+	if v < m {
+		return m
+	}
+	if v > mx {
+		return mx
+	}
+	return v
+}
+
+func ConvertRGBAToNRGBA(c color.RGBA) color.NRGBA {
+	r, g, b, a := c.R, c.G, c.B, c.A
+	if a != 0 && a != 0xff {
+		r = (r * 0xff) / a
+		g = (g * 0xff) / a
+		b = (b * 0xff) / a
+	}
+	return color.NRGBA{
+		R: r,
+		G: g,
+		B: b,
+		A: a,
+	}
+}
 
 func OpenImage(path string) (image.Image, string, error) {
 	file, err := os.Open(path)
@@ -48,7 +100,6 @@ func OpenImage(path string) (image.Image, string, error) {
 		}
 		return img, "svg", nil
 	}
-
 	return image.Decode(file)
 }
 
@@ -95,12 +146,14 @@ func BytesToImage(byts []byte) (image.Image, string, error) {
 }
 
 func ResizeVirticalAndCropWidth(img image.Image, height int, width int) image.Image {
-	resized := imgconv.Resize(img, &imgconv.ResizeOption{Width: 0, Height: height})
+	// resized := imgconv.Resize(img, &imgconv.ResizeOption{Width: 0, Height: height})
+	resized := resize.Resize(uint(width), uint(height), img, resize.Lanczos3)
 	resizedWidth := resized.Bounds().Dx()
 	if resizedWidth > width {
+		start := (resizedWidth - width) / 2
 		resized = resized.(interface {
 			SubImage(r image.Rectangle) image.Image
-		}).SubImage(image.Rect(0, 0, width, height))
+		}).SubImage(image.Rect(start, 0, start+width, height))
 	}
 	return resized
 }
