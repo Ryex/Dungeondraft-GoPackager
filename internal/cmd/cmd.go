@@ -34,6 +34,13 @@ func (ctx *Context) LoadPkg(path string) error {
 			ctx.Log.WithError(err).Error("failed to load package")
 			return err
 		}
+		errs := ctx.Pkg.BuildFileList()
+		if len(errs) != 0 {
+			for _, err := range errs {
+				ctx.Log.WithField("task", "building file list").Errorf("error : %s", err.Error())
+			}
+			return errors.Join(errs...)
+		}
 	} else {
 		err := ctx.Pkg.LoadFromPackedPath(ctx.InputPath, nil)
 		if err != nil {

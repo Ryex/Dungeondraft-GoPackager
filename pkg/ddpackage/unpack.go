@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"regexp"
 	"strings"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
@@ -50,23 +49,9 @@ func (p *Package) extractPackage(
 	return
 }
 
-var (
-	packJSONPathRegex = regexp.MustCompile(`^res://packs/([\w\-. ]+).json`)
-	idTrimPrefixRegex = regexp.MustCompile(`^([\w\-. ]+)/`)
-)
-
-func (p *Package) NormalizeResourcePath(resPath string) string {
-	if match := packJSONPathRegex.MatchString(resPath); match {
-		return "pack.json"
-	}
-	path := strings.TrimPrefix(resPath, "res://packs/")
-	path = idTrimPrefixRegex.ReplaceAllString(path, "")
-	return filepath.Clean(path)
-}
-
 func (p *Package) MapResourcePaths() {
 	for _, fi := range p.fileList {
-		fi.Path = p.NormalizeResourcePath(fi.ResPath)
+		fi.Path = utils.NormalizeResourcePath(fi.ResPath)
 	}
 }
 
@@ -287,7 +272,7 @@ func (p *Package) loadPackedPackJSON(r io.ReadSeeker) (err error) {
 	}
 	var packJSONInfo *structures.FileInfo
 	for _, fi := range p.fileList {
-		match := packJSONPathRegex.MatchString(fi.ResPath)
+		match := utils.PackJSONPathRegex.MatchString(fi.ResPath)
 		if match {
 			packJSONInfo = fi
 			break

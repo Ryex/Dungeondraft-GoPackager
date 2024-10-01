@@ -168,7 +168,7 @@ func (fil FileInfoList) GetRessource(path string) *FileInfo {
 	return nil
 }
 
-func (fil FileInfoList) Find(P func(info *FileInfo) bool) *FileInfo {
+func (fil FileInfoList) Find(P func(fi *FileInfo) bool) *FileInfo {
 	for _, fi := range fil {
 		if P(fi) {
 			return fi
@@ -177,7 +177,7 @@ func (fil FileInfoList) Find(P func(info *FileInfo) bool) *FileInfo {
 	return nil
 }
 
-func (fil FileInfoList) Filter(P func(info *FileInfo) bool) FileInfoList {
+func (fil FileInfoList) Filter(P func(fi *FileInfo) bool) FileInfoList {
 	res := []*FileInfo{}
 	for _, fi := range fil {
 		if P(fi) {
@@ -262,7 +262,7 @@ var ErrBadFileInfoListGlobPattern = errors.New("could not compile glob pattern")
 type FileInfoFilterFunc func(*FileInfo) bool
 
 func (fil FileInfoList) Glob(filter FileInfoFilterFunc, patterns ...string) (FileInfoList, error) {
-	matches := []*FileInfo{}
+	matches := make(map[string]*FileInfo)
 
 	for _, pattern := range patterns {
 		regexpPat, err := GlobToRelPathRegexp(pattern)
@@ -277,12 +277,19 @@ func (fil FileInfoList) Glob(filter FileInfoFilterFunc, patterns ...string) (Fil
 			}
 			relPath := info.CalcRelPath()
 			if regexpPat.MatchString(relPath) {
-				matches = append(matches, info)
+				matches[info.ResPath] = info
 			}
 		}
 	}
 
-	return matches, nil
+	matchesS := make([]*FileInfo, len(matches))
+	i := 0
+	for _, fi := range matches {
+		matchesS[i] = fi
+		i++
+	}
+
+	return matchesS, nil
 }
 
 func (fil FileInfoList) Paths() (paths []string) {
