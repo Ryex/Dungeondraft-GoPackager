@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/sirupsen/logrus"
@@ -196,6 +197,24 @@ func Filter[T any](ts []T, P func(T) bool) []T {
 	return ret
 }
 
+func Any[T any](ts []T, P func(T) bool) bool {
+	for _, t := range ts {
+		if P(t) {
+			return true
+		}
+	}
+	return false
+}
+
+func All[T any](ts []T, P func(T) bool) bool {
+	for _, t := range ts {
+		if !P(t) {
+			return false
+		}
+	}
+	return true
+}
+
 func ListDir(path string) (files []string, dirs []string, errs []error) {
 	paths := []string{path}
 
@@ -230,4 +249,18 @@ func PathIsSub(parent string, sub string) (bool, error) {
 		return true, nil
 	}
 	return false, nil
+}
+
+var (
+	PackJSONPathRegex = regexp.MustCompile(`^res://packs/([\w\-. ]+).json`)
+	IDTrimPrefixRegex = regexp.MustCompile(`^([\w\-. ]+)/`)
+)
+
+func NormalizeResourcePath(resPath string) string {
+	if match := PackJSONPathRegex.MatchString(resPath); match {
+		return "pack.json"
+	}
+	path := strings.TrimPrefix(resPath, "res://packs/")
+	path = IDTrimPrefixRegex.ReplaceAllString(path, "")
+	return filepath.Clean(path)
 }

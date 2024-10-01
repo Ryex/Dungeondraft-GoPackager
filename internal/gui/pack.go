@@ -396,7 +396,7 @@ func (a *App) packPackage(path string, options ddpackage.PackOptions, genThumbna
 		if genThumbnails {
 			taskStr.Set(lang.X("task.genthumbnails.text", "Generating thumbnails ..."))
 			a.packageWatcherIgnoreThumbnails = true
-			err := a.pkg.GenerateThumbnails(func(p float64) {
+			err := a.pkg.GenerateThumbnailsProgress(func(p float64) {
 				progressVal.Set(p)
 			})
 			if err != nil {
@@ -420,7 +420,7 @@ func (a *App) packPackage(path string, options ddpackage.PackOptions, genThumbna
 		}
 
 		taskStr.Set(lang.X("task.package.text", "Packaging resources ..."))
-		err := a.pkg.PackPackage(path, options, func(p float64) {
+		err := a.pkg.PackPackageProgress(path, options, func(p float64) {
 			progressVal.Set(p)
 		})
 		progressDlg.Hide()

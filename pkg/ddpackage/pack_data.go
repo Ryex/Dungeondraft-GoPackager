@@ -128,9 +128,9 @@ func (p *Package) SaveUnpackedWall(resPath string) error {
 		return nil
 	}
 
-	p.log.Infof("%s normalised to %s", resPath, p.NormalizeResourcePath(resPath))
+	p.log.Infof("%s normalised to %s", resPath, utils.NormalizeResourcePath(resPath))
 
-	wallDataPath := filepath.Join(p.unpackedPath, p.NormalizeResourcePath(resPath))
+	wallDataPath := filepath.Join(p.unpackedPath, utils.NormalizeResourcePath(resPath))
 
 	l := p.log.WithField("res", wallDataPath)
 	l.Info("saving wall")
@@ -170,7 +170,7 @@ func (p *Package) SaveUnpackedTileset(resPath string) error {
 		return nil
 	}
 
-	tilesetDataPath := filepath.Join(p.unpackedPath, p.NormalizeResourcePath(resPath))
+	tilesetDataPath := filepath.Join(p.unpackedPath, utils.NormalizeResourcePath(resPath))
 
 	l := p.log.WithField("res", tilesetDataPath)
 	l.Info("saving tileset")

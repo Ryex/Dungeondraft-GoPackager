@@ -198,7 +198,7 @@ func (a *App) extractPackage(path string, options ddpackage.UnpackOptions) {
 	)
 	progressDlg.Show()
 	go func() {
-		err := a.pkg.ExtractPackage(path, options, func(p float64) {
+		err := a.pkg.ExtractPackageProgress(path, options, func(p float64) {
 			log.Info(p)
 			progressVal.Set(p)
 		})
