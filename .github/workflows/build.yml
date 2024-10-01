@@ -52,12 +52,14 @@ jobs:
       - name: Build cli
         run: |
           go build -ldflags "-s -w" ./cmd/dungeondraft-packager-cli
+      - name: List dir
+        run: |
+          ls .
+          ls ./cmd/dungeondraft-packager
       - name: Prep artifacts (windows)
         if: ${{ runner.os == 'windows' }}
         run: |
-          mv cmd/dungeondraft-packager/dungeondraft-packager.exe .
-      - name: List dir
-        run: ls
+          mv "./cmd/dungeondraft-packager/Dungeondraft GoPackager.exe" ./dungeondraft-packager.exe
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
