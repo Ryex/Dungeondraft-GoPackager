@@ -75,9 +75,31 @@ func (p *Package) LoadUnpackedPackJSON(dirPath string) error {
 	return nil
 }
 
+
 // PackPackage packs up a directory into a .dungeondraft_pack file
 // assumes BuildFileList has been called first
-func (p *Package) PackPackage(outDir string, options PackOptions, progressCallbacks ...func(p float64)) (err error) {
+// includes progress callback
+func (p *Package) PackPackageProgress(
+	outDir string,
+	options PackOptions,
+	progressCallback func(p float64),
+) (err error) {
+	return p.packPackage(outDir, options, progressCallback)
+}
+
+// PackPackage packs up a directory into a .dungeondraft_pack file
+// assumes BuildFileList has been called first
+func (p *Package) PackPackage(
+	outDir string,
+	options PackOptions,
+) (err error) {
+	return p.packPackage(outDir, options, nil)
+}
+func (p *Package) packPackage(
+	outDir string,
+	options PackOptions,
+	progressCallback func(p float64),
+) (err error) {
 	if p.mode != PackageModeUnpacked {
 		return ErrPackageNotUnpacked
 	}
@@ -125,7 +147,7 @@ func (p *Package) PackPackage(outDir string, options PackOptions, progressCallba
 		l.WithError(err).Error("can not open package file for writing")
 		return
 	}
-	err = p.writePackage(l, out, progressCallbacks...)
+	err = p.writePackage(l, out, progressCallback)
 	if err != nil {
 		l.WithError(err).Error("failed to write package file")
 		return
@@ -316,7 +338,7 @@ func (p *Package) makeResPath(l logrus.FieldLogger, path string) (string, error)
 	return resPath, nil
 }
 
-func (p *Package) writePackage(l logrus.FieldLogger, out io.WriteSeeker, progressCallbacks ...func(p float64)) (err error) {
+func (p *Package) writePackage(l logrus.FieldLogger, out io.WriteSeeker, progressCallback func(p float64)) (err error) {
 	headers := structures.DefaultPackageHeader()
 	headers.FileCount = uint32(len(p.fileList))
 
@@ -327,7 +349,7 @@ func (p *Package) writePackage(l logrus.FieldLogger, out io.WriteSeeker, progres
 		return
 	}
 
-	err = p.fileList.Write(l, out, p.alignment, progressCallbacks...)
+	err = p.fileList.Write(l, out, p.alignment, progressCallback)
 	if !utils.CheckErrorWrite(l, err) {
 		return
 	}

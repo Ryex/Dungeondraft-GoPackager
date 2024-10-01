@@ -6,6 +6,7 @@ import (
 
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddpackage"
 	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
+	"github.com/schollz/progressbar/v3"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -33,6 +34,8 @@ type GenPackCmd struct {
 
 type GenTumbCmd struct {
 	InputPath string `arg:"" type:"path" help:"the package folder path"`
+
+	Progress bool `default:"true" negatable:"" help:"show progressbar"`
 }
 
 func (gpc *GenPackCmd) Run(ctx *Context) error {
@@ -113,11 +116,21 @@ func (gtc *GenTumbCmd) Run(ctx *Context) error {
 		return errors.New("Failed to build file list")
 	}
 
-	err = pkg.GenerateThumbnails()
+	if gtc.Progress {
+		total := int64(len(pkg.FileList().Filter(func(info *structures.FileInfo) bool {
+			return info.IsTexture()
+		})))
+		bar := progressbar.Default(total, "Generating Thumbnails ...")
+		err = pkg.GenerateThumbnailsProgress(func(p float64) {
+			bar.Set(int(p * float64(total)))
+		})
+	} else {
+		err = pkg.GenerateThumbnails()
+	}
 	if err != nil {
 		l.WithError(err).Error("error generating thumbnails")
 		return err
 	}
-	
+
 	return nil
 }

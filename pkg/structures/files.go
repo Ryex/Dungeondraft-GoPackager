@@ -382,21 +382,20 @@ func (fil FileInfoList) Write(
 	log log.FieldLogger,
 	out io.WriteSeeker,
 	alignment int,
-	progressCallbacks ...func(p float64),
+	progressCallback func(p float64),
 ) error {
-	err := fil.WriteHeaders(log, out, alignment, progressCallbacks...)
+	err := fil.WriteHeaders(log, out, alignment)
 	if err != nil {
 		return err
 	}
 
-	return fil.WriteFiles(log, out, alignment, progressCallbacks...)
+	return fil.WriteFiles(log, out, alignment, progressCallback)
 }
 
 func (fil FileInfoList) WriteHeaders(
 	log log.FieldLogger,
 	out io.WriteSeeker,
 	alignment int,
-	progressCallbacks ...func(p float64),
 ) error {
 	log.Debug("writing headers...")
 	for _, fi := range fil {
@@ -437,7 +436,7 @@ func (fil FileInfoList) WriteFiles(
 	log log.FieldLogger,
 	out io.WriteSeeker,
 	alignment int,
-	progressCallbacks ...func(p float64),
+	progressCallback func(p float64),
 ) error {
 	// alignment
 	curPos, err := utils.Tell(out)
@@ -523,8 +522,8 @@ func (fil FileInfoList) WriteFiles(
 			return err
 		}
 
-		for _, pcb := range progressCallbacks {
-			pcb(float64(i+1) / float64(len(fil)))
+		if progressCallback != nil {
+			progressCallback(float64(i+1) / float64(len(fil)))
 		}
 	}
 
