@@ -78,7 +78,7 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
 			func() {
 				dlg := a.createTagGenDialog()
 				dlg.Show()
-		})
+			})
 		leftSplit.Add(generateTageBtn)
 	}
 
@@ -345,8 +345,9 @@ func (a *App) buildTagInfo(info *structures.FileInfo, editable bool) fyne.Canvas
 	var tags []string
 	boundTags := binding.BindStringList(&tags)
 	updateTags := func() {
-		updated := a.pkg.Tags().TagsFor(info.RelPath).AsSlice()
-		boundTags.Set(updated)
+		tags = a.pkg.Tags().TagsFor(info.RelPath).AsSlice()
+		slices.Sort(tags)
+		boundTags.Reload()
 		log.Infof("tags for %s: %s", info.ResPath, spew.Sdump(tags))
 	}
 	updateTags()

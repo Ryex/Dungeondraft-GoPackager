@@ -1,6 +1,8 @@
 package gui
 
 import (
+	"slices"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
@@ -36,12 +38,15 @@ func (a *App) createTagSetsDialog(editable bool) dialog.Dialog {
 		if ts != nil {
 			updated = ts.AsSlice()
 		}
-		boundTags.Set(updated)
+		slices.Sort(updated)
+		tags = updated
+		boundTags.Reload()
 	}
 
 	updateSets := func() {
-		updated := a.pkg.Tags().AllSets()
-		boundTagSets.Set(updated)
+		tagSets = a.pkg.Tags().AllSets()
+		slices.Sort(tagSets)
+		boundTagSets.Reload()
 	}
 	updateSets()
 
