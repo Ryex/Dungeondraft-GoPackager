@@ -104,13 +104,16 @@ func NewPackJSONDialog(
 func (dlg *PackJSONDialog) buildUI() {
 	IDLbl := widget.NewLabel(lang.X("packJson.id.label", "ID"))
 	IDEntry := widget.NewEntryWithData(binding.BindString(&dlg.ID))
+	IDEntry.Validator = nil
 
 	nameLbl := widget.NewLabel(lang.X("packJson.name.label", "Name"))
 	nameEntry := widget.NewEntryWithData(binding.BindString(&dlg.Name))
+	nameEntry.Validator = nil
 	nameEntry.SetPlaceHolder(lang.X("packJson.name.placeholder", "Package name"))
 
 	authorLbl := widget.NewLabel(lang.X("packJson.author.label", "Author"))
 	authorEntry := widget.NewEntryWithData(binding.BindString(&dlg.Author))
+	authorEntry.Validator = nil
 	authorEntry.SetPlaceHolder(lang.X("packJson.author.placeholder", "Package author"))
 
 	versionLbl := widget.NewLabel(lang.X("packJson.version.label", "Version"))
@@ -140,6 +143,7 @@ func (dlg *PackJSONDialog) buildUI() {
 			return words, nil
 		},
 	))
+	keywordsEntry.Validator = nil
 	keywordsEntry.SetPlaceHolder(lang.X("packJson.keywords.placeholder", "split keywords with commas"))
 
 	thirdPartyCheck := widget.NewCheck(lang.X("packJson.thirdParty.label", "Allow 3rd party mapping software to use this pack"), func(checked bool) {

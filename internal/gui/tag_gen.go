@@ -110,16 +110,16 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 		stripTagSetPrefix     = true
 		stripExtraPrefix      = ""
 	)
-	var generateOptions  = &ddpackage.GenerateTagsOptions{
-			BuildGlobalTagSet:      buildGlobalTagSet,
-			GlobalTagSet:           globalTagSet,
-			BuildTagSetsFromPrefix: buildTagSetFrpmPrefix,
-			PrefixSplitMode:        prefixSplitMode,
-			TagSetPrefrixDelimiter:  tagSetPrefixDelimiter,
-			StripTagSetPrefix: stripTagSetPrefix,
-			StripExtraPrefix:  stripExtraPrefix,
+	generateOptions := &ddpackage.GenerateTagsOptions{
+		BuildGlobalTagSet:      buildGlobalTagSet,
+		GlobalTagSet:           globalTagSet,
+		BuildTagSetsFromPrefix: buildTagSetFrpmPrefix,
+		PrefixSplitMode:        prefixSplitMode,
+		TagSetPrefrixDelimiter: tagSetPrefixDelimiter,
+		StripTagSetPrefix:      stripTagSetPrefix,
+		StripExtraPrefix:       stripExtraPrefix,
 	}
-	var generator  = ddpackage.NewGenerateTags(generateOptions)
+	generator := ddpackage.NewGenerateTags(generateOptions)
 
 	boundBuildGlobalTagSet := binding.BindBool(&buildGlobalTagSet)
 	boundGlobalTagSet := binding.BindString(&globalTagSet)
@@ -235,6 +235,7 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 			globalTagSetEntry.Disable()
 		}
 	})
+	globalTagSetEntry.Validator = nil
 	globalTagSetLbl := widget.NewLabel(
 		lang.X("pathGen.globalTagSet.label", "Global Tag Set Name"),
 	)
@@ -258,7 +259,9 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 	)
 
 	prefixDelimStartEntry := widget.NewEntryWithData(boundPFDStart)
+	prefixDelimStartEntry.Validator = nil
 	prefixDelimStopEntry := widget.NewEntryWithData(boundPFDStop)
+	prefixDelimStopEntry.Validator = nil
 	prefixDelimStartLbl := widget.NewLabel(
 		lang.X("pathGen.prefixDelimStart.label", "Start Delimiter"),
 	)
@@ -279,6 +282,7 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 	)
 
 	prefixSepEntry := widget.NewEntryWithData(boundPrefixSplitSeparator)
+	prefixSepEntry.Validator = nil
 	prefixSplitLbl := widget.NewLabel(
 		lang.X("pathGen.prefixSplit.label", "Prefix Separator"),
 	)
@@ -319,6 +323,7 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 	})
 
 	stripExtraPrefixEntry := widget.NewEntryWithData(boundStripExtraPrefix)
+	stripExtraPrefixEntry.Validator = nil
 	stripExtraPrefixLbl := widget.NewLabel(
 		lang.X("pathGen.stripExtraPrefix", "Prefix to strip from the generated tags"),
 	)

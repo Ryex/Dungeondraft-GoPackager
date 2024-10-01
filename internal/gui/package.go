@@ -32,6 +32,7 @@ import (
 func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
 	filter := binding.NewString()
 	filterEntry := widget.NewEntryWithData(filter)
+	filterEntry.Validator = nil
 	filterEntry.SetPlaceHolder(lang.X("tree.filter.placeholder", "Filter with glob (ie. */objects/**)"))
 	filterErrorText := canvas.NewText(lang.X("tree.filter.error", "Bad glob syntax"), theme.Color(theme.ColorNameError))
 	filterErrorText.Hide()

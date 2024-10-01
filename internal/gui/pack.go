@@ -254,6 +254,7 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 	outputPath := binding.BindPreferenceString("pack.outPath", a.app.Preferences())
 
 	outEntry := widget.NewEntryWithData(outputPath)
+	outEntry.Validator = nil
 	outEntry.SetPlaceHolder(lang.X("pack.outPath.placeholder", "Where to save .dungeondraft_pack file"))
 	outBrowseBtn := widget.NewButtonWithIcon(lang.X("browse", "Browse"), theme.FileIcon(), func() {
 		dlg := dialog.NewFolderOpen(func(lu fyne.ListableURI, err error) {
