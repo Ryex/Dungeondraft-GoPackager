@@ -43,7 +43,8 @@ func (pt *PackageTags) Tag(tag string, resources ...string) {
 		s = NewSet[string]()
 		pt.Tags[tag] = s
 	}
-	s.AddM(resources...)
+	relPaths := utils.Map(resources, utils.CleanRelativeResourcePath)
+	s.AddM(relPaths...)
 }
 
 func (pt *PackageTags) AllTags() []string {
@@ -57,17 +58,19 @@ func (pt *PackageTags) AllSets() []string {
 func (pt *PackageTags) Untag(tag string, resources ...string) {
 	s, ok := pt.Tags[tag]
 	if ok {
-		s.RemoveM(resources...)
+		relPaths := utils.Map(resources, utils.CleanRelativeResourcePath)
+		s.RemoveM(relPaths...)
 	}
 }
 
 func (pt *PackageTags) Retag(resource string, tags ...string) {
 	ts := SetFrom(tags)
+	relPath := utils.CleanRelativeResourcePath(resource)
 	for tag := range pt.Tags {
 		if ts.Has(tag) {
-			pt.Tags[tag].Add(resource)
+			pt.Tags[tag].Add(relPath)
 		} else {
-			pt.Tags[tag].Remove(resource)
+			pt.Tags[tag].Remove(relPath)
 		}
 	}
 }
@@ -126,7 +129,9 @@ func (pt *PackageTags) DeleteSet(set string) {
 
 func (pt *PackageTags) TagsFor(resources ...string) *Set[string] {
 	res := NewSet[string]()
-	for i, resource := range resources {
+
+	relPaths := utils.Map(resources, utils.CleanRelativeResourcePath)
+	for i, resource := range relPaths {
 		cur := NewSet[string]()
 		for tag, s := range pt.Tags {
 			if s.Has(resource) {
@@ -143,7 +148,8 @@ func (pt *PackageTags) TagsFor(resources ...string) *Set[string] {
 }
 
 func (pt *PackageTags) ClearTagsFor(resources ...string) {
+	relPaths := utils.Map(resources, utils.CleanRelativeResourcePath)
 	for tag := range pt.Tags {
-		pt.Tags[tag].RemoveM(resources...)
+		pt.Tags[tag].RemoveM(relPaths...)
 	}
 }

@@ -252,8 +252,8 @@ func PathIsSub(parent string, sub string) (bool, error) {
 }
 
 var (
-	PackJSONPathRegex = regexp.MustCompile(`^res://packs/([\w\-. ]+).json`)
-	IDTrimPrefixRegex = regexp.MustCompile(`^([\w\-. ]+)/`)
+	PackJSONPathRegex = regexp.MustCompile(`^res://packs/([^/]+).json`)
+	IDTrimPrefixRegex = regexp.MustCompile(`^([^/]+)/`)
 )
 
 func NormalizeResourcePath(resPath string) string {
@@ -263,4 +263,10 @@ func NormalizeResourcePath(resPath string) string {
 	path := strings.TrimPrefix(resPath, "res://packs/")
 	path = IDTrimPrefixRegex.ReplaceAllString(path, "")
 	return filepath.Clean(path)
+}
+
+func CleanRelativeResourcePath(path string) string {
+	path = strings.TrimPrefix(path, "res://packs/")
+	path = IDTrimPrefixRegex.ReplaceAllString(path, "")
+	return path
 }
