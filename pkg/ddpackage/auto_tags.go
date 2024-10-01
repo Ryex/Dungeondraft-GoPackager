@@ -24,7 +24,7 @@ func (p *Package) generateTags(generator *GenerateTags, pcb func(p float64)) {
 		if fi.IsTaggable() {
 			tagsMap := generator.TagsFromPath(fi.CalcRelPath())
 			for tag, sets := range tagsMap {
-				p.Tags().Tag(tag, fi.ResPath)
+				p.Tags().Tag(tag, fi.RelPath)
 				for _, set := range sets.AsSlice() {
 					p.Tags().AddTagToSet(set, tag)
 				}
