@@ -146,9 +146,11 @@ func (gt *GenerateTags) setupTagSetSplitter() {
 	gt.tagSetSplitter = gt.splitStartStopSep
 }
 
-func (gt *GenerateTags) splitSingleSep(part string) (set string, rest string) {
-	set, rest = utils.SplitOne(part, gt.options.TagSetPrefrixDelimiter[0])
-	return
+func (gt *GenerateTags) splitSingleSep(part string) (string, string) {
+	if strings.Contains(part, gt.options.TagSetPrefrixDelimiter[0]) {
+		return utils.SplitOne(part, gt.options.TagSetPrefrixDelimiter[0])
+	}
+	return "", part
 }
 
 func (gt *GenerateTags) splitStartStopSep(part string) (string, string) {
