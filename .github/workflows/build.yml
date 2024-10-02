@@ -105,6 +105,7 @@ jobs:
         run: |
           ls .
           ls ./cmd/dungeondraft-packager
+
       - name: Prep artifacts (windows)
         if: ${{ runner.os == 'windows' }}
         shell: msys2 {0}
@@ -114,14 +115,34 @@ jobs:
           cp "./dungeondraft-packager-cli.exe" ./install
           cp *.md ./install
           cp /ucrt64/bin/libwebp-*.dll ./install
-          cp /ucrt64/bin/libsharpyuv--*.dll ./install
-      - name: Prep artifacts
-        if: ${{ runner.os != 'windows' }}
+          cp /ucrt64/bin/libsharpyuv-*.dll ./install
+          ls -r ./install
+          ldd "./install/Dungeondraft GoPackager.exe"
+
+      - name: Prep artifacts (linux)
+        if: ${{ runner.os == 'Linux' }}
         run: |
           mkdir install
-          cp "./Dungeondraft GoPackager"* ./install
+          tar -xJf "./Dungeondraft GoPackager.tar.xz" -C ./install
+          cp ./dungeondraft-packager* ./install/usr/local/bin
+          sed -i "/install:/install:\n\tinstall -Dm00644 usr/local/bin/$$(Exec)-cli $$(DESTDIR)$$(PREFIX)/bin/$$(Exec)-cli" ./install/Makefile
+          cp *.md ./install
+          ls -r ./install
+          ldd ./install/usr/local/bin/dungeondraft-packager
+
+      - name: Prep artifacts (maOS)
+        if: ${{ runner.os == 'macOS' }}
+        run: |
+          mkdir install
+          cp -r "./Dungeondraft GoPackager.app" ./install
           cp ./dungeondraft-packager* ./install
           cp *.md ./install
+          mkdir "./install/Dungeondraft GoPackager.app/Contents/Frameworks"
+          cp /opt/homebrew/opt/webp/lib/libwebp.7.dylib "./install/Dungeondraft GoPackager.app/Contents/Frameworks"
+          install_name_tool -change /opt/homebrew/opt/webp/lib/libwebp.7.dylib "@executable_path/../Frameworks/libwebp.7.dylib" "./install/Dungeondraft GoPackager.app/Contents/MacOS/dungeondraft-packager"
+          ls ./install
+          ls -r "./install/Dungeondraft GoPackager.app"
+          otool -L "./install/Dungeondraft GoPackager.app/Contents/MacOS/dungeondraft-packager"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
