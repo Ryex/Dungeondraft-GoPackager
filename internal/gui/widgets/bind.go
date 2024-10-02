@@ -7,7 +7,7 @@ import (
 	"fyne.io/fyne/v2/data/binding"
 )
 
-type listerPair struct {
+type listenerPair struct {
 	data     binding.DataItem
 	listener binding.DataListener
 }
@@ -15,7 +15,7 @@ type listerPair struct {
 type binder struct {
 	callback atomic.Pointer[func(binding.DataItem)]
 	lock     sync.RWMutex
-	pair     listerPair // guarded by lock
+	pair     listenerPair // guarded by lock
 }
 
 func (b *binder) Bind(data binding.DataItem) {
@@ -27,7 +27,7 @@ func (b *binder) Bind(data binding.DataItem) {
 		(*f)(data)
 	})
 	data.AddListener(listener)
-	pair := listerPair{
+	pair := listenerPair{
 	  data: data,
 	  listener: listener,
 	}
@@ -56,7 +56,7 @@ func (b *binder) Unbind() {
 
 func(b *binder) unbindLocked() {
   prev := b.pair
-  b.pair = listerPair{nil, nil}
+  b.pair = listenerPair{nil, nil}
   if prev.listener == nil || prev.data == nil {
     return
   }

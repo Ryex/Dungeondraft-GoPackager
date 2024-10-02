@@ -86,12 +86,12 @@ func Listen[T any](data Bound[T], f func(T)) binding.DataListener {
 	return listener
 }
 
-func AddListenerToAll(f func(), items ...binding.DataItem) {
-
+func AddListenerToAll(f func(), items ...binding.DataItem) binding.DataListener {
 	listener := binding.NewDataListener(f)
 	for _, item := range items {
 		item.AddListener(listener)
 	}
+	return listener
 }
 
 func ListenErr[T any](data Bound[T], f func(T), e func(error)) binding.DataListener {
