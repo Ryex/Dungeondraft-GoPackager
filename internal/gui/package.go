@@ -23,6 +23,7 @@ import (
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/bindings"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/widgets"
+	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddimage"
 	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
 	ddcolor "github.com/ryex/dungeondraft-gopackager/pkg/structures/color"
@@ -30,10 +31,11 @@ import (
 )
 
 func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
-	filter := binding.NewString()
+	tree, filter, treeSelected, displayByTag := a.buildPackageTree()
+
 	filterEntry := widget.NewEntryWithData(filter)
 	filterEntry.Validator = nil
-	filterEntry.SetPlaceHolder(lang.X("tree.filter.placeholder", "Filter with glob (ie. */objects/**)"))
+	filterEntry.SetPlaceHolder(lang.X("tree.filter.placeholder.resource", "Filter with glob (ie. */objects/**)"))
 	filterErrorText := canvas.NewText(lang.X("tree.filter.error", "Bad glob syntax"), theme.Color(theme.ColorNameError))
 	filterErrorText.Hide()
 	filterEntry.Validator = func(s string) error {
@@ -46,8 +48,27 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
 		return err
 	}
 
-	tree, treeSelected := a.buildPackageTree(filter)
+	displayByLbl := widget.NewLabel(lang.X("tree.displayBy.label", "Display By"))
 
+	byResouceOption := lang.X("tree.displayby.resource", "Resource")
+	byTagOption := lang.X("tree.displayby.tag", "Tag")
+
+	displayByRadio := widget.NewRadioGroup([]string{byResouceOption, byTagOption}, func(selected string) {
+		if selected == byResouceOption {
+			displayByTag.Set(false)
+			filterEntry.SetPlaceHolder(lang.X("tree.filter.placeholder.resource", "Filter with glob (ie. */objects/**)"))
+		} else {
+			displayByTag.Set(true)
+			filterEntry.SetPlaceHolder(lang.X("tree.filter.placeholder.tags", "Filter by tag name"))
+		}
+	})
+	displayByRadio.Required = true
+	displayByRadio.Horizontal = true
+	displayByRadio.SetSelected(byResouceOption)
+
+	displayByContainer := layouts.NewRightExpandHBox(
+		displayByLbl, displayByRadio,
+	)
 	tagSetsBtn := widget.NewButton(
 		lang.X("tagSetsBtn.text", "Edit Tag Sets"),
 		func() {
@@ -58,8 +79,8 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
 
 	leftSplit := layouts.NewTopExpandVBox(
 		layouts.NewBottomExpandVBox(
-			container.New(
-				layouts.NewRightExpandHBoxLayout(),
+			displayByContainer,
+			layouts.NewRightExpandHBox(
 				widget.NewLabel(lang.X("tree.label", "Resources")),
 				filterEntry,
 			),
@@ -91,13 +112,16 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
 
 	bindings.Listen(treeSelected, func(tni string) {
 		content := func() fyne.CanvasObject {
-			info := a.pkg.FileList().Find(func(fi *structures.FileInfo) bool {
-				return fi.RelPath == tni
-			})
-			if info == nil {
-				return defaultPreview
+			if strings.HasPrefix(tni, "res://") {
+				info := a.pkg.FileList().Find(func(fi *structures.FileInfo) bool {
+					return fi.ResPath == tni
+				})
+				if info == nil {
+					return defaultPreview
+				}
+				return a.buildInfoPane(info, editable)
 			}
-			return a.buildInfoPane(info, editable)
+			return defaultPreview
 		}()
 
 		rightSplit.RemoveAll()
@@ -113,13 +137,17 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
 	return split
 }
 
-func (a *App) buildPackageTree(filter binding.String) (*widget.Tree, binding.String) {
+func (a *App) buildPackageTree() (*widget.Tree, binding.String, binding.String, binding.Bool) {
 	filterFunc := func(fi *structures.FileInfo) bool {
 		return !fi.IsThumbnail() && !strings.HasSuffix(fi.ResPath, ".json")
 	}
 	nodeTree := make(map[string][]string)
 
+	filter := ""
+	boundFilter := binding.BindString(&filter)
 	selected := binding.NewString()
+	byTag := false
+	boundByTag := binding.BindBool(&byTag)
 
 	var tree *widget.Tree
 	tree = widget.NewTree(
@@ -132,13 +160,7 @@ func (a *App) buildPackageTree(filter binding.String) (*widget.Tree, binding.Str
 			}
 		},
 		func(tni widget.TreeNodeID) bool {
-			if a.pkg == nil {
-				return false
-			}
-			info := a.pkg.FileList().Find(func(fi *structures.FileInfo) bool {
-				return fi.RelPath == tni
-			})
-			return info == nil
+			return !strings.HasPrefix(tni, "res://")
 		},
 		func(b bool) fyne.CanvasObject {
 			var icon fyne.CanvasObject
@@ -153,7 +175,7 @@ func (a *App) buildPackageTree(filter binding.String) (*widget.Tree, binding.Str
 			c := obj.(*fyne.Container)
 
 			l := c.Objects[0].(*widget.Label)
-			_, file := filepath.Split(tni)
+			file := filepath.Base(tni)
 			if b {
 				var r fyne.Resource
 				if tree.IsBranchOpen(tni) {
@@ -162,24 +184,35 @@ func (a *App) buildPackageTree(filter binding.String) (*widget.Tree, binding.Str
 					r = theme.FolderIcon()
 				}
 				c.Objects[1].(*widget.Icon).SetResource(r)
-				l.SetText(file + "/")
+				l.SetText(file)
 			} else {
-				c.Objects[1].(*widget.FileIcon).SetURI(storage.NewFileURI(tni))
+				c.Objects[1].(*widget.FileIcon).SetURI(
+					storage.NewFileURI(
+						filepath.Join(a.pkg.UnpackedPath(), utils.NormalizeResourcePath(tni)),
+					))
 				l.SetText(file)
 			}
 		},
 	)
 
+	tree.OnBranchOpened = func(uid widget.TreeNodeID) {
+		log.Infof("node %s opened| children %v", uid, nodeTree[uid])
+	}
+
 	filteredList := func() ([]*structures.FileInfo, error) {
-		val, err := filter.Get()
-		if err != nil {
-			return a.pkg.FileList().Filter(filterFunc), err
+		filtered := a.pkg.FileList().Filter(filterFunc)
+		if filter == "" {
+			return filtered, nil
 		}
-		log.Tracef("filtering tree list with '%s'", val)
-		if val == "" {
-			return a.pkg.FileList().Filter(filterFunc), nil
+		if byTag {
+			return filtered.Filter(func(fi *structures.FileInfo) bool {
+				return utils.Any(a.pkg.Tags().TagsFor(fi.ResPath).AsSlice(), func(tag string) bool {
+					return strings.Contains(strings.ToLower(tag), strings.ToLower(filter))
+				})
+			}), nil
 		}
-		return a.pkg.FileList().Glob(filterFunc, val)
+		log.Tracef("filtering tree list with '%s'", filter)
+		return filtered.Glob(nil, filter)
 	}
 
 	rebuildTree := func() {
@@ -188,18 +221,26 @@ func (a *App) buildPackageTree(filter binding.String) (*widget.Tree, binding.Str
 			log.WithError(err).Error("failed to retrieve filtered file list")
 		}
 		log.Trace("rebuilding tree")
-		nodeTree = buildInfoMaps(fil)
+		if byTag {
+			nodeTree = buildTagMaps(fil, a.pkg.Tags())
+		} else {
+			nodeTree = buildInfoMaps(fil)
+		}
 		tree.Refresh()
 	}
 
-	filter.AddListener(binding.NewDataListener(rebuildTree))
-	a.packageUpdated.AddListener(binding.NewDataListener(rebuildTree))
+	bindings.AddListenerToAll(
+		rebuildTree,
+		boundFilter,
+		boundByTag,
+		a.packageUpdated,
+	)
 
 	tree.OnSelected = func(uid widget.TreeNodeID) {
 		selected.Set(uid)
 	}
 
-	return tree, selected
+	return tree, boundFilter, selected, boundByTag
 }
 
 func (a *App) buildInfoPane(info *structures.FileInfo, editable bool) fyne.CanvasObject {
@@ -672,25 +713,54 @@ func (a *App) saveTilesetMetadata(metaPath string) {
 	})
 }
 
-func buildInfoMaps(infoList []*structures.FileInfo) map[string][]string {
+func nodeID(dir string) string {
+	id := "dir://" + dir
+	if dir == "" {
+		id = binding.DataTreeRootID
+	}
+	return id
+}
+
+func buildInfoMaps(fil structures.FileInfoList) map[string][]string {
 	nodeTree := make(map[string][]string)
-	for _, fi := range infoList {
+	for _, fi := range fil {
 		dir, _ := filepath.Split(fi.RelPath)
 		next := dir[:max(len(dir)-1, 0)]
+		node := nodeID(next)
 		path := fi.RelPath
-		nodeTree[next] = append(nodeTree[next], path)
+		var nodeLeaf string
+		nodeTree[node] = append(nodeTree[node], fi.ResPath)
 		for next != "" {
 			path = next
 			dir, _ = filepath.Split(next)
 			next = dir[:max(len(dir)-1, 0)]
-			if !slices.Contains(nodeTree[next], path) {
-				nodeTree[next] = append(nodeTree[next], path)
+			node = nodeID(next)
+			nodeLeaf = "dir://" + path
+			if !slices.Contains(nodeTree[node], nodeLeaf) {
+				nodeTree[node] = append(nodeTree[node], nodeLeaf)
 			}
-		}
-		if !slices.Contains(nodeTree[next], path) {
-			nodeTree[next] = append(nodeTree[next], path)
 		}
 	}
 
+	return nodeTree
+}
+
+func buildTagMaps(fil structures.FileInfoList, pt *structures.PackageTags) map[string][]string {
+	nodeTree := make(map[string][]string)
+	for _, fi := range fil {
+		if fi.IsTaggable() {
+			tags := pt.TagsFor(fi.ResPath)
+			if tags.Size() == 0 {
+				nodeTree["notag://objects"] = append(nodeTree["notag://objects"], fi.ResPath)
+			} else {
+				for _, tag := range tags.AsSlice() {
+					nodeTree["tag://"+tag] = append(nodeTree["tag://"+tag], fi.ResPath)
+				}
+			}
+		}
+	}
+	nodeTree[binding.DataTreeRootID] = utils.Map(pt.AllTags(), func(tag string) string {
+		return "tag://" + tag
+	})
 	return nodeTree
 }
