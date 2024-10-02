@@ -62,15 +62,16 @@ type FileInfo struct {
 	PngImage []byte
 }
 
-var idTrimPrefixRegex = regexp.MustCompile(`^([\w\-. ]+)/`)
+// var idTrimPrefixRegex = regexp.MustCompile(`^([\w\-. ]+)/`)
 
 func (fi *FileInfo) CalcRelPath() string {
 	var path string
 	if fi.RelPath != "" {
 		path = fi.RelPath
 	} else {
-		path = strings.TrimPrefix(fi.ResPath, "res://packs/")
-		path = idTrimPrefixRegex.ReplaceAllString(path, "")
+		path = utils.CleanRelativeResourcePath(fi.ResPath)
+		// path = strings.TrimPrefix(fi.ResPath, "res://packs/")
+		// path = idTrimPrefixRegex.ReplaceAllString(path, "")
 	}
 	if runtime.GOOS == "windows" {
 		path = strings.ReplaceAll(path, "\\", "/")
@@ -79,7 +80,7 @@ func (fi *FileInfo) CalcRelPath() string {
 }
 
 func (fi *FileInfo) IsMetadata() bool {
-	return !fi.IsData() && !fi.IsTexture()
+	return !fi.IsData() && !fi.IsTexture() && !fi.IsThumbnail()
 }
 
 func (fi *FileInfo) ShouldHaveMetadata() bool {
@@ -329,7 +330,7 @@ func (fil FileInfoList) UpdateThumbnailRefrences() {
 	thumbnailMap := make(map[string]string)
 	for _, fi := range fil {
 		if fi.IsTexture() && fi.ThumbnailPath != "" {
-			thumbnailMap[fi.ThumbnailPath] = fi.ResPath
+			thumbnailMap[fi.ThumbnailResPath] = fi.ResPath
 		}
 	}
 	toRemove := NewSet[string]()

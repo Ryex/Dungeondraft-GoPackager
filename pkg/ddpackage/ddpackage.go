@@ -365,12 +365,12 @@ func (p *Package) NewFileInfo(options NewFileInfoOptions) (*structures.FileInfo,
 		Size:        options.Size,
 	}
 
-	if options.Path != "" && info.IsTexture() && ddimage.PathIsSupportedImage(options.Path) {
+	if options.Path != "" && info.IsTexture() {
 
 		l := p.log.WithField("filePath", options.Path)
 
 		thumbnailDir := filepath.Join(p.unpackedPath, "thumbnails")
-		hash := md5.Sum([]byte(*options.ResPath))
+		hash := md5.Sum([]byte(info.ResPath))
 		thumbnailName := hex.EncodeToString(hash[:]) + ".png"
 		thumbnailPath := filepath.Join(thumbnailDir, thumbnailName)
 		info.ThumbnailPath = thumbnailPath
