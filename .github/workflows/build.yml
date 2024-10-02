@@ -27,6 +27,8 @@ jobs:
         with:
           go-version: ${{ matrix.go-version }}
 
+      - name: Force "autocrlf"
+        run: git config --global core.autocrlf input
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -38,18 +40,65 @@ jobs:
             ~/.cache/go-build
             ~/.cache/fyne-cross
           key: ${{ runner.os }}-build-cache-${{ hashFiles('**/go.sum') }}
+      - name: Setup msys2
+        if: ${{ runner.os == 'Windows' }}
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          install: >-
+            base-devel
+            mingw-w64-ucrt-x86_64-toolchain
+            mingw-w64-ucrt-x86_64-libwebp
+            mingw-w64-ucrt-x86_64-go
+
       - name: Install Build Deps (Linux)
-        if: ${{ runner.os == 'linux' }}
-        run: sudo apt-get install golang gcc libgl1-mesa-dev xorg-dev
+        if: ${{ runner.os == 'Linux' }}
+        run: sudo apt-get install golang gcc libgl1-mesa-dev xorg-dev libwebp-dev
+      - name: Install Build Deps (Macos)
+        if: ${{ runner.os == 'macOS' }}
+        run: brew install webp
+      - name: Install Fyne (windows)
+        if: ${{ runner.os == 'Windows' }}
+        shell: msys2 {0}
+        run: |
+          export GOROOT=/ucrt64/lib/go
+          export GOPATH=/ucrt64
+          go install fyne.io/fyne/v2/cmd/fyne@latest
       - name: Install Fyne
+        if: ${{ runner.os != 'Windows' }}
         run: go install fyne.io/fyne/v2/cmd/fyne@latest
+      - name: install go deps (windows)
+        if: ${{ runner.os == 'Windows' }}
+        shell: msys2 {0}
+        run: |
+          export GOROOT=/ucrt64/lib/go
+          export GOPATH=/ucrt64
+          go mod download
       - name: install go deps
+        if: ${{ runner.os != 'Windows' }}
         run: go mod download
+      - name: Build gui (windows)
+        if: ${{ runner.os == 'Windows' }}
+        shell: msys2 {0}
+        run: |
+          export GOROOT=/ucrt64/lib/go
+          export GOPATH=/ucrt64
+          cp FyneApp.toml ./cmd/dungeondraft-packager
+          fyne package -src ./cmd/dungeondraft-packager --release -appID io.github.ryex.dungondraft-gopackager
       - name: Build gui
+        if: ${{ runner.os != 'Windows' }}
         run: |
           cp FyneApp.toml ./cmd/dungeondraft-packager
           fyne package -src ./cmd/dungeondraft-packager --release -appID io.github.ryex.dungondraft-gopackager
+      - name: Build cli (windows)
+        if: ${{ runner.os == 'Windows' }}
+        shell: msys2 {0}
+        run: |
+          export GOROOT=/ucrt64/lib/go
+          export GOPATH=/ucrt64
+          go build -ldflags "-s -w" ./cmd/dungeondraft-packager-cli
       - name: Build cli
+        if: ${{ runner.os != 'Windows' }}
         run: |
           go build -ldflags "-s -w" ./cmd/dungeondraft-packager-cli
       - name: List dir
@@ -93,4 +142,3 @@ jobs:
             Dungeondraft-GoPackager-Linux.tar.gz
             Dungeondraft-GoPackager-macOS.zip
             Dungeondraft-GoPackager-Windows.zip
-
