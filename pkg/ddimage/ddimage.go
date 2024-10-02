@@ -11,6 +11,7 @@ import (
 	_ "image/jpeg"
 	"image/png"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -21,15 +22,11 @@ import (
 
 	// decode webp format
 	// missing important alpha channel support https://github.com/golang/go/issues/60437
-	// _ "golang.org/x/image/webp"
+	// gowebp "golang.org/x/image/webp"
 
-	// uses libwebp >=1.0.3
-	// replace with
-	// github.com/chirino/webp@8b3bed1ecc92085133c77728637009906734715f
-	// for webp 1.4.0
-	_ "github.com/chai2010/webp"
+	libwebp_decoder "github.com/kolesa-team/go-webp/decoder"
+	libwebp "github.com/kolesa-team/go-webp/webp"
 
-	// "github.com/sunshineplan/imgconv"
 	"github.com/nfnt/resize"
 
 	"github.com/srwiley/oksvg"
@@ -93,12 +90,21 @@ func OpenImage(path string) (image.Image, string, error) {
 	}
 	defer file.Close()
 
-	if filepath.Ext(path) == ".svg" {
+	ext := filepath.Ext(path)
+	switch ext {
+	case ".svg":
 		img, err := ReadSvg(file)
 		if err != nil {
 			return nil, "", err
 		}
 		return img, "svg", nil
+	case ".webp":
+		libimg, liberr := libwebp.Decode(file, &libwebp_decoder.Options{})
+		if liberr != nil {
+			return nil, "", liberr
+		}
+		return libimg, "webp", nil
+
 	}
 	return image.Decode(file)
 }
@@ -135,6 +141,65 @@ func SvgToImage(icon *oksvg.SvgIcon) (image.Image, error) {
 	return rgba, nil
 }
 
+type Model string
+
+const (
+	ModelRGBA    = "rgba"
+	ModelRGBA64  = "rgba64"
+	ModelNRGBA   = "nrgba"
+	ModelNRGBA64 = "nrgba64"
+	ModelAlpha   = "alpha"
+	ModelAlpha16 = "alpha16"
+	ModelGray    = "gray"
+	ModelGray16  = "gray16"
+	ModelYCbCr   = "ycbcr"
+	ModelNYCbCr  = "nycbcra"
+	ModelCMYK    = "cmyk"
+	ModelUnknown = "unknown"
+)
+
+func ColorModel(img image.Image) Model {
+	switch img.ColorModel() {
+	case color.RGBAModel:
+		return ModelRGBA
+	case color.RGBA64Model:
+		return ModelRGBA64
+	case color.NRGBAModel:
+		return ModelNRGBA
+	case color.NRGBA64Model:
+		return ModelNRGBA64
+	case color.AlphaModel:
+		return ModelAlpha
+	case color.Alpha16Model:
+		return ModelAlpha16
+	case color.GrayModel:
+		return ModelGray
+	case color.Gray16Model:
+		return ModelGray16
+	case color.YCbCrModel:
+		return ModelYCbCr
+	case color.NYCbCrAModel:
+		return ModelNYCbCr
+	case color.CMYKModel:
+		return ModelCMYK
+	default:
+		return ModelUnknown
+	}
+}
+
+func ForceNRGBA(img image.Image) image.Image {
+	ni := image.NewNRGBA(img.Bounds())
+	if model := ColorModel(img); model != ModelNRGBA {
+		for x := 0; x < img.Bounds().Dx(); x++ {
+			for y := 0; y < img.Bounds().Dy(); y++ {
+				pix := img.At(x, y)
+				ni.Set(x, y, color.NRGBAModel.Convert(pix))
+			}
+		}
+	}
+	return img
+}
+
 func PngImageBytes(img image.Image, buf *bytes.Buffer) (err error) {
 	w := bufio.NewWriter(buf)
 	err = png.Encode(w, img)
@@ -145,15 +210,42 @@ func BytesToImage(byts []byte) (image.Image, string, error) {
 	return image.Decode(bytes.NewReader(byts))
 }
 
-func ResizeVirticalAndCropWidth(img image.Image, height int, width int) image.Image {
+func Resize(img image.Image, width, height int) image.Image {
+	if width == 0 && height == 0 {
+		return img
+	}
+	if width == 0 {
+		w := float64(height) * float64(img.Bounds().Dx()) / float64(img.Bounds().Dy())
+		width = int(math.Max(1.0, math.Floor(w+0.5)))
+	}
+	if height == 0 {
+		h := float64(width) * float64(img.Bounds().Dy()) / float64(img.Bounds().Dx())
+		width = int(math.Max(1.0, math.Floor(h+0.5)))
+	}
+	return resize.Resize(uint(width), uint(height), img, resize.Lanczos3)
+}
+
+func Crop(img image.Image, rect image.Rectangle) image.Image {
+	imgSub, ok := img.(interface {
+		SubImage(r image.Rectangle) image.Image
+	})
+	if ok {
+		return imgSub.SubImage(rect)
+	}
+	return img
+}
+
+// func Square(img image.Image) image.Image {}
+
+func ResizeVirticalAndCropWidth(img image.Image, height, maxWidth int) image.Image {
 	// resized := imgconv.Resize(img, &imgconv.ResizeOption{Width: 0, Height: height})
-	resized := resize.Resize(uint(width), uint(height), img, resize.Lanczos3)
+	resized := Resize(img, maxWidth, height)
 	resizedWidth := resized.Bounds().Dx()
-	if resizedWidth > width {
-		start := (resizedWidth - width) / 2
+	if resizedWidth > maxWidth {
+		start := (resizedWidth - maxWidth) / 2
 		resized = resized.(interface {
 			SubImage(r image.Rectangle) image.Image
-		}).SubImage(image.Rect(start, 0, start+width, height))
+		}).SubImage(image.Rect(start, 0, start+maxWidth, height))
 	}
 	return resized
 }

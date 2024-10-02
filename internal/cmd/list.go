@@ -74,6 +74,7 @@ func (lsf *ListFilesCmd) Run(ctx *Context) error {
 			fmt.Fprintln(os.Stderr, err)
 		}
 	} else {
+		logrus.Warn("no globs")
 		fileList = fileList.Filter(filterFunc)
 	}
 

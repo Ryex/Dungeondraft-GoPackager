@@ -175,8 +175,6 @@ func (p *Package) ExtractFile(info *structures.FileInfo, outPath string) (string
 	filePath := filepath.Join(outPath, fileNameFull)
 	l = l.WithField("unpackedFile", filePath)
 
-	l.Info("writing file")
-
 	fileExists := utils.FileExists(filePath)
 	if fileExists {
 		if p.unpackOptions.Overwrite {

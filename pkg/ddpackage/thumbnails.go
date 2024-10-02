@@ -46,30 +46,29 @@ func (p *Package) generateThumbnails(progressCallback func(p float64)) error {
 		if info.IsTexture() {
 			p.log.WithField("res", info.ResPath).Trace("generating thumbnail")
 
-			var maxWidth, height int
-			if info.IsTerrain() {
-				maxWidth, height = 160, 160
-			} else if info.IsWall() {
-				maxWidth, height = 228, 32
-			} else if info.IsPath() {
-				maxWidth, height = 228, 48
-			} else {
-				maxWidth, height = 64, 64
-			}
-
-			var image image.Image
+			var img image.Image
+			var err error
 			if info.Image == nil {
-				img, _, err := ddimage.OpenImage(info.Path)
+				img, _, err = ddimage.OpenImage(info.Path)
 				if err != nil {
 					err = errors.Join(err, fmt.Errorf("failed to open %s as an image", info.Path))
 					return err
 				}
-				image = img
 			} else {
-				image = info.Image
+				img = info.Image
 			}
 
-			thumbnail := ddimage.ResizeVirticalAndCropWidth(image, height, maxWidth)
+			var thumbnail image.Image
+
+			if info.IsTerrain() {
+				thumbnail = ddimage.Resize(img, 0, 160)
+			} else if info.IsWall() {
+				thumbnail = ddimage.ResizeVirticalAndCropWidth(img, 32, 228)
+			} else if info.IsPath() {
+				thumbnail = ddimage.ResizeVirticalAndCropWidth(img, 48, 228)
+			} else {
+				thumbnail = ddimage.Resize(img, 0, 64)
+			}
 
 			file, err := os.OpenFile(
 				info.ThumbnailPath,

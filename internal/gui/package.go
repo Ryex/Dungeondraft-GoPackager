@@ -195,10 +195,6 @@ func (a *App) buildPackageTree() (*widget.Tree, binding.String, binding.String, 
 		},
 	)
 
-	tree.OnBranchOpened = func(uid widget.TreeNodeID) {
-		log.Infof("node %s opened| children %v", uid, nodeTree[uid])
-	}
-
 	filteredList := func() ([]*structures.FileInfo, error) {
 		filtered := a.pkg.FileList().Filter(filterFunc)
 		if filter == "" {
@@ -759,7 +755,9 @@ func buildTagMaps(fil structures.FileInfoList, pt *structures.PackageTags) map[s
 			}
 		}
 	}
-	nodeTree[binding.DataTreeRootID] = utils.Map(pt.AllTags(), func(tag string) string {
+	allTags := pt.AllTags()
+	slices.Sort(allTags)
+	nodeTree[binding.DataTreeRootID] = utils.Map(allTags, func(tag string) string {
 		return "tag://" + tag
 	})
 	return nodeTree
