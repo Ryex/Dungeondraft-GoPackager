@@ -206,7 +206,13 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 					widget.NewLabel(lang.X("pathGen.exampleTags.label", "Example Tags")),
 				),
 			),
-			tagsList,
+			container.NewStack(
+				&canvas.Rectangle{
+					FillColor:    theme.Color(theme.ColorNameInputBackground),
+					CornerRadius: 4,
+				},
+				tagsList,
+			),
 		),
 		widget.NewSeparator(),
 		layouts.NewBottomExpandVBox(
@@ -219,7 +225,13 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 					widget.NewLabel(lang.X("pathGen.exampleSets.label", "Example sets tag is in")),
 				),
 			),
-			setsList,
+			container.NewStack(
+				&canvas.Rectangle{
+					FillColor:    theme.Color(theme.ColorNameInputBackground),
+					CornerRadius: 4,
+				},
+				setsList,
+			),
 		),
 	)
 
