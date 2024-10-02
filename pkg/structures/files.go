@@ -6,6 +6,7 @@ import (
 	"image"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"slices"
@@ -331,13 +332,21 @@ func (fil FileInfoList) UpdateThumbnailRefrences() {
 			thumbnailMap[fi.ThumbnailPath] = fi.ResPath
 		}
 	}
+	toRemove := NewSet[string]()
 	for _, fi := range fil {
 		if fi.IsThumbnail() {
 			forRes, ok := thumbnailMap[fi.ResPath]
 			if ok {
 				fi.ThubnailFor = forRes
+			} else {
+				toRemove.Add(fi.ResPath)
 			}
 		}
+	}
+
+	for _, res := range toRemove.AsSlice() {
+		log.Warnf("removing thumbnail %s (does not have a linked texture)", filepath.Base(res))
+		fil.RemoveRes(res)
 	}
 }
 
