@@ -107,17 +107,27 @@ jobs:
           ls ./cmd/dungeondraft-packager
       - name: Prep artifacts (windows)
         if: ${{ runner.os == 'windows' }}
+        shell: msys2 {0}
         run: |
-          mv "./cmd/dungeondraft-packager/Dungeondraft GoPackager.exe" ./dungeondraft-packager.exe
+          mkdir install
+          cp "./cmd/dungeondraft-packager/Dungeondraft GoPackager.exe" ./install
+          cp "./dungeondraft-packager-cli.exe" ./install
+          cp *.md ./install
+          cp /ucrt64/bin/libwebp-*.dll ./install
+          cp /ucrt64/bin/libsharpyuv--*.dll ./install
+      - name: Prep artifacts
+        if: ${{ runner.os != 'windows' }}
+        run: |
+          mkdir install
+          cp "./Dungeondraft GoPackager"* ./install
+          cp ./dungeondraft-packager* ./install
+          cp *.md ./install
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Dungeondraft-GoPackager-${{ runner.os }}
-          path: |
-            dungeondraft-packager*
-            README.md
-            LICENSE.md
-            CHANGELOG.md
+          path: install/**
 
   release:
     needs: build
