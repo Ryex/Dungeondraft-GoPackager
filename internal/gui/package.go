@@ -1,9 +1,9 @@
 package gui
 
 import (
+	"errors"
 	"fmt"
 	"image/color"
-	"math"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -25,6 +25,7 @@ import (
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/widgets"
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddimage"
+	"github.com/ryex/dungeondraft-gopackager/pkg/ddpackage"
 	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
 	ddcolor "github.com/ryex/dungeondraft-gopackager/pkg/structures/color"
 	log "github.com/sirupsen/logrus"
@@ -264,7 +265,10 @@ func (a *App) buildInfoPane(info *structures.FileInfo, editable bool) fyne.Canva
 	}
 
 	tabs.SetTabLocation(container.TabLocationTop)
-	return tabs
+	return container.NewBorder(
+		nil, nil, nil, nil,
+		tabs,
+	)
 }
 
 func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
@@ -272,6 +276,14 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 	if err != nil {
 		log.WithError(err).Errorf("failed to read image data for %s", info.ResPath)
 		return widget.NewLabel(fmt.Sprintf("Failed to read image data for %s", info.ResPath))
+	}
+
+	showThumbnail := binding.NewBool()
+	thumbnailToggle := widgets.NewToggleWithData(showThumbnail)
+	thumbnailLbl := widget.NewLabel(lang.X("preview.thumbnail.toggle", "Show Thumbnail"))
+	thumbToggle := layouts.NewLeftExpandHBox(thumbnailLbl, thumbnailToggle)
+	if !info.IsTexture() {
+		thumbToggle.Hide()
 	}
 
 	path := container.NewStack(
@@ -348,33 +360,73 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 		return content
 	}
 
+	thumbnailErrString := lang.X("preview.noThumbnail", "Thumbnail not generated.")
+	thumbnailErr := binding.BindString(&thumbnailErrString)
+	thumbnailErrObj := container.NewCenter(
+		container.NewStack(
+			&canvas.Rectangle{
+				FillColor:    theme.Color(theme.ColorNameBackground),
+				CornerRadius: 8,
+			},
+			widget.NewLabelWithData(thumbnailErr),
+		),
+	)
+
+	var thumbnail fyne.CanvasObject = thumbnailErrObj
+	if info.ThumbnailResPath != "" {
+		thumbnailData, thumbErr := a.pkg.LoadResource(info.ThumbnailResPath)
+		if thumbErr != nil {
+			if errors.Is(thumbErr, ddpackage.ErrResourceNotFound) {
+				thumbnailErr.Set(lang.X("preview.noThumbnail", "Thumbnail not generated."))
+			} else {
+				thumbnailErr.Set(lang.X("preview.thumbnailError", "Error loading thumbnail.\n{{.Error}}", map[string]any{"Error": thumbErr.Error()}))
+			}
+		} else {
+			thumb, _, thumbErr := ddimage.BytesToImage(thumbnailData)
+			if thumbErr != nil {
+				thumbnailErr.Set(lang.X("preview.thumbnailError", "Error loading thumbnail.\n{{.Error}}", map[string]any{"Error": thumbErr.Error()}))
+			} else {
+				thumbW := canvas.NewImageFromImage(thumb)
+				thumbW.FillMode = canvas.ImageFillOriginal
+				thumbnail = thumbW
+			}
+		}
+	}
+	thumbnail.Hide()
+
 	log.Infof("loaded image for %s", info.ResPath)
 	imgW := canvas.NewImageFromImage(img)
-	height := float32(64)
-	if info.IsTerrain() {
-		height = 160
-	} else if info.IsWall() {
-		height = 32
-	} else if info.IsPath() {
-		height = 48
-	}
-	tmpW := float64(height) * float64(img.Bounds().Dx()) / float64(img.Bounds().Dy())
-	width := float32(math.Max(1.0, math.Floor(tmpW+0.5)))
-	imgW.SetMinSize(fyne.NewSize(width, height))
-	imgW.FillMode = canvas.ImageFillContain
+
+	imgW.FillMode = canvas.ImageFillOriginal
 	imgW.ScaleMode = canvas.ImageScaleFastest
-	content := container.NewPadded(container.New(
-		layouts.NewBottomExpandVBoxLayout(),
+
+	bindings.Listen(showThumbnail, func(show bool) {
+		if show {
+			imgW.Hide()
+			thumbnail.Show()
+		} else {
+			thumbnail.Hide()
+			imgW.Show()
+		}
+	})
+
+	content := container.NewPadded(layouts.NewBottomExpandVBox(
+		thumbToggle,
 		path,
-		container.NewPadded(container.NewStack(
-			bg,
-			container.New(
-				layout.NewCustomPaddedLayout(8, 8, 8, 8),
-				container.NewScroll(
+		container.NewStack(
+			canvas.NewRasterWithPixels(func(x, y, w, h int) color.Color {
+				if ((x/8)+(y/8))%2 == 0 {
+					return color.NRGBA{100, 100, 100, 255}
+				}
+				return color.NRGBA{255, 255, 255, 255}
+			}),
+			container.NewPadded(container.NewScroll(
+				container.NewStack(
 					imgW,
+					thumbnail,
 				),
-			),
-		)),
+			)),
+		),
 	))
 	return content
 }
