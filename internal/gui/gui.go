@@ -85,6 +85,34 @@ func (a *App) Main() {
 	a.window.SetIcon(assets.Icon)
 	a.window.Resize(fyne.NewSize(1200, 800))
 
+	a.window.SetOnDropped(func(_ fyne.Position, u []fyne.URI) {
+		if len(u) > 1 {
+			dialog.ShowInformation(
+				lang.X("tooManyDrops.title", "Too Many Dropped Items"),
+				lang.X("tooManyDrop.message", "DungeonDraft GoPackager does not support dropping multiple items"),
+				a.window,
+			)
+		} else if len(u) == 1 {
+			path := filepath.Clean(u[0].Path())
+			dlg := dialog.NewConfirm(
+				lang.X("dropOpenDialog.title", "Confirm Open Pack"),
+				lang.X(
+					"dropOpenDialog.message",
+					"Do you want to open '{{.Path}}' ?",
+					map[string]string{
+						"Path": path,
+					},
+				),
+				func(confirmed bool) {
+					if confirmed {
+						a.operatingPath.Set(path)
+					}
+				},
+				a.window,
+			)
+			dlg.Show()
+		}
+	})
 	a.buildMainUI()
 	a.setupPathHandler()
 
@@ -251,13 +279,17 @@ func (a *App) buildMainUI() {
 		folderBtn,
 	)
 
-	defaultMainText := canvas.NewText(
-		lang.X("main.defaultText", "Enter a path to get started."),
+	defaultMainText := multilineCanvasText(
+		lang.X(
+			"main.defaultText",
+			"Enter a path to get started.\n"+
+				"You can also drag and drop a resource pack file or unpacked folder.",
+		),
+		28,
+		fyne.TextStyle{Italic: true},
+		fyne.TextAlignCenter,
 		theme.Color(theme.ColorNameForeground),
 	)
-	defaultMainText.Alignment = fyne.TextAlignCenter
-	defaultMainText.TextSize = 28
-	defaultMainText.TextStyle = fyne.TextStyle{Italic: true}
 
 	a.defaultMainContent = container.NewBorder(
 		nil, nil, nil, nil,
