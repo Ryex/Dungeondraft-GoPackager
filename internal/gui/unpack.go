@@ -14,6 +14,7 @@ import (
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	xlayout "fyne.io/x/fyne/layout"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
@@ -150,6 +151,13 @@ func (a *App) setPackContent(pkg *ddpackage.Package) {
 			dlg.Show()
 		},
 	)
+	tagSetsBtn := widget.NewButton(
+		lang.X("unpack.tagSetsBtn.text", "View Tag Sets"),
+		func() {
+			dlg := a.createTagSetsDialog(false)
+			dlg.Show()
+		},
+	)
 
 	extractForm := container.NewVBox(
 		container.New(
@@ -157,12 +165,22 @@ func (a *App) setPackContent(pkg *ddpackage.Package) {
 			outEntry,
 			outBrowseBtn,
 		),
-		container.NewHBox(
-			overwriteCheck,
-			ripTexCheck,
-			thumbnailsCheck,
+		container.New(
+			xlayout.NewHPortion([]float64{20, 80}),
+
+			container.NewVBox(
+				infoBtn,
+				tagSetsBtn,
+			),
+			container.NewVBox(
+				container.NewHBox(
+					overwriteCheck,
+					ripTexCheck,
+					thumbnailsCheck,
+				),
+				extrctBtn,
+			),
 		),
-		container.NewBorder(nil, nil, infoBtn, nil, extrctBtn),
 	)
 
 	a.setMainContent(

@@ -58,6 +58,7 @@ type App struct {
 
 	pkgUpdateCounter int
 	packageUpdated   binding.Int
+
 }
 
 //go:embed translation
