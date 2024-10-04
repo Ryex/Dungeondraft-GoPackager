@@ -108,7 +108,8 @@ func (gtc *GenTumbCmd) Run(ctx *Context) error {
 		return err
 	}
 
-	errs := pkg.BuildFileList()
+	var errs []error
+	errs = pkg.BuildFileList()
 	if len(errs) != 0 {
 		for _, err := range errs {
 			l.WithField("task", "build file list").Errorf("error: %s", err.Error())
@@ -121,15 +122,15 @@ func (gtc *GenTumbCmd) Run(ctx *Context) error {
 			return info.IsTexture()
 		})))
 		bar := progressbar.Default(total, "Generating Thumbnails ...")
-		err = pkg.GenerateThumbnailsProgress(func(p float64) {
+		errs = pkg.GenerateThumbnailsProgress(func(p float64) {
 			bar.Set(int(p * float64(total)))
 		})
 	} else {
-		err = pkg.GenerateThumbnails()
+		errs = pkg.GenerateThumbnails()
 	}
-	if err != nil {
-		l.WithError(err).Error("error generating thumbnails")
-		return err
+	if len(errs) != 0 {
+		l.Error("error generating thumbnails")
+		return errors.Join(errs...)
 	}
 
 	return nil
