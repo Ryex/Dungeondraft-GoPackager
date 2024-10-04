@@ -392,8 +392,8 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 					editPackBtn,
 				),
 				container.NewVBox(
-					tagSetsBtn,
 					generateTageBtn,
+					tagSetsBtn,
 				),
 			),
 			container.NewVBox(
