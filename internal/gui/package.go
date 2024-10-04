@@ -356,7 +356,14 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 	img, _, err := ddimage.BytesToImage(fileData)
 	if err != nil {
 		log.WithError(err).Errorf("failed to decode image for %s", info.ResPath)
-		content := widget.NewLabel(fmt.Sprintf("Failed to decode image for %s", info.ResPath))
+		content := container.NewCenter(
+			widget.NewLabel(
+				fmt.Sprintf(
+					"Failed to decode image for %s\n%s",
+					info.ResPath, err.Error(),
+				),
+			),
+		)
 		return content
 	}
 
@@ -400,6 +407,13 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 	imgW.FillMode = canvas.ImageFillOriginal
 	imgW.ScaleMode = canvas.ImageScaleFastest
 
+	imgContent := container.NewScroll(
+		container.NewStack(
+			container.NewCenter(imgW),
+			container.NewCenter(thumbnail),
+		),
+	)
+
 	bindings.Listen(showThumbnail, func(show bool) {
 		if show {
 			imgW.Hide()
@@ -408,6 +422,7 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 			thumbnail.Hide()
 			imgW.Show()
 		}
+		imgContent.Refresh()
 	})
 
 	content := container.NewPadded(layouts.NewBottomExpandVBox(
@@ -416,16 +431,11 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 		container.NewStack(
 			canvas.NewRasterWithPixels(func(x, y, w, h int) color.Color {
 				if ((x/8)+(y/8))%2 == 0 {
-					return color.NRGBA{100, 100, 100, 255}
+					return color.NRGBA{90, 90, 90, 255}
 				}
-				return color.NRGBA{255, 255, 255, 255}
+				return color.NRGBA{160, 160, 160, 255}
 			}),
-			container.NewPadded(container.NewScroll(
-				container.NewStack(
-					imgW,
-					thumbnail,
-				),
-			)),
+			container.NewPadded(imgContent),
 		),
 	))
 	return content
