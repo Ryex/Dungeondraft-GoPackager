@@ -256,17 +256,21 @@ var (
 	IDTrimPrefixRegex = regexp.MustCompile(`^([^/]+)/`)
 )
 
-func NormalizeResourcePath(resPath string) string {
-	if match := PackJSONPathRegex.MatchString(resPath); match {
+func NormalizeResourcePath(path string) string {
+	if match := PackJSONPathRegex.MatchString(path); match {
 		return "pack.json"
 	}
-	path := strings.TrimPrefix(resPath, "res://packs/")
-	path = IDTrimPrefixRegex.ReplaceAllString(path, "")
+	if strings.HasPrefix(path, "res://") {
+		path = strings.TrimPrefix(path, "res://packs/")
+		path = IDTrimPrefixRegex.ReplaceAllString(path, "")
+	}
 	return filepath.Clean(path)
 }
 
 func CleanRelativeResourcePath(path string) string {
-	path = strings.TrimPrefix(path, "res://packs/")
-	path = IDTrimPrefixRegex.ReplaceAllString(path, "")
+	if strings.HasPrefix(path, "res://") {
+		path = strings.TrimPrefix(path, "res://packs/")
+		path = IDTrimPrefixRegex.ReplaceAllString(path, "")
+	}
 	return path
 }
