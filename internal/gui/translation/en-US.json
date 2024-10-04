@@ -66,7 +66,7 @@
   "pack.success.dlg.title": "Packaging successful",
   "pack.success.dlg.text": "{{.Path}} Packaged to {{.Pack}} successfully",
   "package.tag.delete.title": "Confirm Delete Tag",
-	"package.tag.delete.message": "Do you want to delete the '{{.Tag}}' tag?",
+  "package.tag.delete.message": "Do you want to delete the '{{.Tag}}' tag?",
   "notAPackage.message": "No pack.json at {{.Path}}:\nThis does not appear to be a resource pack.",
   "notAPackage.newPackBtn.text": "Create a pack.json",
   "packJson.id.label": "ID",
