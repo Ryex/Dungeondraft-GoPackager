@@ -1,0 +1,3 @@
+files:
+  - source: /internal/gui/translation/en-US.json
+    translation: /internal/gui/translation/%locale%.json
