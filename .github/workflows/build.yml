@@ -40,49 +40,50 @@ jobs:
             ~/.cache/go-build
             ~/.cache/fyne-cross
           key: ${{ runner.os }}-build-cache-${{ hashFiles('**/go.sum') }}
-      - name: Setup msys2
-        if: ${{ runner.os == 'Windows' }}
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: UCRT64
-          install: >-
-            base-devel
-            mingw-w64-ucrt-x86_64-toolchain
-            mingw-w64-ucrt-x86_64-libwebp
-            mingw-w64-ucrt-x86_64-go
+      # - name: Setup msys2
+      #   if: ${{ runner.os == 'Windows' }}
+      #   uses: msys2/setup-msys2@v2
+      #   with:
+      #     msystem: UCRT64
+      #     install: >-
+      #       base-devel
+      #       mingw-w64-ucrt-x86_64-toolchain
+      #       mingw-w64-ucrt-x86_64-libwebp
+      #       mingw-w64-ucrt-x86_64-go
 
       - name: Install Build Deps (Linux)
         if: ${{ runner.os == 'Linux' }}
-        run: sudo apt-get install golang gcc libgl1-mesa-dev xorg-dev libwebp-dev
-      - name: Install Build Deps (Macos)
-        if: ${{ runner.os == 'macOS' }}
-        run: brew install webp
+        # run: sudo apt-get install golang gcc libgl1-mesa-dev xorg-dev libwebp-dev
+        run: sudo apt-get install golang gcc libgl1-mesa-dev xorg-dev
+      # - name: Install Build Deps (Macos)
+      #   if: ${{ runner.os == 'macOS' }}
+      #   run: brew install webp
       - name: Install Fyne (windows)
         if: ${{ runner.os == 'Windows' }}
-        shell: msys2 {0}
+        # shell: msys2 {0}
         run: |
-          export GOROOT=/ucrt64/lib/go
-          export GOPATH=/ucrt64
+          # export GOROOT=/ucrt64/lib/go
+          # export GOPATH=/ucrt64
           go install fyne.io/fyne/v2/cmd/fyne@latest
       - name: Install Fyne
         if: ${{ runner.os != 'Windows' }}
         run: go install fyne.io/fyne/v2/cmd/fyne@latest
       - name: install go deps (windows)
         if: ${{ runner.os == 'Windows' }}
-        shell: msys2 {0}
+        # shell: msys2 {0}
         run: |
-          export GOROOT=/ucrt64/lib/go
-          export GOPATH=/ucrt64
+          # export GOROOT=/ucrt64/lib/go
+          # export GOPATH=/ucrt64
           go mod download
       - name: install go deps
         if: ${{ runner.os != 'Windows' }}
         run: go mod download
       - name: Build gui (windows)
         if: ${{ runner.os == 'Windows' }}
-        shell: msys2 {0}
+        # shell: msys2 {0}
         run: |
-          export GOROOT=/ucrt64/lib/go
-          export GOPATH=/ucrt64
+          # export GOROOT=/ucrt64/lib/go
+          # export GOPATH=/ucrt64
           cp FyneApp.toml ./cmd/dungeondraft-packager
           fyne package -src ./cmd/dungeondraft-packager --release -appID io.github.ryex.dungondraft-gopackager
       - name: Build gui
@@ -92,10 +93,10 @@ jobs:
           fyne package -src ./cmd/dungeondraft-packager --release -appID io.github.ryex.dungondraft-gopackager
       - name: Build cli (windows)
         if: ${{ runner.os == 'Windows' }}
-        shell: msys2 {0}
+        # shell: msys2 {0}
         run: |
-          export GOROOT=/ucrt64/lib/go
-          export GOPATH=/ucrt64
+          # export GOROOT=/ucrt64/lib/go
+          # export GOPATH=/ucrt64
           go build -ldflags "-s -w" ./cmd/dungeondraft-packager-cli
       - name: Build cli
         if: ${{ runner.os != 'Windows' }}
@@ -108,16 +109,17 @@ jobs:
 
       - name: Prep artifacts (windows)
         if: ${{ runner.os == 'windows' }}
-        shell: msys2 {0}
+        # shell: msys2 {0}
         run: |
           mkdir install
           cp "./cmd/dungeondraft-packager/Dungeondraft GoPackager.exe" ./install
           cp "./dungeondraft-packager-cli.exe" ./install
           cp *.md ./install
-          cp /ucrt64/bin/libwebp-*.dll ./install
-          cp /ucrt64/bin/libsharpyuv-*.dll ./install
+          # cp /ucrt64/bin/libwebp-*.dll ./install
+          # cp /ucrt64/bin/libsharpyuv-*.dll ./install
           ls -r ./install
-          ldd "./install/Dungeondraft GoPackager.exe"
+          # ldd "./install/Dungeondraft GoPackager.exe"
+          # dumpbin /dependents "./install/Dungeondraft GoPackager.exe"
 
       - name: Prep artifacts (linux)
         if: ${{ runner.os == 'Linux' }}
@@ -138,8 +140,8 @@ jobs:
           cp ./dungeondraft-packager* ./install
           cp *.md ./install
           mkdir "./install/Dungeondraft GoPackager.app/Contents/Frameworks"
-          cp /opt/homebrew/opt/webp/lib/libwebp.7.dylib "./install/Dungeondraft GoPackager.app/Contents/Frameworks"
-          install_name_tool -change /opt/homebrew/opt/webp/lib/libwebp.7.dylib "@executable_path/../Frameworks/libwebp.7.dylib" "./install/Dungeondraft GoPackager.app/Contents/MacOS/dungeondraft-packager"
+          # cp /opt/homebrew/opt/webp/lib/libwebp.7.dylib "./install/Dungeondraft GoPackager.app/Contents/Frameworks"
+          # install_name_tool -change /opt/homebrew/opt/webp/lib/libwebp.7.dylib "@executable_path/../Frameworks/libwebp.7.dylib" "./install/Dungeondraft GoPackager.app/Contents/MacOS/dungeondraft-packager"
           ls ./install
           ls -r "./install/Dungeondraft GoPackager.app"
           otool -L "./install/Dungeondraft GoPackager.app/Contents/MacOS/dungeondraft-packager"
