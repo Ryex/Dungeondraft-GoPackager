@@ -12,7 +12,7 @@ import (
 )
 
 var CLI struct {
-	LogLevel string `enum:"debug,info,warn,error" default:"info"`
+	LogLevel string `enum:"debug,info,warn,error" default:"warn"`
 	LogFile  string `short:"L" type:"path" default:"./logs/packager.log"`
 }
 
