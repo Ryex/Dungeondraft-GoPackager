@@ -433,7 +433,7 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 	)
 
 	bindings.Listen(showThumbnail, func(show bool) {
-		if show {
+		if show && info.IsTexture() {
 			imgW.Hide()
 			thumbnail.Show()
 		} else {
