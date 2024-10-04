@@ -345,6 +345,8 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 		stripExtraPrefixLbl, stripExtraPrefixEntry,
 	)
 
+	var genTagsDlg *dialog.CustomDialog
+
 	generateBtn := widget.NewButtonWithIcon(
 		lang.X("pathGen.generateBtl.label", "Generate"),
 		theme.ConfirmIcon(),
@@ -368,6 +370,9 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 				lang.X("pathGen.doneDialog.msg", "Tags have finished generating."),
 				a.window,
 			)
+			doneDlg.SetOnClosed(func() {
+				genTagsDlg.Hide()
+			})
 			doneDlg.Show()
 		},
 	)
@@ -392,7 +397,7 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 		),
 	)
 
-	genTagsDlg := dialog.NewCustom(
+	genTagsDlg = dialog.NewCustom(
 		lang.X("pathGen.dialog.title", "Generate Tags"),
 		lang.X("pathGen.dialog.dismiss", "Close"),
 		content,
