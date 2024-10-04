@@ -163,6 +163,19 @@ func (a *App) setupPackageWatcher() {
 				if !ok {
 					return
 				}
+				if errors.Is(err, fsnotify.ErrEventOverflow) {
+					log.WithError(err).Warn("fsnotify overflow, force updating package")
+					timerLock.Lock()
+					defer timerLock.Unlock()
+					if eventTimer != nil {
+						eventTimer.Stop()
+					}
+					paths.Add(a.pkg.UnpackedPath())
+					eventTimer = time.AfterFunc(
+						2*time.Second,
+						updatePackage,
+					)
+				}
 				log.WithError(err).Warn("filesystem watcher error")
 			}
 		}
@@ -279,10 +292,8 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 	})
 
 	overwriteOption := binding.NewBool()
-	thumbnailsOption := binding.NewBool()
 
 	overwriteCheck := widget.NewCheckWithData(lang.X("pack.option.overwrite.text", "Overwrite existing files"), overwriteOption)
-	thumbnailsCheck := widget.NewCheckWithData(lang.X("pack.option.thumbnails.text", "Generate thumbnails"), thumbnailsOption)
 
 	packBtn := widget.NewButtonWithIcon(lang.X("pack.packBtn.text", "Package"), theme.DownloadIcon(), func() {
 		path, err := outputPath.Get()
@@ -295,14 +306,9 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 			log.WithError(err).Error("error collecting bound overwrite value")
 			return
 		}
-		thumbnails, err := thumbnailsOption.Get()
-		if err != nil {
-			log.WithError(err).Error("error collecting bound thumbnails value")
-			return
-		}
 		a.packPackage(path, ddpackage.PackOptions{
 			Overwrite: overwrite,
-		}, thumbnails)
+		})
 	})
 	editPackBtn := widget.NewButtonWithIcon(
 		lang.X("pack.editPackBtn.text", "Edit settings"),
@@ -347,6 +353,13 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 			dlg.Show()
 		},
 	)
+	thumbnailsBtn := widget.NewButtonWithIcon(
+		lang.X("pack.option.thumbnails.text", "Generate thumbnails"),
+		theme.MediaPhotoIcon(),
+		func() {
+			a.genthumbnails()
+		},
+	)
 
 	packForm := container.NewVBox(
 		container.New(
@@ -354,17 +367,27 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 			outEntry,
 			outBrowseBtn,
 		),
-		container.NewHBox(
-			overwriteCheck,
-			thumbnailsCheck,
+		container.NewBorder(
+			nil, nil,
+			container.NewVBox(
+				thumbnailsBtn,
+				editPackBtn,
+			),
+			container.NewVBox(
+				container.NewVBox(
+					overwriteCheck,
+				),
+				packBtn,
+			),
+			layout.NewSpacer(),
 		),
-		container.NewBorder(nil, nil, editPackBtn, nil, packBtn),
 	)
 
 	a.setMainContent(
 		container.New(
 			layouts.NewBottomExpandVBoxLayout(),
 			packForm,
+			widget.NewSeparator(),
 			split,
 		),
 		func(disable bool) {
@@ -377,7 +400,45 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 	a.disableButtons.Set(false)
 }
 
-func (a *App) packPackage(path string, options ddpackage.PackOptions, genThumbnails bool) {
+func (a *App) genthumbnails() {
+	a.disableButtons.Set(true)
+
+	progressVal := binding.NewFloat()
+	progressBar := widget.NewProgressBarWithData(progressVal)
+	progressDlg := dialog.NewCustomWithoutButtons(
+		lang.X("task.genthumbnails.text", "Generating thumbnails ..."),
+		container.NewPadded(progressBar),
+		a.window,
+	)
+	progressDlg.Show()
+	go func() {
+		a.packageWatcherIgnoreThumbnails = true
+		errs := a.pkg.GenerateThumbnailsProgress(func(p float64) {
+			progressVal.Set(p)
+		})
+		progressDlg.Hide()
+		if len(errs) != 0 {
+			progressDlg.Hide()
+			errDlg := dialog.NewError(
+				errors.Join(append(errs, errors.New(lang.X(
+					"pack.thumbnails.error.text",
+					"Error generating thumbnails for {{.Path}}",
+					map[string]any{
+						"Path": a.pkg.UnpackedPath(),
+					},
+				)))...),
+				a.window,
+			)
+			errDlg.Show()
+			return
+		}
+		a.pkg.UpdateFromPaths([]string{filepath.Join(a.pkg.UnpackedPath(), "thumbnails")})
+		a.packageWatcherIgnoreThumbnails = true
+		a.disableButtons.Set(false)
+	}()
+}
+
+func (a *App) packPackage(path string, options ddpackage.PackOptions) {
 	a.disableButtons.Set(true)
 
 	progressVal := binding.NewFloat()
@@ -394,32 +455,6 @@ func (a *App) packPackage(path string, options ddpackage.PackOptions, genThumbna
 	)
 	progressDlg.Show()
 	go func() {
-		if genThumbnails {
-			taskStr.Set(lang.X("task.genthumbnails.text", "Generating thumbnails ..."))
-			a.packageWatcherIgnoreThumbnails = true
-			err := a.pkg.GenerateThumbnailsProgress(func(p float64) {
-				progressVal.Set(p)
-			})
-			if err != nil {
-				progressDlg.Hide()
-				errDlg := dialog.NewError(
-					errors.Join(err, errors.New(lang.X(
-						"pack.thumbnails.error.text",
-						"Error generating thumbnails for {{.Path}}",
-						map[string]any{
-							"Path": a.pkg.UnpackedPath(),
-						},
-					))),
-					a.window,
-				)
-				errDlg.Show()
-				return
-			}
-			a.pkg.UpdateFromPaths([]string{filepath.Join(a.pkg.UnpackedPath(), "thumbnails")})
-			a.packageWatcherIgnoreThumbnails = true
-			progressVal.Set(1.0)
-		}
-
 		taskStr.Set(lang.X("task.package.text", "Packaging resources ..."))
 		err := a.pkg.PackPackageProgress(path, options, func(p float64) {
 			progressVal.Set(p)
