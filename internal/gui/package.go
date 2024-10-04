@@ -32,11 +32,11 @@ import (
 )
 
 func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
-	tree, filter, treeSelected, displayByTag := a.buildPackageTree()
+	tree, filter, treeSelected, displayByTag := a.buildPackageTree(editable)
 
 	filterEntry := widget.NewEntryWithData(filter)
 	filterEntry.Validator = nil
-	filterEntry.SetPlaceHolder(lang.X("tree.filter.placeholder.resource", "Filter with glob (ie. */objects/**)"))
+	filterEntry.SetPlaceHolder(lang.X("tree.filter.placeholder.resource", "Filter with glob (e.g. */objects/**)"))
 	filterErrorText := canvas.NewText(lang.X("tree.filter.error", "Bad glob syntax"), theme.Color(theme.ColorNameError))
 	filterErrorText.Hide()
 	filterEntry.Validator = func(s string) error {
@@ -57,7 +57,7 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
 	displayByRadio := widget.NewRadioGroup([]string{byResouceOption, byTagOption}, func(selected string) {
 		if selected == byResouceOption {
 			displayByTag.Set(false)
-			filterEntry.SetPlaceHolder(lang.X("tree.filter.placeholder.resource", "Filter with glob (ie. */objects/**)"))
+			filterEntry.SetPlaceHolder(lang.X("tree.filter.placeholder.resource", "Filter with glob (e.g. */objects/**)"))
 		} else {
 			displayByTag.Set(true)
 			filterEntry.SetPlaceHolder(lang.X("tree.filter.placeholder.tags", "Filter by tag name"))
@@ -69,13 +69,6 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
 
 	displayByContainer := layouts.NewRightExpandHBox(
 		displayByLbl, displayByRadio,
-	)
-	tagSetsBtn := widget.NewButton(
-		lang.X("tagSetsBtn.text", "Edit Tag Sets"),
-		func() {
-			dlg := a.createTagSetsDialog(editable)
-			dlg.Show()
-		},
 	)
 
 	leftSplit := layouts.NewTopExpandVBox(
@@ -92,18 +85,7 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
 				container.NewPadded(tree),
 			),
 		),
-		tagSetsBtn,
 	)
-
-	if editable {
-		generateTageBtn := widget.NewButton(
-			lang.X("generateTageBtn.label", "Generate Tags"),
-			func() {
-				dlg := a.createTagGenDialog()
-				dlg.Show()
-			})
-		leftSplit.Add(generateTageBtn)
-	}
 
 	defaultPreview := container.NewCenter(
 		widget.NewLabel(lang.X("preview.defaultText", "Select a resource")),
@@ -138,7 +120,7 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
 	return split
 }
 
-func (a *App) buildPackageTree() (*widget.Tree, binding.String, binding.String, binding.Bool) {
+func (a *App) buildPackageTree(editable bool) (*widget.Tree, binding.String, binding.String, binding.Bool) {
 	filterFunc := func(fi *structures.FileInfo) bool {
 		return !fi.IsThumbnail() && !strings.HasSuffix(fi.ResPath, ".json")
 	}
@@ -164,13 +146,15 @@ func (a *App) buildPackageTree() (*widget.Tree, binding.String, binding.String, 
 			return !strings.HasPrefix(tni, "res://")
 		},
 		func(b bool) fyne.CanvasObject {
-			var icon fyne.CanvasObject
+			var icon, btn fyne.CanvasObject
 			if b {
 				icon = widget.NewIcon(nil)
+				btn = widget.NewButtonWithIcon("template", theme.ErrorIcon(), nil)
 			} else {
 				icon = widget.NewFileIcon(nil)
+				btn = nil
 			}
-			return container.NewBorder(nil, nil, icon, nil, widget.NewLabel("label template"))
+			return container.NewBorder(nil, nil, icon, btn, widget.NewLabel("label template"))
 		},
 		func(tni widget.TreeNodeID, b bool, obj fyne.CanvasObject) {
 			c := obj.(*fyne.Container)
@@ -178,20 +162,54 @@ func (a *App) buildPackageTree() (*widget.Tree, binding.String, binding.String, 
 			l := c.Objects[0].(*widget.Label)
 			file := filepath.Base(tni)
 			if b {
+				icn := c.Objects[1].(*widget.Icon)
+				btn := c.Objects[2].(*widget.Button)
 				var r fyne.Resource
 				if tree.IsBranchOpen(tni) {
 					r = theme.FolderOpenIcon()
 				} else {
 					r = theme.FolderIcon()
 				}
-				c.Objects[1].(*widget.Icon).SetResource(r)
+				icn.SetResource(r)
 				l.SetText(file)
+				if editable && strings.HasPrefix(tni, "tag://") {
+					btn.SetIcon(theme.DeleteIcon())
+					tag := strings.TrimPrefix(tni, "tag://")
+					btn.OnTapped = func() {
+						dialog.ShowConfirm(
+							lang.X("package.tag.delete.title", "Confirm Delete Tag"),
+							lang.X(
+								"package.tag.delete.message",
+								"Do you want to delete the '{{.Tag}}' tag?",
+								map[string]string{
+									"Tag": tag,
+								},
+							),
+							func(confirmed bool) {
+								a.pkg.Tags().DeleteTag(tag)
+								a.pkg.SaveUnpackedTags()
+							},
+							a.window,
+						)
+					}
+					btn.SetText("")
+					btn.Show()
+				} else {
+					btn.Hide()
+				}
 			} else {
-				c.Objects[1].(*widget.FileIcon).SetURI(
-					storage.NewFileURI(
-						filepath.Join(a.pkg.UnpackedPath(), utils.NormalizeResourcePath(tni)),
-					))
-				l.SetText(file)
+				icn := c.Objects[1].(*widget.FileIcon)
+				if strings.HasPrefix(tni, "empty://") {
+					l.TextStyle = fyne.TextStyle{Italic: true}
+					l.SetText(lang.X("tag.enpty", "No resources"))
+				} else {
+					icn.SetURI(
+						storage.NewFileURI(
+							filepath.Join(a.pkg.UnpackedPath(), utils.NormalizeResourcePath(tni)),
+						))
+					l.TextStyle = fyne.TextStyle{}
+					l.SetText(file)
+				}
 			}
 		},
 	)
@@ -219,7 +237,7 @@ func (a *App) buildPackageTree() (*widget.Tree, binding.String, binding.String, 
 		}
 		log.Trace("rebuilding tree")
 		if byTag {
-			nodeTree = buildTagMaps(fil, a.pkg.Tags())
+			nodeTree = buildTagMaps(fil, a.pkg.Tags(), filter)
 		} else {
 			nodeTree = buildInfoMaps(fil)
 		}
@@ -803,7 +821,7 @@ func buildInfoMaps(fil structures.FileInfoList) map[string][]string {
 	return nodeTree
 }
 
-func buildTagMaps(fil structures.FileInfoList, pt *structures.PackageTags) map[string][]string {
+func buildTagMaps(fil structures.FileInfoList, pt *structures.PackageTags, filter string) map[string][]string {
 	nodeTree := make(map[string][]string)
 	for _, fi := range fil {
 		if fi.IsTaggable() {
@@ -819,8 +837,14 @@ func buildTagMaps(fil structures.FileInfoList, pt *structures.PackageTags) map[s
 	}
 	allTags := pt.AllTags()
 	slices.Sort(allTags)
-	nodeTree[binding.DataTreeRootID] = utils.Map(allTags, func(tag string) string {
-		return "tag://" + tag
-	})
+	for _, tag := range allTags {
+		if filter != "" && !strings.Contains(strings.ToLower(tag), strings.ToLower(filter)) {
+			continue
+		}
+		if len(nodeTree["tag://"+tag]) == 0 {
+			nodeTree["tag://"+tag] = append(nodeTree["tag://"+tag], "empty://"+tag)
+		}
+		nodeTree[binding.DataTreeRootID] = append(nodeTree[binding.DataTreeRootID], "tag://"+tag)
+	}
 	return nodeTree
 }

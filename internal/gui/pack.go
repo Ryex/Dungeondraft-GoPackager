@@ -17,6 +17,7 @@ import (
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	xlayout "fyne.io/x/fyne/layout"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/fsnotify/fsnotify"
@@ -360,6 +361,20 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 			a.genthumbnails()
 		},
 	)
+	tagSetsBtn := widget.NewButton(
+		lang.X("pack.tagSetsBtn.text", "Edit Tag Sets"),
+		func() {
+			dlg := a.createTagSetsDialog(true)
+			dlg.Show()
+		},
+	)
+
+	generateTageBtn := widget.NewButton(
+		lang.X("pack.generateTagsBtn.label", "Generate Tags"),
+		func() {
+			dlg := a.createTagGenDialog()
+			dlg.Show()
+		})
 
 	packForm := container.NewVBox(
 		container.New(
@@ -367,11 +382,19 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 			outEntry,
 			outBrowseBtn,
 		),
-		container.NewBorder(
-			nil, nil,
-			container.NewVBox(
-				thumbnailsBtn,
-				editPackBtn,
+		container.New(
+			xlayout.NewHPortion([]float64{40, 60}),
+			container.New(
+				xlayout.NewHPortion([]float64{50, 50}),
+
+				container.NewVBox(
+					thumbnailsBtn,
+					editPackBtn,
+				),
+				container.NewVBox(
+					tagSetsBtn,
+					generateTageBtn,
+				),
 			),
 			container.NewVBox(
 				container.NewVBox(
@@ -379,7 +402,6 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 				),
 				packBtn,
 			),
-			layout.NewSpacer(),
 		),
 	)
 
