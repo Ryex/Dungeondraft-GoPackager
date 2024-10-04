@@ -9,8 +9,8 @@ require (
 	github.com/davecgh/go-spew v1.1.1
 	github.com/dustin/go-humanize v1.0.1
 	github.com/fsnotify/fsnotify v1.7.0
-	github.com/kolesa-team/go-webp v1.0.4
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646
+	github.com/ryex/gowebp v0.0.0-20241003211111-581e98574421
 	github.com/schollz/progressbar/v3 v3.16.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/snowzach/rotatefilehook v0.0.0-20220211133110-53752135082d
