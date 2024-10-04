@@ -24,8 +24,12 @@ import (
 	// missing important alpha channel support https://github.com/golang/go/issues/60437
 	// gowebp "golang.org/x/image/webp"
 
-	libwebp_decoder "github.com/kolesa-team/go-webp/decoder"
-	libwebp "github.com/kolesa-team/go-webp/webp"
+	// libwebp_decoder "github.com/kolesa-team/go-webp/decoder"
+	// libwebp "github.com/kolesa-team/go-webp/webp"
+
+	// libwebp "github.com/bep/gowebp/libwebp"
+	"github.com/ryex/gowebp/libwebp"
+	"github.com/ryex/gowebp/libwebp/webpoptions"
 
 	"github.com/nfnt/resize"
 
@@ -99,11 +103,11 @@ func OpenImage(path string) (image.Image, string, error) {
 		}
 		return img, "svg", nil
 	case ".webp":
-		libimg, liberr := libwebp.Decode(file, &libwebp_decoder.Options{})
-		if liberr != nil {
-			return nil, "", liberr
+		img, err := libwebp.Decode(file, webpoptions.DecodingOptions{})
+		if err != nil {
+			return nil, "", err
 		}
-		return libimg, "webp", nil
+		return img, "webp", nil
 
 	}
 	return image.Decode(file)
@@ -187,7 +191,7 @@ func ColorModel(img image.Image) Model {
 	}
 }
 
-func ForceNRGBA(img image.Image) image.Image {
+func ToNRGBA(img image.Image) image.Image {
 	ni := image.NewNRGBA(img.Bounds())
 	if model := ColorModel(img); model != ModelNRGBA {
 		for x := 0; x < img.Bounds().Dx(); x++ {
@@ -200,54 +204,196 @@ func ForceNRGBA(img image.Image) image.Image {
 	return img
 }
 
+func ToNRGBA64(img image.Image) image.Image {
+	ni := image.NewNRGBA64(img.Bounds())
+	if model := ColorModel(img); model != ModelNRGBA64 {
+		for x := 0; x < img.Bounds().Dx(); x++ {
+			for y := 0; y < img.Bounds().Dy(); y++ {
+				pix := img.At(x, y)
+				ni.Set(x, y, color.NRGBA64Model.Convert(pix))
+			}
+		}
+	}
+	return img
+}
+
+func StripAlpha(img image.Image) image.Image {
+	ni := image.NewNRGBA(img.Bounds())
+	for x := 0; x < img.Bounds().Dx(); x++ {
+		for y := 0; y < img.Bounds().Dy(); y++ {
+			pix := color.NRGBAModel.Convert(img.At(x, y)).(color.NRGBA)
+			pix.A = 255
+			ni.Set(x, y, pix)
+		}
+	}
+	return ni
+}
+
+func TranparentBounds(img image.Image, threshold uint8) image.Rectangle {
+	bounds := img.Bounds()
+	tBounds := image.Rect(bounds.Min.X, bounds.Min.Y, bounds.Max.X, bounds.Max.Y)
+
+	// from the left
+	for x := bounds.Min.X; x < bounds.Max.X; x++ {
+		colAlphaMax := uint8(0)
+		for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+			nrgba := color.NRGBAModel.Convert(img.At(x, y)).(color.NRGBA)
+			if nrgba.A > colAlphaMax {
+				colAlphaMax = nrgba.A
+			}
+		}
+		if colAlphaMax >= threshold {
+			tBounds.Min.X = x
+			// fmt.Println("found left", tBounds.Min.X)
+			break
+		}
+	}
+	// from the right
+	for x := bounds.Max.X - 1; x >= bounds.Min.X; x-- {
+		colAlphaMax := uint8(0)
+		for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+			nrgba := color.NRGBAModel.Convert(img.At(x, y)).(color.NRGBA)
+			if nrgba.A > colAlphaMax {
+				colAlphaMax = nrgba.A
+			}
+		}
+		if colAlphaMax >= threshold {
+			tBounds.Max.X = x
+			// fmt.Println("found right", tBounds.Max.X)
+			break
+		}
+	}
+	// from the top
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		lineAlphaMax := uint8(0)
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			nrgba := color.NRGBAModel.Convert(img.At(x, y)).(color.NRGBA)
+			if nrgba.A > lineAlphaMax {
+				lineAlphaMax = nrgba.A
+			}
+		}
+		if lineAlphaMax >= threshold {
+			tBounds.Min.Y = y
+			// fmt.Println("found top", tBounds.Min.Y)
+			break
+		}
+	}
+	// from the bottom
+	for y := bounds.Max.Y - 1; y >= bounds.Min.Y; y-- {
+		lineAlphaMax := uint8(0)
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			nrgba := color.NRGBAModel.Convert(img.At(x, y)).(color.NRGBA)
+			if nrgba.A > lineAlphaMax {
+				lineAlphaMax = nrgba.A
+			}
+		}
+		if lineAlphaMax >= threshold {
+			tBounds.Max.Y = y
+			// fmt.Println("found bottom", tBounds.Max.Y)
+			break
+		}
+	}
+	return tBounds
+}
+
 func PngImageBytes(img image.Image, buf *bytes.Buffer) (err error) {
 	w := bufio.NewWriter(buf)
-	err = png.Encode(w, img)
+	enc := &png.Encoder{
+		CompressionLevel: png.NoCompression,
+	}
+	err = enc.Encode(w, img)
+	w.Flush()
 	return
+}
+
+func PngDecodeBytes(byts []byte) (image.Image, error) {
+	return png.Decode(bytes.NewReader(byts))
 }
 
 func BytesToImage(byts []byte) (image.Image, string, error) {
 	return image.Decode(bytes.NewReader(byts))
 }
 
-func Resize(img image.Image, width, height int) image.Image {
+var (
+	ResizeLancos2           = resize.Lanczos2
+	ResizeLancos3           = resize.Lanczos3
+	ResizeBicubic           = resize.Bicubic
+	ResizeBilinear          = resize.Bilinear
+	ResizeNearestNeighbor   = resize.NearestNeighbor
+	ResizeMitchellNetravali = resize.MitchellNetravali
+)
+
+func Resize(img image.Image, width, height int, ifunc resize.InterpolationFunction) image.Image {
 	if width == 0 && height == 0 {
 		return img
 	}
 	if width == 0 {
-		w := float64(height) * float64(img.Bounds().Dx()) / float64(img.Bounds().Dy())
+		w := float64(height) * (float64(img.Bounds().Dx()) / float64(img.Bounds().Dy()))
 		width = int(math.Max(1.0, math.Floor(w+0.5)))
 	}
 	if height == 0 {
-		h := float64(width) * float64(img.Bounds().Dy()) / float64(img.Bounds().Dx())
+		h := float64(width) * (float64(img.Bounds().Dy()) / float64(img.Bounds().Dx()))
 		width = int(math.Max(1.0, math.Floor(h+0.5)))
 	}
-	return resize.Resize(uint(width), uint(height), img, resize.Lanczos3)
+	return resize.Resize(uint(width), uint(height), img, ifunc)
 }
 
 func Crop(img image.Image, rect image.Rectangle) image.Image {
-	imgSub, ok := img.(interface {
-		SubImage(r image.Rectangle) image.Image
-	})
-	if ok {
-		return imgSub.SubImage(rect)
+	ni := image.NewNRGBA(image.Rect(0, 0, rect.Dx(), rect.Dy()))
+	for x, i := rect.Min.X, 0; x < rect.Max.X; x, i = x+1, i+1 {
+		for y, j := rect.Min.Y, 0; y < rect.Max.Y; y, j = y+1, j+1 {
+			ni.Set(i, j, color.NRGBAModel.Convert(img.At(x, y)))
+		}
 	}
-	return img
+	return ni
+}
+
+func CropTransparent(img image.Image, minWidth, minHeight int, threshold uint8) image.Image {
+	bounds := TranparentBounds(img, threshold)
+	if minWidth > 0 && bounds.Dx() < minWidth {
+		middle := bounds.Min.X + bounds.Dx()/2
+		bounds.Min.X = max(img.Bounds().Min.X, middle-minWidth/2)
+		bounds.Max.X = min(img.Bounds().Max.X, bounds.Min.X+minWidth)
+	}
+	if minHeight > 0 && bounds.Dy() < minHeight {
+		middle := bounds.Min.Y + bounds.Dy()/2
+		bounds.Min.Y = max(img.Bounds().Min.Y, middle-minHeight/2)
+		bounds.Max.Y = min(img.Bounds().Max.Y, bounds.Min.Y+minHeight)
+	}
+	return Crop(img, bounds)
 }
 
 // func Square(img image.Image) image.Image {}
 
-func ResizeVirticalAndCropWidth(img image.Image, height, maxWidth int) image.Image {
-	// resized := imgconv.Resize(img, &imgconv.ResizeOption{Width: 0, Height: height})
-	resized := Resize(img, maxWidth, height)
-	resizedWidth := resized.Bounds().Dx()
+func ResizeVirticalAndCropWidth(img image.Image, height, maxWidth int, ifunc resize.InterpolationFunction) image.Image {
+	var resized image.Image
+	if img.Bounds().Dy() == height {
+		resized = img
+	} else {
+		resized = Resize(img, 0, height, ifunc)
+	}
+	bounds := resized.Bounds()
+	resizedWidth := bounds.Dx()
 	if resizedWidth > maxWidth {
-		start := (resizedWidth - maxWidth) / 2
-		resized = resized.(interface {
-			SubImage(r image.Rectangle) image.Image
-		}).SubImage(image.Rect(start, 0, start+maxWidth, height))
+		return Crop(resized, image.Rect(bounds.Min.X, bounds.Min.Y, bounds.Min.X+maxWidth, bounds.Max.Y))
 	}
 	return resized
+}
+
+func TerrainThumbnail(img image.Image) image.Image {
+	return StripAlpha(Resize(img, 0, 160, ResizeBicubic))
+}
+
+func WallThumbnail(img image.Image) image.Image {
+	return ResizeVirticalAndCropWidth(CropTransparent(img, 0, 0, 5), 32, 228, ResizeBicubic)
+}
+
+func PathThumbnail(img image.Image) image.Image {
+	return ResizeVirticalAndCropWidth(CropTransparent(img, 0, 0, 5), 48, 228, ResizeBicubic)
+}
+
+func DefaultThumbnail(img image.Image) image.Image {
+	return Resize(img, 0, 64, ResizeBicubic)
 }
 
 func PathIsSupportedImage(path string) bool {
