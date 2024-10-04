@@ -48,7 +48,7 @@
   "unpack.success.dlg.text": "{{.Pack}} extracted to {{.Path}} successfully",
   "package.tags.error": "Failed to read tags",
   "package.metadata.error": "Failed to read metadata",
-  "pack.wait": "Loading unpacked resources from {{.Path}} (building index) ...",
+  "pack.wait": "Chargement des ressources depuis {{.Path}} (construction de l'index)...",
   "pack.buildList.activity": "Loading {{.Path}} ...",
   "pack.refreshBtn.text": "Refresh",
   "pack.outPath.placeholder": "Where to save .dungeondraft_pack file",
