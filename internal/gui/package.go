@@ -278,7 +278,7 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 		return widget.NewLabel(fmt.Sprintf("Failed to read image data for %s", info.ResPath))
 	}
 
-	showThumbnail := binding.NewBool()
+	showThumbnail := binding.BindPreferenceBool("showThumbnails", a.app.Preferences())
 	thumbnailToggle := widgets.NewToggleWithData(showThumbnail)
 	thumbnailLbl := widget.NewLabel(lang.X("preview.thumbnail.toggle", "Show Thumbnail"))
 	thumbToggle := layouts.NewLeftExpandHBox(thumbnailLbl, thumbnailToggle)
