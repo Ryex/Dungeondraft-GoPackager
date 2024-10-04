@@ -12,6 +12,8 @@
 
 GUI and Command-line utilities to pack, unpack, and edit custom assets, and tags for [Dungeondraft](https://dungeondraft.net/)
 
+Contribute translations on [Crowdin](https://crowdin.com/project/dundeondraft-gopackager)
+
 
 ### Instation
 
