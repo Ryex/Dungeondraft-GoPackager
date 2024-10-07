@@ -576,7 +576,7 @@ func (a *App) buildMetadataPane(info *structures.FileInfo, editable bool) fyne.C
 		if info.IsWall() {
 			metaPath := info.MetadataPath
 
-			defaultColor := color.NRGBA{255, 0, 0, 255}
+			defaultColor := color.NRGBA{0, 0, 0, 0}
 			wallData := a.pkg.Walls()
 			if wallData != nil {
 				metaData, ok := (*wallData)[metaPath]
@@ -631,7 +631,7 @@ func (a *App) buildMetadataPane(info *structures.FileInfo, editable bool) fyne.C
 		} else if info.IsTileset() {
 			metaPath := info.MetadataPath
 
-			defaultColor := color.NRGBA{255, 0, 0, 255}
+			defaultColor := color.NRGBA{0, 0, 0, 0}
 			tilesetName := ""
 			tilesetType := structures.TilesetNormal
 
