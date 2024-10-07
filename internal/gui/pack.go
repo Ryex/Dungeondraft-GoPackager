@@ -268,6 +268,7 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 
 	outputPath := binding.BindPreferenceString("pack.outPath", a.app.Preferences())
 
+	outLbl := widget.NewLabel(lang.X("outputPath.label", "Output Path"))
 	outEntry := widget.NewEntryWithData(outputPath)
 	outEntry.Validator = nil
 	outEntry.SetPlaceHolder(lang.X("pack.outPath.placeholder", "Where to save .dungeondraft_pack file"))
@@ -378,9 +379,8 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 		})
 
 	packForm := container.NewVBox(
-		container.New(
-			layouts.NewLeftExpandHBoxLayout(),
-			outEntry,
+		layouts.NewLeftExpandHBox(
+			container.New(layout.NewFormLayout(), outLbl, outEntry),
 			outBrowseBtn,
 		),
 		container.New(
@@ -462,6 +462,14 @@ func (a *App) genthumbnails() {
 }
 
 func (a *App) packPackage(path string, options ddpackage.PackOptions) {
+	if path == "" {
+		dialog.ShowInformation(
+			lang.X("needOutPathDialog.title", "Please Provide an Output Path"),
+			lang.X("newOutPathDialog.message", "The output path can not be empty."),
+			a.window,
+		)
+		return
+	}
 	a.disableButtons.Set(true)
 
 	progressVal := binding.NewFloat()

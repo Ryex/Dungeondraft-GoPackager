@@ -11,6 +11,7 @@ import (
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/lang"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
@@ -83,6 +84,7 @@ func (a *App) setPackContent(pkg *ddpackage.Package) {
 
 	outputPath := binding.BindPreferenceString("unpack.outPath", a.app.Preferences())
 
+	outLbl := widget.NewLabel(lang.X("outputPath.label", "Output Path"))
 	outEntry := widget.NewEntryWithData(outputPath)
 	outEntry.Validator = nil
 	outEntry.SetPlaceHolder(lang.X("unpack.outPath.placeholder", "Where to extract resources"))
@@ -160,9 +162,8 @@ func (a *App) setPackContent(pkg *ddpackage.Package) {
 	)
 
 	extractForm := container.NewVBox(
-		container.New(
-			layouts.NewLeftExpandHBoxLayout(),
-			outEntry,
+		layouts.NewLeftExpandHBox(
+			container.New(layout.NewFormLayout(), outLbl, outEntry),
 			outBrowseBtn,
 		),
 		container.New(
@@ -205,6 +206,14 @@ func (a *App) setPackContent(pkg *ddpackage.Package) {
 }
 
 func (a *App) extractPackage(path string, options ddpackage.UnpackOptions) {
+	if path == "" {
+		dialog.ShowInformation(
+			lang.X("needOutPathDialog.title", "Please Provide an Output Path"),
+			lang.X("newOutPathDialog.message", "The output path can not be empty."),
+			a.window,
+		)
+		return
+	}
 	a.disableButtons.Set(true)
 	progressVal := binding.NewFloat()
 	progressBar := widget.NewProgressBarWithData(progressVal)
