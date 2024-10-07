@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -128,9 +129,9 @@ func (a *App) setupPackageWatcher() {
 		paths = structures.NewSet[string]()
 		if a.packageWatcherIgnoreThumbnails {
 			thumbnailPrefix := filepath.Join(a.pkg.UnpackedPath(), "thumbnails")
-			toUpdate = utils.Filter(toUpdate, func(path string) bool {
+			toUpdate = slices.Collect(utils.Filter(slices.Values(toUpdate), func(path string) bool {
 				return !strings.HasPrefix(path, thumbnailPrefix)
-			})
+			}))
 		}
 		if a.pkg != nil {
 			a.pkg.UpdateFromPaths(toUpdate)

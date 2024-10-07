@@ -2,6 +2,7 @@ package gui
 
 import (
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -134,12 +135,14 @@ func (dlg *PackJSONDialog) buildUI() {
 			return strings.Join(list, ","), nil
 		},
 		func(csv string) ([]string, error) {
-			words := utils.Map(strings.Split(csv, ","), func(s string) string {
-				return strings.TrimSpace(s)
-			})
-			words = utils.Filter(words, func(s string) bool {
-				return s != ""
-			})
+			words := slices.Collect(utils.Filter(
+				utils.Map(slices.Values(strings.Split(csv, ",")), func(s string) string {
+					return strings.TrimSpace(s)
+				}),
+				func(s string) bool {
+					return s != ""
+				},
+			))
 			return words, nil
 		},
 	))

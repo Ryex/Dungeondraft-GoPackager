@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -58,7 +59,6 @@ type App struct {
 
 	pkgUpdateCounter int
 	packageUpdated   binding.Int
-
 }
 
 //go:embed translation
@@ -417,8 +417,8 @@ func multilineCanvasText(
 	color color.Color,
 ) fyne.CanvasObject {
 	lines := strings.Split(text, "\n")
-	content := container.NewVBox(utils.Map(
-		lines,
+	content := container.NewVBox(slices.Collect(utils.Map(
+		slices.Values(lines),
 		func(line string) fyne.CanvasObject {
 			text := canvas.NewText(line, color)
 			text.TextSize = size
@@ -426,7 +426,7 @@ func multilineCanvasText(
 			text.Alignment = align
 			return text
 		},
-	)...)
+	))...)
 	return content
 }
 

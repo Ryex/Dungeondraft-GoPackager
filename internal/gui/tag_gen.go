@@ -1,6 +1,8 @@
 package gui
 
 import (
+	"fmt"
+	"maps"
 	"os"
 	"slices"
 	"strings"
@@ -15,6 +17,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	xlayout "fyne.io/x/fyne/layout"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/bindings"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
@@ -179,12 +182,29 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 	examplePathEntry.OnChanged = func(path string) {
 		path = strings.ReplaceAll(path, string(os.PathSeparator), "/")
 		parts := strings.Split(path, "/")
+		fmt.Println(parts)
 
 		if len(parts) < 3 {
 			examplePathParts = []string{"textures", "objects", "object.png"}
 			examplePathEntry.SetText(strings.Join(examplePathParts, string(os.PathSeparator)))
 		} else {
+			changed := false
+			if parts[0] != "textures" {
+				parts[0] = "textures"
+				changed = true
+			}
+			if parts[1] != "objects" {
+				parts[1] = "objects"
+				changed = true
+			}
+			if parts[len(parts)-1] != "object.png" {
+				parts[len(parts)-1] = "object.png"
+				changed = true
+			}
 			examplePathParts = parts
+			if changed {
+				examplePathEntry.SetText(strings.Join(examplePathParts, string(os.PathSeparator)))
+			}
 		}
 		updateTagsMap()
 	}
@@ -306,14 +326,68 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 	prefixSplit.Hide()
 
 	bindings.Listen(boundPrefixSplitMode, func(checked bool) {
+		var newParts []string
+		fmt.Println("tagMapBefore")
+		spew.Dump(tagsMap)
 		if checked {
+			newParts = slices.Collect(utils.Map2(maps.All(
+				ddpackage.NewGenerateTags(&ddpackage.GenerateTagsOptions{
+					BuildGlobalTagSet:      buildGlobalTagSet,
+					GlobalTagSet:           globalTagSet,
+					BuildTagSetsFromPrefix: buildTagSetFrpmPrefix,
+					PrefixSplitMode:        false,
+					TagSetPrefrixDelimiter: tagSetPrefixDelimiter,
+					StripTagSetPrefix:      stripTagSetPrefix,
+					StripExtraPrefix:       stripExtraPrefix,
+				}).
+					TagsFromPath(strings.Join(examplePathParts, "/")),
+			), func(tag string, sets *structures.Set[string]) string {
+				return strings.Join(
+					slices.Concat(
+						slices.Collect(utils.Filter(sets.Values(), func(set string) bool {
+							return set != globalTagSet
+						})),
+						[]string{tag},
+					),
+					prefixSplitSeparator,
+				)
+			}))
 			prefixDelim.Hide()
 			prefixSplit.Show()
 		} else {
+			newParts = slices.Collect(utils.Map2(maps.All(
+				ddpackage.NewGenerateTags(&ddpackage.GenerateTagsOptions{
+					BuildGlobalTagSet:      buildGlobalTagSet,
+					GlobalTagSet:           globalTagSet,
+					BuildTagSetsFromPrefix: buildTagSetFrpmPrefix,
+					PrefixSplitMode:        true,
+					TagSetPrefrixDelimiter: [2]string{prefixSplitSeparator, ""},
+					StripTagSetPrefix:      stripTagSetPrefix,
+					StripExtraPrefix:       stripExtraPrefix,
+				}).
+					TagsFromPath(strings.Join(examplePathParts, "/")),
+			), func(tag string, sets *structures.Set[string]) string {
+				return strings.Join(
+					slices.Collect(utils.Map(
+						utils.Filter(sets.Values(), func(set string) bool {
+							return set != globalTagSet
+						}),
+						func(set string) string {
+							return tagSetPrefixDelimiter[0] + set + tagSetPrefixDelimiter[1]
+						})),
+					"",
+				) + tag
+			}))
 			prefixDelim.Show()
 			prefixSplit.Hide()
 		}
+		examplePathParts = slices.Concat([]string{"textures", "objects"}, newParts, []string{"object.png"})
+		fmt.Println("new Parts")
+		spew.Dump(examplePathParts)
+		examplePathEntry.SetText(strings.Join(examplePathParts, string(os.PathSeparator)))
+		updateTagsMap()
 	})
+
 	stripPrefixFromTagCheck := widget.NewCheckWithData(
 		lang.X("pathGen.stripPrefixFromTagCheck.label", "Strip tag set prefix from generated tag"),
 		boundStripTagSetPrefix,

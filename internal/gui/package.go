@@ -221,7 +221,7 @@ func (a *App) buildPackageTree(editable bool) (*widget.Tree, binding.String, bin
 		}
 		if byTag {
 			return filtered.Filter(func(fi *structures.FileInfo) bool {
-				return utils.Any(a.pkg.Tags().TagsFor(fi.ResPath).AsSlice(), func(tag string) bool {
+				return utils.Any(a.pkg.Tags().TagsFor(fi.ResPath).Values(), func(tag string) bool {
 					return strings.Contains(strings.ToLower(tag), strings.ToLower(filter))
 				})
 			}), nil
