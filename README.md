@@ -8,8 +8,6 @@
 
 </div>
 
-
-
 GUI and Command-line utilities to pack, unpack, and edit custom assets, and tags for [Dungeondraft](https://dungeondraft.net/)
 
 Contribute translations on [Crowdin](https://crowdin.com/project/dundeondraft-gopackager)
@@ -31,27 +29,6 @@ Or, if you have [Go](https://go.dev/) installed you can `go install` them yourse
 go install github.com/ryex/dungeondraft-gopackager/cmd/dungeondraft-packager
 go install github.com/ryex/dungeondraft-gopackager/cmd/dungeondraft-packager-cli/
 ```
-
-and the binaries will be complied and installed to your `$GOBIN` path
-
-#### NOTE
-
-This program depends on a binding to libwebp (to go only webp decoder doesn't lke some images)
-if your building from source you'll need to install it
-##### MacOS:
-```bash
-brew install webp
-```
-##### Linux:
-```bash
-sudo apt-get update
-sudo apt-get install libwebp-dev
-```
-##### Windows
-
-
-You'll new to use msys2 and install a toochain, go and one of the `mingw-w64-<system>-x86_64-libwebp` packages to successfully compile
-
 
 ### GUI
 Version 2.0 of Dungeondraft-GoPackager comes with a nice GUI!
