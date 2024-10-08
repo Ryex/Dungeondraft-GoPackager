@@ -19,6 +19,7 @@ type GenPackCmd struct {
 	InputPath string `arg:"" type:"existingdir" help:"the package folder path"`
 	Overwrite bool   `short:"O" help:"overwrite existing pack.json"`
 
+	ID      string `short:"I" help:"Unique ID for the pack, defaults to a randomly generated id"`
 	Name    string `short:"N" help:"name of the package" required:""`
 	Author  string `short:"A" help:"package author" required:""`
 	Version string `short:"V" help:"package version"`
@@ -52,6 +53,7 @@ func (gpc *GenPackCmd) Run(ctx *Context) error {
 
 	err := ddpackage.SavePackageJSON(l, ddpackage.SavePackageJSONOptions{
 		Path:          packDirPath,
+		ID:            gpc.ID,
 		Name:          gpc.Name,
 		Author:        gpc.Author,
 		Version:       gpc.Version,

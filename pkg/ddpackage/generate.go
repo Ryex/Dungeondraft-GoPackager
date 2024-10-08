@@ -97,6 +97,10 @@ func SavePackageJSON(log logrus.FieldLogger, options SavePackageJSONOptions, ove
 		return
 	}
 
+	if options.ID == "" {
+		options.ID = GenPackID()
+	}
+
 	pack := structures.PackageInfo{
 		Name:           options.Name,
 		ID:             options.ID,
