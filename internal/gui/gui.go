@@ -59,6 +59,8 @@ type App struct {
 
 	pkgUpdateCounter int
 	packageUpdated   binding.Int
+
+	lastSelectedTab string
 }
 
 //go:embed translation

@@ -259,33 +259,50 @@ func (a *App) buildPackageTree(editable bool) (*widget.Tree, binding.String, bin
 }
 
 func (a *App) buildInfoPane(info *structures.FileInfo, editable bool) fyne.CanvasObject {
-	tabs := container.NewAppTabs(
-		container.NewTabItemWithIcon(
-			lang.X("preview.tab.resource", "Resource"),
-			theme.FileIcon(),
-			a.buildFilePreview(info)),
+	tabs := make(map[string]*container.TabItem, 3)
+	tabs["Resource"] = container.NewTabItemWithIcon(
+		lang.X("preview.tab.resource", "Resource"),
+		theme.FileIcon(),
+		a.buildFilePreview(info),
 	)
 
+	tabsContainer := container.NewAppTabs(tabs["Resource"])
+
 	if info.IsTaggable() {
-		tabs.Append(container.NewTabItemWithIcon(
+		tabs["Tags"] = container.NewTabItemWithIcon(
 			lang.X("preview.tab.tags", "Tags"),
 			theme.ListIcon(),
 			a.buildTagInfo(info, editable),
-		))
+		)
+		tabsContainer.Append(tabs["Tags"])
 	}
 
 	if info.ShouldHaveMetadata() {
-		tabs.Append(container.NewTabItemWithIcon(
+		tabs["Settings"] = container.NewTabItemWithIcon(
 			lang.X("preview.tab.metadata", "Settings"),
 			theme.ColorPaletteIcon(),
 			a.buildMetadataPane(info, editable),
-		))
+		)
+		tabsContainer.Append(tabs["Settings"])
 	}
 
-	tabs.SetTabLocation(container.TabLocationTop)
+	tabsContainer.SetTabLocation(container.TabLocationTop)
+
+	if tabs[a.lastSelectedTab] != nil {
+		tabsContainer.Select(tabs[a.lastSelectedTab])
+	}
+
+	tabsContainer.OnSelected = func(ti *container.TabItem) {
+		for key := range tabs {
+			if tabs[key] == ti {
+				a.lastSelectedTab = key
+			}
+		}
+	}
+
 	return container.NewBorder(
 		nil, nil, nil, nil,
-		tabs,
+		tabsContainer,
 	)
 }
 

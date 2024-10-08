@@ -84,7 +84,11 @@ func (fi *FileInfo) IsMetadata() bool {
 }
 
 func (fi *FileInfo) ShouldHaveMetadata() bool {
-	return fi.IsWall() || fi.IsTileset()
+	return (fi.IsWall() &&
+		!strings.HasSuffix(
+			strings.TrimSuffix(filepath.Base(fi.ResPath), filepath.Ext(fi.ResPath)),
+			"_end",
+		)) || fi.IsTileset()
 }
 
 func (fi *FileInfo) IsData() bool {
