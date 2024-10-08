@@ -10,6 +10,7 @@ import (
 
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
+	"github.com/tailscale/hujson"
 )
 
 func (p *Package) loadPackedTags(r io.ReadSeeker) error {
@@ -40,6 +41,12 @@ func (p *Package) loadPackedTags(r io.ReadSeeker) error {
 		return errors.Join(err, ErrTagsRead)
 	}
 
+	tagsBytes, err = hujson.Standardize(tagsBytes)
+	if err != nil {
+		p.log.WithError(err).WithField("res", tagsResPath).Error("failed to parse tags json")
+		return errors.Join(err, ErrJSONStandardize, ErrTagsParse)
+	}
+
 	err = json.Unmarshal(tagsBytes, &p.tags)
 	if err != nil {
 		p.log.WithError(err).WithField("res", tagsResPath).Error("failed to parse tags file")
@@ -65,6 +72,13 @@ func (p *Package) loadPackedResourceMetadata(r io.ReadSeeker) error {
 			p.log.WithError(err).WithField("res", fi.ResPath).Error("failed to read data file")
 			return errors.Join(err, ErrMetadataRead, fmt.Errorf("failed to read data file %s", fi.ResPath))
 		}
+
+
+	  fileData, err = hujson.Standardize(fileData)
+	  if err != nil {
+		  p.log.WithError(err).WithField("res", fi.ResPath).Error("failed to parse metadata json")
+		  return errors.Join(err, ErrJSONStandardize)
+	  }
 
 		if fi.IsWallData() {
 			wall := structures.NewPackageWall()
@@ -107,6 +121,13 @@ func (p *Package) loadUnpackedTags() error {
 			WithField("tagsPath", tagsPath).
 			Error("can't read tags file")
 		return errors.Join(err, ErrTagsRead)
+	}
+
+
+	tagsBytes, err = hujson.Standardize(tagsBytes)
+	if err != nil {
+		p.log.WithError(err).WithField("tagsPath", tagsPath).Error("failed to parse tags json")
+		return errors.Join(err, ErrJSONStandardize, ErrTagsParse)
 	}
 
 	err = json.Unmarshal(tagsBytes, &p.tags)
@@ -216,6 +237,13 @@ func (p *Package) loadUnpackedResourceMetadata() error {
 			p.log.WithError(err).WithField("res", fi.ResPath).Error("failed to read data file")
 			return errors.Join(err, ErrMetadataRead, fmt.Errorf("failed to read data file %s", fi.Path))
 		}
+
+
+	  fileData, err = hujson.Standardize(fileData)
+	  if err != nil {
+		  p.log.WithError(err).WithField("res", fi.ResPath).Error("failed to parse metadata json")
+		  return errors.Join(err, ErrJSONStandardize)
+	  }
 
 		if fi.IsWallData() {
 			wall := structures.NewPackageWall()

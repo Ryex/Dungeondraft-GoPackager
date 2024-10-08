@@ -15,6 +15,7 @@ import (
 
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
+	"github.com/tailscale/hujson"
 )
 
 // ExtractPackage extracts the package contents to the filesystem
@@ -284,13 +285,20 @@ func (p *Package) loadPackedPackJSON(r io.ReadSeeker) (err error) {
 	packJSONBytes, err := p.readPackedFileFromPackage(r, packJSONInfo)
 	if err != nil {
 		p.log.WithError(err).WithField("res", packJSONInfo.ResPath).Error("failed to read pack json")
-		return errors.Join(err, errors.New("failed to read pack json"))
+		return errors.Join(err, ErrPackJSONRead)
 	}
+
+	packJSONBytes, err = hujson.Standardize(packJSONBytes)
+	if err != nil {
+		p.log.WithError(err).WithField("res", packJSONInfo.ResPath).Error("failed to parse pack json")
+		return errors.Join(err, ErrJSONStandardize, ErrPackJSONParse)
+	}
+
 
 	err = json.Unmarshal(packJSONBytes, &p.info)
 	if err != nil {
 		p.log.WithError(err).WithField("res", packJSONInfo.ResPath).Error("failed to parse pack json")
-		return errors.Join(err, errors.New("failed to parse pack json"))
+		return errors.Join(err, ErrPackJSONParse)
 	}
 
 	p.id = p.info.ID
