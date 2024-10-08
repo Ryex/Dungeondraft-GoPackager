@@ -13,7 +13,7 @@ GUI and Command-line utilities to pack, unpack, and edit custom assets, and tags
 Contribute translations on [Crowdin](https://crowdin.com/project/dundeondraft-gopackager)
 
 
-### Instation
+### Installation
 
 you can either install the precompiled binaries available on the [release page](https://github.com/Ryex/Dungeondraft-GoPackager/releases)
 
@@ -67,6 +67,6 @@ A valid `pack.json` with a new id and the provided values will be created in the
 
 ### If You Have Issues
 
-If you have issues like the packager not picking up files, try passing in the `-vvv` flags to get info and debug output. Then, makes sure there isn't a structural problem with your package folder.
+If you have issues like the packager not picking up files, try passing in the `--log-level=info` or `--log-level=debug` flags to get info and debug output. Then, makes sure there isn't a structural problem with your package folder.
 
-If you can't find the problem file an issue with the `-vvv` debug output.
+If you can't find the problem file an issue with the `--log-level=debug` debug output.
