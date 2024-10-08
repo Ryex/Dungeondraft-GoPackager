@@ -14,6 +14,7 @@ import (
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
 	"github.com/sirupsen/logrus"
+	"github.com/tailscale/hujson"
 )
 
 func (p *Package) LoadUnpackedPackJSON(dirPath string) error {
@@ -35,6 +36,15 @@ func (p *Package) LoadUnpackedPackJSON(dirPath string) error {
 			WithField("packJSONPath", packJSONPath).
 			Error("can't read pack.json")
 		return errors.Join(err, ErrPackJSONRead)
+	}
+
+	packJSONBytes, err = hujson.Standardize(packJSONBytes)
+	if err != nil {
+		p.log.WithError(err).
+			WithField("path", dirPath).
+			WithField("packJSONPath", packJSONPath).
+			Error("can't parse pack.json")
+		return errors.Join(err, ErrJSONStandardize, ErrPackJSONParse)
 	}
 
 	var pack structures.PackageInfo
