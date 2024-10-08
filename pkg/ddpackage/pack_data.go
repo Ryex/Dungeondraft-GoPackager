@@ -239,6 +239,28 @@ func (p *Package) loadUnpackedResourceMetadata() error {
 	return nil
 }
 
+func (p *Package) SaveUnpackedInfo() error {
+	if p.unpackedPath == "" {
+		return ErrUnsetUnpackedPath
+	}
+
+	packJSONPath := filepath.Join(p.unpackedPath, `pack.json`)
+
+	packJSONBytes, err := json.MarshalIndent(&p.info, "", "  ")
+	if err != nil {
+		p.log.WithError(err).
+			Error("failed to create pack json")
+		return errors.Join(err, errors.New("failed to create pack json"))
+	}
+
+	err = os.WriteFile(packJSONPath, packJSONBytes, 0o644)
+	if err != nil {
+		p.log.WithError(err).WithField("path", packJSONPath).WithField("packJSONPath", packJSONPath).Error("can't write pack.json")
+		return err
+	}
+	return nil
+}
+
 func (p *Package) SaveUnpackedTags() error {
 	if p.unpackedPath == "" {
 		return ErrUnsetUnpackedPath

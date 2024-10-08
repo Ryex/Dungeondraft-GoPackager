@@ -39,7 +39,7 @@ const (
 
 type Package struct {
 	log           logrus.FieldLogger
-	mode          PackageMode
+mode          PackageMode
 	name          string
 	id            string
 	unpackOptions *UnpackOptions
@@ -72,8 +72,43 @@ func (p *Package) ID() string {
 	return p.id
 }
 
+func (p *Package) SetID(id string) {
+	p.id = id
+	p.info.ID = id
+}
+
 func (p *Package) Name() string {
 	return p.name
+}
+
+func (p *Package) SetName(name string) {
+	p.name = name
+	p.info.Name = name
+}
+
+func (p *Package) SetAuthor(author string) {
+	p.info.Author = author
+}
+
+func (p *Package) SetVersion(version string) {
+	p.info.Version = version
+}
+
+func (p *Package) SetKeywords(keywords []string) {
+	p.info.Keywords = keywords
+	p.info.KeywordsRaw = strings.Join(keywords, ",")
+}
+
+func (p *Package) SetAllow3rdParty(allow *bool) {
+	val := new(bool)
+	if allow != nil {
+		*val = *allow
+	}
+	p.info.Allow3rdParty = val
+}
+
+func (p *Package) SetColorOverrides(overrides structures.CustomColorOverrides) {
+	p.info.ColorOverrides = overrides
 }
 
 func (p *Package) UnpackedPath() string {
