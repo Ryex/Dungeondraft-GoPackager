@@ -3,6 +3,7 @@ package structures
 import (
 	"encoding/json"
 	"fmt"
+	"iter"
 )
 
 type Set[T comparable] struct {
@@ -29,6 +30,16 @@ func (s *Set[T]) AsSlice() []T {
 		i++
 	}
 	return res
+}
+
+func (s *Set[T]) Values() iter.Seq[T] {
+	return func(yield func(T) bool) {
+		for d := range s.data {
+			if !yield(d) {
+				return
+			}
+		}
+	}
 }
 
 func (s *Set[T]) Has(d T) bool {

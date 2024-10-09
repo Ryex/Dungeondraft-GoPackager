@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"iter"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -179,26 +180,38 @@ func TruncatePathHumanFriendly(path string, maxLen int) string {
 	return path
 }
 
-func Map[T, U any](ts []T, f func(T) U) []U {
-	us := make([]U, len(ts))
-	for i := range ts {
-		us[i] = f(ts[i])
-	}
-	return us
-}
-
-func Filter[T any](ts []T, P func(T) bool) []T {
-	ret := []T{}
-	for _, t := range ts {
-		if P(t) {
-			ret = append(ret, t)
+func Map[T, U any](ts iter.Seq[T], f func(T) U) iter.Seq[U] {
+	return func(yield func(U) bool) {
+		for e := range ts {
+			if !yield(f(e)) {
+				return
+			}
 		}
 	}
-	return ret
 }
 
-func Any[T any](ts []T, P func(T) bool) bool {
-	for _, t := range ts {
+func Map2[K, V, U any](ts iter.Seq2[K, V], f func(K, V) U) iter.Seq[U] {
+	return func(yield func(U) bool) {
+		for k, v := range ts {
+			if !yield(f(k, v)) {
+				return
+			}
+		}
+	}
+}
+
+func Filter[T any](ts iter.Seq[T], P func(T) bool) iter.Seq[T] {
+	return func(yield func(T) bool) {
+		for e := range ts {
+			if P(e) && !yield(e) {
+				return
+			}
+		}
+	}
+}
+
+func Any[T any](ts iter.Seq[T], P func(T) bool) bool {
+	for t := range ts {
 		if P(t) {
 			return true
 		}
@@ -206,8 +219,8 @@ func Any[T any](ts []T, P func(T) bool) bool {
 	return false
 }
 
-func All[T any](ts []T, P func(T) bool) bool {
-	for _, t := range ts {
+func All[T any](ts iter.Seq[T], P func(T) bool) bool {
+	for t := range ts {
 		if !P(t) {
 			return false
 		}
