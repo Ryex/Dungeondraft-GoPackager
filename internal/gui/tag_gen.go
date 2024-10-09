@@ -1,6 +1,7 @@
 package gui
 
 import (
+	"maps"
 	"os"
 	"slices"
 	"strings"
@@ -135,6 +136,9 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 
 	boundStripExtraPrefix := binding.BindString(&stripExtraPrefix)
 
+	lastSplitSeperator := prefixSplitSeparator
+	lastDelimiter := [2]string{tagSetPrefixDelimiter[0], tagSetPrefixDelimiter[1]}
+
 	updateTagsMap := func() {
 		generateOptions = &ddpackage.GenerateTagsOptions{
 			BuildGlobalTagSet:      buildGlobalTagSet,
@@ -184,10 +188,57 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 			examplePathParts = []string{"textures", "objects", "object.png"}
 			examplePathEntry.SetText(strings.Join(examplePathParts, string(os.PathSeparator)))
 		} else {
+			changed := false
+			if parts[0] != "textures" {
+				parts[0] = "textures"
+				changed = true
+			}
+			if parts[1] != "objects" {
+				parts[1] = "objects"
+				changed = true
+			}
+			if parts[len(parts)-1] != "object.png" {
+				parts[len(parts)-1] = "object.png"
+				changed = true
+			}
 			examplePathParts = parts
+			if changed {
+				examplePathEntry.SetText(strings.Join(examplePathParts, string(os.PathSeparator)))
+			}
 		}
 		updateTagsMap()
 	}
+
+	bindings.Listen(boundPrefixSplitSeparator, func(separator string) {
+		if prefixSplitMode && lastSplitSeperator != "" && prefixSplitSeparator != "" {
+			newParts := slices.Collect(utils.Map(slices.Values(examplePathParts[2:len(examplePathParts)-1]), func(part string) string {
+				return strings.ReplaceAll(part, lastSplitSeperator, prefixSplitSeparator)
+			}))
+
+			examplePathParts = slices.Concat([]string{"textures", "objects"}, newParts, []string{"object.png"})
+			examplePathEntry.SetText(strings.Join(examplePathParts, string(os.PathSeparator)))
+			updateTagsMap()
+			lastSplitSeperator = prefixSplitSeparator
+		}
+	})
+
+	bindings.AddListenerToAll(func() {
+		if !prefixSplitMode &&
+			lastDelimiter[0] != "" && lastDelimiter[1] != "" &&
+			tagSetPrefixDelimiter[0] != "" && tagSetPrefixDelimiter[1] != "" {
+
+			newParts := slices.Collect(utils.Map(slices.Values(examplePathParts[2:len(examplePathParts)-1]), func(part string) string {
+				return strings.ReplaceAll(strings.ReplaceAll(part, lastDelimiter[0], tagSetPrefixDelimiter[0]), lastDelimiter[1], tagSetPrefixDelimiter[1])
+			}))
+			examplePathParts = slices.Concat([]string{"textures", "objects"}, newParts, []string{"object.png"})
+			examplePathEntry.SetText(strings.Join(examplePathParts, string(os.PathSeparator)))
+			updateTagsMap()
+			lastDelimiter = [2]string{tagSetPrefixDelimiter[0], tagSetPrefixDelimiter[1]}
+		}
+	},
+		boundPFDStart,
+		boundPFDStop,
+	)
 
 	examplePathContainer := container.New(
 		layout.NewFormLayout(),
@@ -306,14 +357,64 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 	prefixSplit.Hide()
 
 	bindings.Listen(boundPrefixSplitMode, func(checked bool) {
+		var newParts []string
 		if checked {
+			newParts = slices.Collect(utils.Map2(maps.All(
+				ddpackage.NewGenerateTags(&ddpackage.GenerateTagsOptions{
+					BuildGlobalTagSet:      buildGlobalTagSet,
+					GlobalTagSet:           globalTagSet,
+					BuildTagSetsFromPrefix: buildTagSetFrpmPrefix,
+					PrefixSplitMode:        false,
+					TagSetPrefrixDelimiter: tagSetPrefixDelimiter,
+					StripTagSetPrefix:      stripTagSetPrefix,
+					StripExtraPrefix:       stripExtraPrefix,
+				}).
+					TagsFromPath(strings.Join(examplePathParts, "/")),
+			), func(tag string, sets *structures.Set[string]) string {
+				return strings.Join(
+					slices.Concat(
+						slices.Collect(utils.Filter(sets.Values(), func(set string) bool {
+							return set != globalTagSet
+						})),
+						[]string{tag},
+					),
+					prefixSplitSeparator,
+				)
+			}))
 			prefixDelim.Hide()
 			prefixSplit.Show()
 		} else {
+			newParts = slices.Collect(utils.Map2(maps.All(
+				ddpackage.NewGenerateTags(&ddpackage.GenerateTagsOptions{
+					BuildGlobalTagSet:      buildGlobalTagSet,
+					GlobalTagSet:           globalTagSet,
+					BuildTagSetsFromPrefix: buildTagSetFrpmPrefix,
+					PrefixSplitMode:        true,
+					TagSetPrefrixDelimiter: [2]string{prefixSplitSeparator, ""},
+					StripTagSetPrefix:      stripTagSetPrefix,
+					StripExtraPrefix:       stripExtraPrefix,
+				}).
+					TagsFromPath(strings.Join(examplePathParts, "/")),
+			), func(tag string, sets *structures.Set[string]) string {
+				return strings.Join(
+					slices.Collect(utils.Map(
+						utils.Filter(sets.Values(), func(set string) bool {
+							return set != globalTagSet
+						}),
+						func(set string) string {
+							return tagSetPrefixDelimiter[0] + set + tagSetPrefixDelimiter[1]
+						})),
+					"",
+				) + tag
+			}))
 			prefixDelim.Show()
 			prefixSplit.Hide()
 		}
+		examplePathParts = slices.Concat([]string{"textures", "objects"}, newParts, []string{"object.png"})
+		examplePathEntry.SetText(strings.Join(examplePathParts, string(os.PathSeparator)))
+		updateTagsMap()
 	})
+
 	stripPrefixFromTagCheck := widget.NewCheckWithData(
 		lang.X("pathGen.stripPrefixFromTagCheck.label", "Strip tag set prefix from generated tag"),
 		boundStripTagSetPrefix,
@@ -345,6 +446,8 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 		stripExtraPrefixLbl, stripExtraPrefixEntry,
 	)
 
+	var genTagsDlg *dialog.CustomDialog
+
 	generateBtn := widget.NewButtonWithIcon(
 		lang.X("pathGen.generateBtl.label", "Generate"),
 		theme.ConfirmIcon(),
@@ -368,6 +471,9 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 				lang.X("pathGen.doneDialog.msg", "Tags have finished generating."),
 				a.window,
 			)
+			doneDlg.SetOnClosed(func() {
+				genTagsDlg.Hide()
+			})
 			doneDlg.Show()
 		},
 	)
@@ -392,7 +498,7 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 		),
 	)
 
-	genTagsDlg := dialog.NewCustom(
+	genTagsDlg = dialog.NewCustom(
 		lang.X("pathGen.dialog.title", "Generate Tags"),
 		lang.X("pathGen.dialog.dismiss", "Close"),
 		content,

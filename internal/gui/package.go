@@ -221,7 +221,7 @@ func (a *App) buildPackageTree(editable bool) (*widget.Tree, binding.String, bin
 		}
 		if byTag {
 			return filtered.Filter(func(fi *structures.FileInfo) bool {
-				return utils.Any(a.pkg.Tags().TagsFor(fi.ResPath).AsSlice(), func(tag string) bool {
+				return utils.Any(a.pkg.Tags().TagsFor(fi.ResPath).Values(), func(tag string) bool {
 					return strings.Contains(strings.ToLower(tag), strings.ToLower(filter))
 				})
 			}), nil
@@ -259,33 +259,50 @@ func (a *App) buildPackageTree(editable bool) (*widget.Tree, binding.String, bin
 }
 
 func (a *App) buildInfoPane(info *structures.FileInfo, editable bool) fyne.CanvasObject {
-	tabs := container.NewAppTabs(
-		container.NewTabItemWithIcon(
-			lang.X("preview.tab.resource", "Resource"),
-			theme.FileIcon(),
-			a.buildFilePreview(info)),
+	tabs := make(map[string]*container.TabItem, 3)
+	tabs["Resource"] = container.NewTabItemWithIcon(
+		lang.X("preview.tab.resource", "Resource"),
+		theme.FileIcon(),
+		a.buildFilePreview(info),
 	)
 
+	tabsContainer := container.NewAppTabs(tabs["Resource"])
+
 	if info.IsTaggable() {
-		tabs.Append(container.NewTabItemWithIcon(
+		tabs["Tags"] = container.NewTabItemWithIcon(
 			lang.X("preview.tab.tags", "Tags"),
 			theme.ListIcon(),
 			a.buildTagInfo(info, editable),
-		))
+		)
+		tabsContainer.Append(tabs["Tags"])
 	}
 
 	if info.ShouldHaveMetadata() {
-		tabs.Append(container.NewTabItemWithIcon(
+		tabs["Settings"] = container.NewTabItemWithIcon(
 			lang.X("preview.tab.metadata", "Settings"),
 			theme.ColorPaletteIcon(),
 			a.buildMetadataPane(info, editable),
-		))
+		)
+		tabsContainer.Append(tabs["Settings"])
 	}
 
-	tabs.SetTabLocation(container.TabLocationTop)
+	tabsContainer.SetTabLocation(container.TabLocationTop)
+
+	if tabs[a.lastSelectedTab] != nil {
+		tabsContainer.Select(tabs[a.lastSelectedTab])
+	}
+
+	tabsContainer.OnSelected = func(ti *container.TabItem) {
+		for key := range tabs {
+			if tabs[key] == ti {
+				a.lastSelectedTab = key
+			}
+		}
+	}
+
 	return container.NewBorder(
 		nil, nil, nil, nil,
-		tabs,
+		tabsContainer,
 	)
 }
 
@@ -433,7 +450,7 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 	)
 
 	bindings.Listen(showThumbnail, func(show bool) {
-		if show {
+		if show && info.IsTexture() {
 			imgW.Hide()
 			thumbnail.Show()
 		} else {
@@ -576,7 +593,7 @@ func (a *App) buildMetadataPane(info *structures.FileInfo, editable bool) fyne.C
 		if info.IsWall() {
 			metaPath := info.MetadataPath
 
-			defaultColor := color.NRGBA{255, 0, 0, 255}
+			defaultColor := color.NRGBA{0, 0, 0, 0}
 			wallData := a.pkg.Walls()
 			if wallData != nil {
 				metaData, ok := (*wallData)[metaPath]
@@ -631,7 +648,7 @@ func (a *App) buildMetadataPane(info *structures.FileInfo, editable bool) fyne.C
 		} else if info.IsTileset() {
 			metaPath := info.MetadataPath
 
-			defaultColor := color.NRGBA{255, 0, 0, 255}
+			defaultColor := color.NRGBA{0, 0, 0, 0}
 			tilesetName := ""
 			tilesetType := structures.TilesetNormal
 

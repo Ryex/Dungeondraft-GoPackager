@@ -10,6 +10,7 @@ import (
 
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
+	"github.com/tailscale/hujson"
 )
 
 func (p *Package) loadPackedTags(r io.ReadSeeker) error {
@@ -40,6 +41,12 @@ func (p *Package) loadPackedTags(r io.ReadSeeker) error {
 		return errors.Join(err, ErrTagsRead)
 	}
 
+	tagsBytes, err = hujson.Standardize(tagsBytes)
+	if err != nil {
+		p.log.WithError(err).WithField("res", tagsResPath).Error("failed to parse tags json")
+		return errors.Join(err, ErrJSONStandardize, ErrTagsParse)
+	}
+
 	err = json.Unmarshal(tagsBytes, &p.tags)
 	if err != nil {
 		p.log.WithError(err).WithField("res", tagsResPath).Error("failed to parse tags file")
@@ -65,6 +72,13 @@ func (p *Package) loadPackedResourceMetadata(r io.ReadSeeker) error {
 			p.log.WithError(err).WithField("res", fi.ResPath).Error("failed to read data file")
 			return errors.Join(err, ErrMetadataRead, fmt.Errorf("failed to read data file %s", fi.ResPath))
 		}
+
+
+	  fileData, err = hujson.Standardize(fileData)
+	  if err != nil {
+		  p.log.WithError(err).WithField("res", fi.ResPath).Error("failed to parse metadata json")
+		  return errors.Join(err, ErrJSONStandardize)
+	  }
 
 		if fi.IsWallData() {
 			wall := structures.NewPackageWall()
@@ -107,6 +121,13 @@ func (p *Package) loadUnpackedTags() error {
 			WithField("tagsPath", tagsPath).
 			Error("can't read tags file")
 		return errors.Join(err, ErrTagsRead)
+	}
+
+
+	tagsBytes, err = hujson.Standardize(tagsBytes)
+	if err != nil {
+		p.log.WithError(err).WithField("tagsPath", tagsPath).Error("failed to parse tags json")
+		return errors.Join(err, ErrJSONStandardize, ErrTagsParse)
 	}
 
 	err = json.Unmarshal(tagsBytes, &p.tags)
@@ -217,6 +238,13 @@ func (p *Package) loadUnpackedResourceMetadata() error {
 			return errors.Join(err, ErrMetadataRead, fmt.Errorf("failed to read data file %s", fi.Path))
 		}
 
+
+	  fileData, err = hujson.Standardize(fileData)
+	  if err != nil {
+		  p.log.WithError(err).WithField("res", fi.ResPath).Error("failed to parse metadata json")
+		  return errors.Join(err, ErrJSONStandardize)
+	  }
+
 		if fi.IsWallData() {
 			wall := structures.NewPackageWall()
 			err = json.Unmarshal(fileData, wall)
@@ -236,6 +264,28 @@ func (p *Package) loadUnpackedResourceMetadata() error {
 		}
 	}
 
+	return nil
+}
+
+func (p *Package) SaveUnpackedInfo() error {
+	if p.unpackedPath == "" {
+		return ErrUnsetUnpackedPath
+	}
+
+	packJSONPath := filepath.Join(p.unpackedPath, `pack.json`)
+
+	packJSONBytes, err := json.MarshalIndent(&p.info, "", "  ")
+	if err != nil {
+		p.log.WithError(err).
+			Error("failed to create pack json")
+		return errors.Join(err, errors.New("failed to create pack json"))
+	}
+
+	err = os.WriteFile(packJSONPath, packJSONBytes, 0o644)
+	if err != nil {
+		p.log.WithError(err).WithField("path", packJSONPath).WithField("packJSONPath", packJSONPath).Error("can't write pack.json")
+		return err
+	}
 	return nil
 }
 

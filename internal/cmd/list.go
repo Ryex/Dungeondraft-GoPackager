@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	humanize "github.com/dustin/go-humanize"
@@ -62,7 +63,7 @@ func (lsf *ListFilesCmd) Run(ctx *Context) error {
 				return false
 			}
 			tags := ctx.Pkg.Tags().TagsFor(fi.CalcRelPath())
-			return utils.Any(lsf.ByTag, func(searchTag string) bool {
+			return utils.Any(slices.Values(lsf.ByTag), func(searchTag string) bool {
 				return tags.Has(searchTag)
 			})
 		})

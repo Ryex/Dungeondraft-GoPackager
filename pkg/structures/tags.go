@@ -1,6 +1,8 @@
 package structures
 
 import (
+	"slices"
+
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 )
 
@@ -43,7 +45,7 @@ func (pt *PackageTags) Tag(tag string, resources ...string) {
 		s = NewSet[string]()
 		pt.Tags[tag] = s
 	}
-	relPaths := utils.Map(resources, utils.CleanRelativeResourcePath)
+	relPaths := slices.Collect(utils.Map(slices.Values(resources), utils.CleanRelativeResourcePath))
 	s.AddM(relPaths...)
 }
 
@@ -58,7 +60,7 @@ func (pt *PackageTags) AllSets() []string {
 func (pt *PackageTags) Untag(tag string, resources ...string) {
 	s, ok := pt.Tags[tag]
 	if ok {
-		relPaths := utils.Map(resources, utils.CleanRelativeResourcePath)
+		relPaths := slices.Collect(utils.Map(slices.Values(resources), utils.CleanRelativeResourcePath))
 		s.RemoveM(relPaths...)
 	}
 }
@@ -130,7 +132,7 @@ func (pt *PackageTags) DeleteSet(set string) {
 func (pt *PackageTags) TagsFor(resources ...string) *Set[string] {
 	res := NewSet[string]()
 
-	relPaths := utils.Map(resources, utils.CleanRelativeResourcePath)
+	relPaths := slices.Collect(utils.Map(slices.Values(resources), utils.CleanRelativeResourcePath))
 	for i, resource := range relPaths {
 		cur := NewSet[string]()
 		for tag, s := range pt.Tags {
@@ -148,7 +150,7 @@ func (pt *PackageTags) TagsFor(resources ...string) *Set[string] {
 }
 
 func (pt *PackageTags) ClearTagsFor(resources ...string) {
-	relPaths := utils.Map(resources, utils.CleanRelativeResourcePath)
+	relPaths := slices.Collect(utils.Map(slices.Values(resources), utils.CleanRelativeResourcePath))
 	for tag := range pt.Tags {
 		pt.Tags[tag].RemoveM(relPaths...)
 	}
