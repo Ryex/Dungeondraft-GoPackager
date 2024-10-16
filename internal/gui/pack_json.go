@@ -3,7 +3,6 @@ package gui
 import (
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -118,15 +117,8 @@ func (dlg *PackJSONDialog) buildUI() {
 	authorEntry.SetPlaceHolder(lang.X("packJson.author.placeholder", "Package author"))
 
 	versionLbl := widget.NewLabel(lang.X("packJson.version.label", "Version"))
-	versionEntry := widgets.NewSpinner(1, 10000, 0.1)
-	versionEntry.Bind(bindings.NewReversableMapping(
-		binding.BindString(&dlg.Version),
-		func(ver string) (float64, error) {
-			return strconv.ParseFloat(ver, 64)
-		}, func(val float64) (string, error) {
-			return strconv.FormatFloat(val, 'f', -1, 64), nil
-		},
-	))
+	versionEntry := widgets.NewMajorMinorVersionSpinner(0, 10000, 999, 1)
+	versionEntry.Bind(binding.BindString(&dlg.Version))
 
 	keywordsLbl := widget.NewLabel(lang.X("packJson.keywords.label", "Keywords"))
 	keywordsEntry := widget.NewEntryWithData(bindings.NewReversableMapping(
@@ -168,14 +160,17 @@ func (dlg *PackJSONDialog) buildUI() {
 
 	minRednessLbl := widget.NewLabel(lang.X("packJson.minRedness.label", "Minimum Redness"))
 	minRednessEntry := widgets.NewSpinner(-1, 1, 0.001)
+	minRednessEntry.Precision = 6
 	minRednessEntry.Bind(binding.BindFloat(&dlg.ColorOverrides.MinRedness))
 
 	minSaturationLbl := widget.NewLabel(lang.X("packJson.minSaturation.label", "Minimum Saturation"))
 	minSaturationEntry := widgets.NewSpinner(-1, 1, 0.001)
+	minSaturationEntry.Precision = 6
 	minSaturationEntry.Bind(binding.BindFloat(&dlg.ColorOverrides.MinSaturation))
 
 	rednessToleranceLbl := widget.NewLabel(lang.X("packJson.redTolerance.label", "Redness Tolerance"))
 	rednessToleranceEntry := widgets.NewSpinner(-1, 1, 0.001)
+	rednessToleranceEntry.Precision = 6
 	rednessToleranceEntry.Bind(binding.BindFloat(&dlg.ColorOverrides.RedTolerance))
 
 	customColorsContainer := container.New(
