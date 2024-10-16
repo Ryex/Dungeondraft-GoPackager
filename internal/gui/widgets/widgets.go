@@ -5,6 +5,7 @@ import (
 	"image/color"
 	"math"
 	"strconv"
+	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -12,6 +13,7 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 )
 
 type NumericalEntry struct {
@@ -59,8 +61,9 @@ func (e *NumericalEntry) AsInt() int {
 
 type extendedEntry struct {
 	NumericalEntry
-	onEnter    func()
-	onScrolled func(s *fyne.ScrollEvent)
+	onEnter     func()
+	onScrolled  func(s *fyne.ScrollEvent)
+	onFocusLost func()
 }
 
 func newExtendedEntry() *extendedEntry {
@@ -75,13 +78,20 @@ func (e *extendedEntry) KeyDown(key *fyne.KeyEvent) {
 			e.onEnter()
 		}
 	} else {
-		e.Entry.KeyDown(key)
+		e.NumericalEntry.KeyDown(key)
 	}
 }
 
 func (e *extendedEntry) Scrolled(s *fyne.ScrollEvent) {
 	if e.onScrolled != nil {
 		e.onScrolled(s)
+	}
+}
+
+func (e *extendedEntry) FocusLost() {
+	e.NumericalEntry.FocusLost()
+	if e.onFocusLost != nil {
+		e.onFocusLost()
 	}
 }
 
@@ -103,6 +113,19 @@ type Spinner struct {
 	OnChanged func(float64)
 
 	binder binder
+}
+
+type MajorMinorVersionSpinner struct {
+	Spinner
+	value    string
+	major    int
+	minor    int
+	Min      int
+	MaxMajor int
+	MaxMinor int
+	Step     int
+
+	OnChanged func(string)
 }
 
 func NewSpinner(min, max, step float64) *Spinner {
@@ -133,15 +156,72 @@ func newSpinner(minVal, maxVal, step float64, integer bool) *Spinner {
 	}
 	buttonDown.OnTapped = spin.onDown
 	buttonUp.OnTapped = spin.onUp
+
+	entry.AllowFloat = !integer
+
 	entry.onEnter = spin.onEnter
-	entry.OnChanged = func(_ string) {
+	entry.OnChanged = func(s string) {
+		if strings.Contains(s, ".") {
+			_, deci := utils.SplitOne(s, ".")
+			if deci == "" {
+				return
+			}
+		}
 		spin.onEnter()
 	}
+	entry.onFocusLost = spin.onEnter
 	entry.onScrolled = spin.onScrolled
+
 	spin.Layout = layout.NewBorderLayout(nil, nil, nil, updown)
 	spin.Add(updown)
 	spin.Add(entry)
 	spin.updateVal(spin.value, true)
+	return spin
+}
+
+func NewMajorMinorVersionSpinner(minVal, maxMajor, maxMinor, step int) *MajorMinorVersionSpinner {
+	buttonUp := widget.NewButtonWithIcon("", theme.MoveUpIcon(), func() {})
+	buttonDown := widget.NewButtonWithIcon("", theme.MoveDownIcon(), func() {})
+
+	updown := container.NewHBox(buttonUp, buttonDown)
+	entry := newExtendedEntry()
+
+	spin := &MajorMinorVersionSpinner{
+		Spinner: Spinner{
+			buttonUp:   buttonUp,
+			buttonDown: buttonDown,
+			entry:      entry,
+		},
+		Min:      minVal,
+		MaxMajor: maxMajor,
+		MaxMinor: maxMinor,
+		major:    min(max(minVal, 1), maxMajor),
+		minor:    0,
+		value:    strconv.Itoa(min(max(minVal, 1), maxMajor)),
+		Step:     step,
+	}
+	buttonDown.OnTapped = spin.onDown
+	buttonUp.OnTapped = spin.onUp
+
+	entry.AllowFloat = true
+
+	entry.onEnter = spin.onEnter
+	entry.onFocusLost = spin.onEnter
+	entry.onScrolled = spin.onScrolled
+	entry.OnChanged = func(s string) {
+		if strings.Contains(s, ".") {
+			_, minor := utils.SplitOne(s, ".")
+			if minor == "" {
+				return
+			}
+		}
+		spin.onEnter()
+	}
+
+	spin.Layout = layout.NewBorderLayout(nil, nil, nil, updown)
+	spin.Add(updown)
+	spin.Add(entry)
+	spin.updateVal(spin.major, spin.minor, true)
 	return spin
 }
 
@@ -154,6 +234,27 @@ func (s *Spinner) SetValue(value float64) {
 	s.updateVal(value, false)
 }
 
+func (s *MajorMinorVersionSpinner) GetValue() string {
+	s.updateVal(s.major, s.minor, true)
+	return s.value
+}
+
+func (s *MajorMinorVersionSpinner) SetValue(value string) {
+	majorS, minorS := utils.SplitOne(utils.TruncateToNumericString(s.entry.Text), ".")
+
+	var major, minor int
+	var err error
+	major, err = strconv.Atoi(majorS)
+	if err != nil {
+		major = s.Min
+	}
+	minor, err = strconv.Atoi(minorS)
+	if err != nil {
+		minor = 0
+	}
+	s.updateVal(major, minor, false)
+}
+
 func (s *Spinner) onEnter() {
 	var val float64
 	if f, err := strconv.ParseFloat(s.entry.Text, 64); err != nil {
@@ -162,6 +263,26 @@ func (s *Spinner) onEnter() {
 		val = min(max(s.Min, f), s.Max)
 	}
 	changed := s.updateVal(val, false)
+	if changed && s.OnChanged != nil {
+		s.OnChanged(val)
+	}
+}
+
+func (s *MajorMinorVersionSpinner) onEnter() {
+	var val string
+	majorS, minorS := utils.SplitOne(utils.TruncateToNumericString(s.entry.Text), ".")
+
+	var major, minor int
+	var err error
+	major, err = strconv.Atoi(majorS)
+	if err != nil {
+		major = s.Min
+	}
+	minor, err = strconv.Atoi(minorS)
+	if err != nil {
+		minor = 0
+	}
+	changed := s.updateVal(major, minor, false)
 	if changed && s.OnChanged != nil {
 		s.OnChanged(val)
 	}
@@ -188,6 +309,16 @@ func (s *Spinner) onScrolled(e *fyne.ScrollEvent) {
 	}
 }
 
+func (s *MajorMinorVersionSpinner) onScrolled(e *fyne.ScrollEvent) {
+	if e.Scrolled.DY != 0 {
+		minor := s.minor + s.Step*int(sn(float64(e.Scrolled.DY)))
+		changed := s.updateVal(s.major, minor, false)
+		if changed && s.OnChanged != nil {
+			s.OnChanged(s.value)
+		}
+	}
+}
+
 func (s *Spinner) onUp() {
 	val := s.value + s.Step
 	changed := s.updateVal(val, false)
@@ -204,8 +335,27 @@ func (s *Spinner) onDown() {
 	}
 }
 
+func (s *MajorMinorVersionSpinner) onUp() {
+	val := s.minor + s.Step
+	changed := s.updateVal(s.major, val, false)
+	if changed && s.OnChanged != nil {
+		s.OnChanged(s.value)
+	}
+}
+
+func (s *MajorMinorVersionSpinner) onDown() {
+	val := s.minor - s.Step
+	changed := s.updateVal(s.major, val, false)
+	if changed && s.OnChanged != nil {
+		s.OnChanged(s.value)
+	}
+}
+
 func (s *Spinner) updateVal(val float64, fromBinding bool) bool {
 	val = min(max(s.Min, val), s.Max)
+	if s.Precision > 0 {
+		val = utils.ToFixed(val, int(s.Precision))
+	}
 	changed := val != s.value
 	s.value = val
 	if s.integer {
@@ -217,7 +367,6 @@ func (s *Spinner) updateVal(val float64, fromBinding bool) bool {
 			precision = int(s.Precision)
 		}
 		s.entry.SetText(strconv.FormatFloat(s.value, 'f', precision, 64))
-
 	}
 	if s.value <= s.Min {
 		s.buttonDown.Disable()
@@ -236,6 +385,48 @@ func (s *Spinner) updateVal(val float64, fromBinding bool) bool {
 			s.binder.SetCallback(s.updateFromData)
 		}
 	}
+	return changed
+}
+
+func (s *MajorMinorVersionSpinner) updateVal(major, minor int, fromBinding bool) bool {
+	s.major = major
+	s.minor = minor
+	if s.minor > s.MaxMinor {
+		s.minor = 0
+		s.major += 1
+	}
+	if s.major > s.MaxMajor {
+		s.major = s.MaxMajor
+	}
+	if s.major < s.Min {
+		s.major = s.Min
+	}
+	val := strconv.Itoa(s.major)
+	if s.minor > 0 {
+		val += fmt.Sprintf(".%d", s.minor)
+	}
+	changed := val != s.value
+	s.value = val
+	s.entry.SetText(s.value)
+
+	if s.major <= s.Min && s.minor <= 0 {
+		s.buttonDown.Disable()
+	} else {
+		s.buttonDown.Enable()
+	}
+	if s.major >= s.MaxMajor {
+		s.buttonUp.Disable()
+	} else {
+		s.buttonUp.Enable()
+	}
+	if changed && !fromBinding {
+		if s.binder.pair.listener != nil {
+			s.binder.SetCallback(nil)
+			s.binder.CallWithData(s.writeData)
+			s.binder.SetCallback(s.updateFromData)
+		}
+	}
+
 	return changed
 }
 
@@ -261,6 +452,11 @@ func (s *Spinner) Bind(data binding.Float) {
 	s.binder.Bind(data)
 }
 
+func (s *MajorMinorVersionSpinner) Bind(data binding.String) {
+	s.binder.SetCallback(s.updateFromData)
+	s.binder.Bind(data)
+}
+
 func (s *Spinner) Unbind() {
 	s.binder.Unbind()
 }
@@ -280,6 +476,28 @@ func (s *Spinner) updateFromData(data binding.DataItem) {
 	s.updateVal(val, true)
 }
 
+func (s *MajorMinorVersionSpinner) updateFromData(data binding.DataItem) {
+	if data == nil {
+		return
+	}
+	versionS, ok := data.(binding.String)
+	if !ok {
+		return
+	}
+	val, err := versionS.Get()
+	majorS, minorS := utils.SplitOne(utils.TruncateToNumericString(val), ".")
+	var major, minor int
+	major, err = strconv.Atoi(majorS)
+	if err != nil {
+		major = s.Min
+	}
+	minor, err = strconv.Atoi(minorS)
+	if err != nil {
+		minor = 0
+	}
+	s.updateVal(major, minor, true)
+}
+
 func (s *Spinner) writeData(data binding.DataItem) {
 	if data == nil {
 		return
@@ -293,6 +511,21 @@ func (s *Spinner) writeData(data binding.DataItem) {
 		return
 	}
 	floatT.Set(s.value)
+}
+
+func (s *MajorMinorVersionSpinner) writeData(data binding.DataItem) {
+	if data == nil {
+		return
+	}
+	versionT, ok := data.(binding.String)
+	if !ok {
+		return
+	}
+	curVal, err := versionT.Get()
+	if err == nil && curVal == s.value {
+		return
+	}
+	versionT.Set(s.value)
 }
 
 type spinnerRenderer struct {

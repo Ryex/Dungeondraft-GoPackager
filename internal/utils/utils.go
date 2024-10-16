@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"iter"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -286,4 +287,30 @@ func CleanRelativeResourcePath(path string) string {
 		path = IDTrimPrefixRegex.ReplaceAllString(path, "")
 	}
 	return path
+}
+
+func TruncateToNumericString(val string) (s string) {
+	var sb strings.Builder
+	for i, c := range val {
+		if i == 0 && c == '+' {
+			continue
+		} else if i == 0 && c == '-' {
+			sb.WriteRune(c)
+		} else if ('0' <= c && c <= '9') || c == '.' {
+			sb.WriteRune(c)
+		} else {
+			break
+		}
+	}
+	s = sb.String()
+	return
+}
+
+func round(val float64) int {
+	return int(val + math.Copysign(0.5, val))
+}
+
+func ToFixed(val float64, precision int) float64 {
+	out := math.Pow(10, float64(precision))
+	return float64(round(val * out)) / out
 }
