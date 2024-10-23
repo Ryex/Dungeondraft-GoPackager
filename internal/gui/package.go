@@ -547,7 +547,15 @@ func (a *App) buildTagInfo(info *structures.FileInfo, editable bool) fyne.Canvas
 					),
 				),
 			),
-			tagsList,
+			container.NewStack(
+				&canvas.Rectangle{
+					FillColor:    theme.Color(theme.ColorNameInputBackground),
+					CornerRadius: 4,
+				},
+				container.NewPadded(
+					tagsList,
+				),
+			),
 		),
 	)
 
