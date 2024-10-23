@@ -1,6 +1,9 @@
 package structures
 
 import (
+	"bytes"
+	"encoding/json"
+	"maps"
 	"slices"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
@@ -154,4 +157,57 @@ func (pt *PackageTags) ClearTagsFor(resources ...string) {
 	for tag := range pt.Tags {
 		pt.Tags[tag].RemoveM(relPaths...)
 	}
+}
+
+func (pt *PackageTags) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+
+	buf.WriteString("{")
+
+	buf.WriteString(`"tags":{`)
+	tagsKeys := slices.Sorted(maps.Keys(pt.Tags))
+	for i, key := range tagsKeys {
+		if i != 0 {
+			buf.WriteString(",")
+		}
+		keyJSON, err := json.Marshal(key)
+		if err != nil {
+			return nil, err
+		}
+		buf.Write(keyJSON)
+		buf.WriteString(":")
+		valJSON, err := json.Marshal(pt.Tags[key])
+		if err != nil {
+			return nil, err
+		}
+		buf.Write(valJSON)
+	}
+	buf.WriteString("}")
+
+	buf.WriteString(",")
+
+	buf.WriteString(`"sets":{`)
+
+	setsKeys := slices.Sorted(maps.Keys(pt.Sets))
+	for i, key := range setsKeys {
+		if i != 0 {
+			buf.WriteString(",")
+		}
+		keyJSON, err := json.Marshal(key)
+		if err != nil {
+			return nil, err
+		}
+		buf.Write(keyJSON)
+		buf.WriteString(":")
+		valJSON, err := json.Marshal(pt.Sets[key])
+		if err != nil {
+			return nil, err
+		}
+		buf.Write(valJSON)
+	}
+	buf.WriteString("}")
+
+	buf.WriteString("}")
+
+	return buf.Bytes(), nil
 }
