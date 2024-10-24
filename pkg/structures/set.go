@@ -1,22 +1,25 @@
 package structures
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"iter"
+	"maps"
+	"slices"
 )
 
-type Set[T comparable] struct {
+type Set[T cmp.Ordered] struct {
 	data map[T]struct{}
 }
 
-func NewSet[T comparable]() *Set[T] {
+func NewSet[T cmp.Ordered]() *Set[T] {
 	s := &Set[T]{}
 	s.data = make(map[T]struct{})
 	return s
 }
 
-func SetFrom[T comparable](from []T) *Set[T] {
+func SetFrom[T cmp.Ordered](from []T) *Set[T] {
 	s := NewSet[T]()
 	s.AddM(from...)
 	return s
@@ -135,7 +138,7 @@ func (s *Set[T]) UnmarshalJSON(bytes []byte) error {
 }
 
 func (s *Set[T]) MarshalJSON() ([]byte, error) {
-	data := s.AsSlice()
+	data := slices.Sorted(maps.Keys(s.data))
 	return json.Marshal(data)
 }
 
