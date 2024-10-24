@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 <!-- insertion marker -->
+## [v2.0.1](https://github.com/Ryex/Dungeondraft-GoPackager/releases/tag/v2.0.1) - 2024-10-24
+
+<small>[Compare with v2.0.0](https://github.com/Ryex/Dungeondraft-GoPackager/compare/v2.0.0...v2.0.1)</small>
+
+### Bug Fixes
+
+- sort object *inside* tags too ([65df801](https://github.com/Ryex/Dungeondraft-GoPackager/commit/65df801f0a1fdf97ecdd7dd3e5ab7b584011ef46) by Rachel Powers).
+
 ## [v2.0.0](https://github.com/Ryex/Dungeondraft-GoPackager/releases/tag/v2.0.0) - 2024-10-23
 
 <small>[Compare with v2.0.0+pre2](https://github.com/Ryex/Dungeondraft-GoPackager/compare/v2.0.0+pre2...v2.0.0)</small>
