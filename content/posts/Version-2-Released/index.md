@@ -13,7 +13,7 @@ Now edit your resource packages with a shiny new GUI.
 
 <!--more-->
 
-![Gui screenshot](/static/images/ddgp-mainpage.png)
+![Gui screenshot](ddgp-mainpage.png)
 
-![Gui screenshot](/static/images/ddgp-gentags.png)
+![Gui screenshot](ddgp-gentags.png)
 

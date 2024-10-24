@@ -28,7 +28,7 @@ params:
   profileMode:
     enabled: true
     subtitle: "Package and edit Dungeondraft resource packs"
-    imageUrl: "/static/images/Icon.png" # optional
+    imageUrl: "static/images/Icon.png" # optional
     imageTitle: "DDGPIcon" # optional
     imageWidth: 400 # custom size
     imageHeight: 400 # custom size
