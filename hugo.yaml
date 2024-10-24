@@ -3,14 +3,35 @@ languageCode: en-us
 title: Dungeondraft GoPackager
 theme: ["PaperMod"]
 
+menu:
+  main:
+    - name: Github
+      url: "https://github.com/Ryex/Dungeondraft-GoPackager"
+      weight: 3
+    - name: Download
+      url: https://github.com/Ryex/Dungeondraft-GoPackager/releases
+      weight: 1
+    - name: Archive
+      url: archives
+      weight: 5
+    - name: Search
+      url: search/
+      weight: 10
+    - name: Tags
+      url: tags/
+      weight: 10
+    - name: WiKi
+      url: https://github.com/Ryex/Dungeondraft-GoPackager/wiki/
+
 params:
+  ShowBreadCrumbs: true
   profileMode:
     enabled: true
     subtitle: "Package and edit Dungeondraft resource packs"
-    # imageUrl: "<image link>" # optional
-    # imageTitle: "<title of image as alt>" # optional
-    imageWidth: 120 # custom size
-    imageHeight: 120 # custom size
+    imageUrl: "/static/images/Icon.png" # optional
+    imageTitle: "DDGPIcon" # optional
+    imageWidth: 400 # custom size
+    imageHeight: 400 # custom size
     buttons:
       - name: Github
         url: "https://github.com/Ryex/Dungeondraft-GoPackager"
