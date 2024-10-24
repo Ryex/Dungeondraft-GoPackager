@@ -19,9 +19,9 @@ you can either install the precompiled binaries available on the [release page](
 
 Binaries are available for all major platforms:
 
-- [Windows](https://github.com/Ryex/Dungeondraft-GoPackager/releases/download/Dungeondraft-GoPackager-Windows.zip)
-- [MacOs](https://github.com/Ryex/Dungeondraft-GoPackager/releases/download/Dungeondraft-GoPackager-macOS.zip)
-- [Linux](https://github.com/Ryex/Dungeondraft-GoPackager/releases/download/Dungeondraft-GoPackager-Linux.tgz)
+- [Windows](https://github.com/Ryex/Dungeondraft-GoPackager/releases/latest/download/Dungeondraft-GoPackager-Windows.zip)
+- [MacOs](https://github.com/Ryex/Dungeondraft-GoPackager/releases/latest/download/Dungeondraft-GoPackager-macOS.zip)
+- [Linux](https://github.com/Ryex/Dungeondraft-GoPackager/releases/latest/download/Dungeondraft-GoPackager-Linux.tar.gz)
 
 Or, if you have [Go](https://go.dev/) installed you can `go install` them yourself
 
