@@ -106,7 +106,7 @@
   "pathGen.dialog.title": "Générer les Tags",
   "pathGen.dialog.dismiss": "Fermer",
   "pathGen.doneDialog.title": "Tags générés",
-  "pathGen.doneDialog.msg": "Les tags ont fini d'être générés.",
+  "pathGen.doneDialog.msg": "Les tags ont été générés.",
   "pathGen.tagProgressDlg.title": "Génération des Tags...",
   "pathGen.exampleTags.label": "Exemple de Tags",
   "pathGen.exampleSets.label": "Exemple de Sets comprenant le Tag",
