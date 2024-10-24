@@ -163,7 +163,7 @@ jobs:
         run: ls
       - name: Package
         run: |
-          pushd Dungeondraft-GoPackager-Linux ; tar -czf ../Dungeondraft-GoPackager-Linux.tgz * ; popd
+          pushd Dungeondraft-GoPackager-Linux ; tar -czf ../Dungeondraft-GoPackager-Linux.tar.gz * ; popd
           pushd Dungeondraft-GoPackager-macOS ; zip -r ../Dungeondraft-GoPackager-macOS.zip * ; popd
           pushd Dungeondraft-GoPackager-Windows ; zip -r ../Dungeondraft-GoPackager-Windows.zip * ; popd
       - name: Release
