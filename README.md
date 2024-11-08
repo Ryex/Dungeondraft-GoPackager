@@ -12,10 +12,24 @@ GUI and Command-line utilities to pack, unpack, and edit custom assets, and tags
 
 Contribute translations on [Crowdin](https://crowdin.com/project/dundeondraft-gopackager)
 
+### Features
+
+- Pack custom asset packs
+  - Set or generate a package ID
+- Unpack packaged asset packs (useful to combine multiple packs or edit tags)
+- View assets and tags of packed or unpacked packages
+- Edit tags of individual assets in an unpacked package
+- Edit tag sets
+- Edit metadata for Walls and Tilesets (custom color, tileset name, etc.)
+- Generate tags from the folder structure of the package
+- Generate thumbnails for assets in an unpacked package
+  - ~20 seconds for 42K thumbnails!
+- GUI or CLI interface. Automate your workflow!
+
 
 ### Installation
 
-you can either install the precompiled binaries available on the [release page](https://github.com/Ryex/Dungeondraft-GoPackager/releases)
+You can either install the precompiled binaries available on the [release page](https://github.com/Ryex/Dungeondraft-GoPackager/releases)
 
 Binaries are available for all major platforms:
 
