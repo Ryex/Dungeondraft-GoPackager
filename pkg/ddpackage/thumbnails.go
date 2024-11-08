@@ -7,6 +7,8 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"runtime"
+	"sync"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddimage"
@@ -108,31 +110,67 @@ func (p *Package) generateThumbnails(progressCallback func(p float64)) []error {
 		ch <- result{nil, fi.ResPath}
 	}
 
-	ch := make(chan result)
+	numCpus := runtime.NumCPU()
+
+	chResult := make(chan result, numCpus*8)
+	chInput := make(chan int, 256)
+	var wg sync.WaitGroup
 
 	p.flLock.RLock()
 	defer p.flLock.RUnlock()
 
-	for _, fi := range p.fileList {
-		if fi.IsTexture() {
-			go makeThumb(fi, p.log.WithField("res", fi.ResPath), ch)
-		}
+	fileList := p.fileList
+	log := p.log
+
+	// start a limited number of go routines to process thumbnails
+	for j := 0; j < (numCpus * 2); j++ {
+		wg.Add(1)
+		go func() {
+			for {
+				index, ok := <-chInput
+				if !ok { // no more input and channel closed
+					wg.Done()
+					return
+				}
+				fi := fileList[index]
+			  makeThumb(fi, log.WithField("res", fi.ResPath), chResult)
+			}
+		}()
 	}
+
+	// send thumbnails into input buffer
+	go func() {
+		for index, fi := range p.fileList {
+			if fi.IsTexture() {
+				chInput <- index
+			}
+		}
+		// no more input
+		close(chInput)
+	}()
 
 	var thumbCount float64
 	var errs []error
 
-	for i := 0; i < int(texCount); i++ {
-		r := <-ch
-		if r.Err != nil {
-			errs = append(errs, r.Err)
+	// process results
+	wg.Add(1)
+	go func() {
+		for i := 0; i < int(texCount); i++ {
+			r := <-chResult
+			if r.Err != nil {
+				errs = append(errs, r.Err)
+			}
+			thumbCount += 1
+			if progressCallback != nil {
+				progressCallback(thumbCount / texCount)
+			}
+			p.log.WithField("res", r.Resource).Trace("thumbnail generated")
 		}
-		thumbCount += 1
-		if progressCallback != nil {
-			progressCallback(thumbCount / texCount)
-		}
-		p.log.WithField("res", r.Resource).Trace("thumbnail generated")
-	}
+		wg.Done()
+	}()
+
+	// wait for all threads to finish
+	wg.Wait()
 
 	return errs
 }
