@@ -136,15 +136,17 @@ jobs:
         if: ${{ runner.os == 'macOS' }}
         run: |
           mkdir install
-          cp -r "./Dungeondraft GoPackager.app" ./install
-          cp ./dungeondraft-packager* ./install
-          cp *.md ./install
-          mkdir "./install/Dungeondraft GoPackager.app/Contents/Frameworks"
+          mkdir prep
+          cp -r "./Dungeondraft GoPackager.app" ./prep
+          cp ./dungeondraft-packager* ./prep
+          cp *.md ./prep
+          mkdir "./prep/Dungeondraft GoPackager.app/Contents/Frameworks"
           # cp /opt/homebrew/opt/webp/lib/libwebp.7.dylib "./install/Dungeondraft GoPackager.app/Contents/Frameworks"
           # install_name_tool -change /opt/homebrew/opt/webp/lib/libwebp.7.dylib "@executable_path/../Frameworks/libwebp.7.dylib" "./install/Dungeondraft GoPackager.app/Contents/MacOS/dungeondraft-packager"
-          ls ./install
-          ls -r "./install/Dungeondraft GoPackager.app"
-          otool -L "./install/Dungeondraft GoPackager.app/Contents/MacOS/dungeondraft-packager"
+          ls ./prep
+          ls -r "./prep/Dungeondraft GoPackager.app"
+          otool -L "./prep/Dungeondraft GoPackager.app/Contents/MacOS/dungeondraft-packager"
+          ditto -c -k --sequesterRsrc  "./prep" "./install/Dungeondraft-GoPackager.zip"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -164,7 +166,7 @@ jobs:
       - name: Package
         run: |
           pushd Dungeondraft-GoPackager-Linux ; tar -czf ../Dungeondraft-GoPackager-Linux.tar.gz * ; popd
-          pushd Dungeondraft-GoPackager-macOS ; zip -r ../Dungeondraft-GoPackager-macOS.zip * ; popd
+          pushd Dungeondraft-GoPackager-macOS ; cp ./Dungeondraft-GoPackager.zip ../Dungeondraft-GoPackager-macOS.zip ; popd
           pushd Dungeondraft-GoPackager-Windows ; zip -r ../Dungeondraft-GoPackager-Windows.zip * ; popd
       - name: Release
         uses: softprops/action-gh-release@v2
