@@ -102,7 +102,7 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 	}
 
 	var (
-		buildGlobalTagSet     = true
+		buildGlobalTagSet     = false
 		globalTagSet          = a.pkg.Name()
 		buildTagSetFrpmPrefix = true
 		prefixSplitMode       = false
