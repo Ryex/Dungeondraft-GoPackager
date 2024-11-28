@@ -30,10 +30,10 @@ type CustomColorOverrides struct {
 
 func DefaultCustomColorOverrides() *CustomColorOverrides {
 	return &CustomColorOverrides{
-		Enabled: false,
-		MinRedness: 0.1,
+		Enabled:       false,
+		MinRedness:    0.1,
 		MinSaturation: 0.0,
-		RedTolerance: 0.04,
+		RedTolerance:  0.04,
 	}
 }
 
@@ -85,10 +85,10 @@ type PackageTileset struct {
 }
 
 func NewPackageTileset() *PackageTileset {
-	return &PackageTileset{Type: TilesetNormal, Color: color.Color{}}
+	return &PackageTileset{Type: TilesetNormal, Color: color.Color{R: 255, G: 255, B: 255, A: 255}}
 }
 
-type PackageWall struct  {
+type PackageWall struct {
 	// relative resource path
 	Path string `json:"path"`
 	// default color
@@ -96,5 +96,5 @@ type PackageWall struct  {
 }
 
 func NewPackageWall() *PackageWall {
-	return &PackageWall{Color: color.Color{}}
+	return &PackageWall{Color: color.Color{R: 255, G: 255, B: 255, A: 255}}
 }
