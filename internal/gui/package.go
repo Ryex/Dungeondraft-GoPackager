@@ -601,7 +601,7 @@ func (a *App) buildMetadataPane(info *structures.FileInfo, editable bool) fyne.C
 		if info.IsWall() {
 			metaPath := info.MetadataPath
 
-			defaultColor := color.NRGBA{0, 0, 0, 0}
+			defaultColor := color.NRGBA{255, 255, 255, 255}
 			wallData := a.pkg.Walls()
 			if wallData != nil {
 				metaData, ok := (*wallData)[metaPath]
@@ -656,7 +656,7 @@ func (a *App) buildMetadataPane(info *structures.FileInfo, editable bool) fyne.C
 		} else if info.IsTileset() {
 			metaPath := info.MetadataPath
 
-			defaultColor := color.NRGBA{0, 0, 0, 0}
+			defaultColor := color.NRGBA{255, 255, 255, 255}
 			tilesetName := ""
 			tilesetType := structures.TilesetNormal
 
@@ -735,30 +735,31 @@ func (a *App) buildMetadataPane(info *structures.FileInfo, editable bool) fyne.C
 					string(structures.TilesetNormal),
 					string(structures.TilesetCustomColor),
 				},
-				func(s string) {
-					var typ structures.TilesetType
-					switch s {
-					case string(structures.TilesetNormal):
-						typ = structures.TilesetNormal
-					case string(structures.TilesetCustomColor):
-						typ = structures.TilesetCustomColor
-					}
-					data, ok := (*tilesetData)[metaPath]
-					if !ok {
-						(*tilesetData)[metaPath] = structures.PackageTileset{
-							Path:  info.RelPath,
-							Name:  "",
-							Color: ddcolor.FromColor(defaultColor),
-							Type:  typ,
-						}
-					} else {
-						data.Type = typ
-						(*tilesetData)[metaPath] = data
-					}
-					a.saveTilesetMetadata(metaPath)
-				},
+				nil,
 			)
 			tilesetTypeSelector.SetSelected(string(tilesetType))
+			tilesetTypeSelector.OnChanged = func(s string) {
+				var typ structures.TilesetType
+				switch s {
+				case string(structures.TilesetNormal):
+					typ = structures.TilesetNormal
+				case string(structures.TilesetCustomColor):
+					typ = structures.TilesetCustomColor
+				}
+				data, ok := (*tilesetData)[metaPath]
+				if !ok {
+					(*tilesetData)[metaPath] = structures.PackageTileset{
+						Path:  info.RelPath,
+						Name:  "",
+						Color: ddcolor.FromColor(defaultColor),
+						Type:  typ,
+					}
+				} else {
+					data.Type = typ
+					(*tilesetData)[metaPath] = data
+				}
+				a.saveTilesetMetadata(metaPath)
+			}
 
 			if !editable {
 				nameEntry.Disable()
