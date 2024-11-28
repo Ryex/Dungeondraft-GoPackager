@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 <!-- insertion marker -->
+## [v2.0.3](https://github.com/Ryex/Dungeondraft-GoPackager/releases/tag/v2.0.3) - 2024-11-28
+
+<small>[Compare with v2.0.2](https://github.com/Ryex/Dungeondraft-GoPackager/compare/v2.0.2...v2.0.3)</small>
+
+### Bug Fixes
+
+- don't generate global tag set by default ([340926a](https://github.com/Ryex/Dungeondraft-GoPackager/commit/340926a631025f0e0e69e933b74471bee6b0d83f) by Rachel Powers).
+- prevent tileset data save on preview, default color white ([fe90372](https://github.com/Ryex/Dungeondraft-GoPackager/commit/fe9037261b5fe6384d05bf78dd571b641cc6a776) by Rachel Powers).
+
 ## [v2.0.2](https://github.com/Ryex/Dungeondraft-GoPackager/releases/tag/v2.0.2) - 2024-11-08
 
 <small>[Compare with v2.0.1](https://github.com/Ryex/Dungeondraft-GoPackager/compare/v2.0.1...v2.0.2)</small>
