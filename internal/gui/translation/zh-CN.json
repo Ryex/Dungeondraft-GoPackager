@@ -24,6 +24,8 @@
   "tree.displayby.resource": "资源",
   "tree.displayby.tag": "标签",
   "tree.filter.error": "glob 语法错误",
+  "tree.filter.toolTip.glob": "Use Glob syntax to match resource paths",
+  "tree.filter.toolTip.tag": "If a tag contains spaces surround it with \"\".\nBy default filters use OR (filter includes any resource that has at least one of the filter tags).\nStart the filter with a single `&` to filter by AND (e.g `& aTag \"another Tag\" tagC`).\nBy Default tags use a fuzzy match, prefix a tag with a `%` to make it match exactly (e.g \" `%exactly_this_tag`\").",
   "preview.defaultText": "选择资源",
   "preview.tooLarge": "这个文件太大了！\n在文本编辑器中打开它。",
   "preview.path.label": "路径",
