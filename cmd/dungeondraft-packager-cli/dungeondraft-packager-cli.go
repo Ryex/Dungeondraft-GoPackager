@@ -11,7 +11,7 @@ import (
 )
 
 var CLI struct {
-	LogLevel string `enum:"debug,info,warn,error" default:"warn"`
+	LogLevel string `enum:"trace,debug,info,warn,error" default:"warn"`
 
 	Pack     cmd.PackCmd   `cmd:"" help:"Packs the contents of a directory to a .dungeondraft_pack file, there must be a valid pack.json in the directory"`
 	Unpack   cmd.UnpackCmd `cmd:"" help:"Extracts the contesnts of a .dungeondraft_pack file"`
@@ -37,6 +37,8 @@ func main() {
 
 	var logLevel log.Level
 	switch CLI.LogLevel {
+	case "trace":
+		logLevel = log.TraceLevel
 	case "debug":
 		logLevel = log.DebugLevel
 	case "info":
