@@ -34,20 +34,30 @@ import (
 func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
 	tree, filter, treeSelected, displayByTag := a.buildPackageTree(editable)
 
-	filterEntry := widget.NewEntryWithData(filter)
-	filterEntry.Validator = nil
+	filterEntry := widgets.NewToolTipEntryWithData(filter)
 	filterEntry.SetPlaceHolder(lang.X("tree.filter.placeholder.resource", "Filter with glob (e.g. */objects/**)"))
 	filterErrorText := canvas.NewText(lang.X("tree.filter.error", "Bad glob syntax"), theme.Color(theme.ColorNameError))
 	filterErrorText.Hide()
 	filterEntry.Validator = func(s string) error {
-		_, err := structures.GlobToRelPathRegexp(s)
+		byTag, err := displayByTag.Get()
 		if err != nil {
-			filterErrorText.Show()
-		} else {
+			return err
+		}
+		if byTag {
 			filterErrorText.Hide()
+		} else {
+			_, err := structures.GlobToRelPathRegexp(s)
+			filterErrorText.Text = lang.X("tree.filter.error", "Bad glob syntax")
+			if err != nil {
+				filterErrorText.Show()
+			} else {
+				filterErrorText.Hide()
+			}
 		}
 		return err
 	}
+
+	filterEntry.SetToolTip(lang.X("tree.filter.toolTip.glob", "Use Glob syntax to match resource paths"))
 
 	displayByLbl := widget.NewLabel(lang.X("tree.displayBy.label", "Display By"))
 
@@ -58,9 +68,19 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
 		if selected == byResouceOption {
 			displayByTag.Set(false)
 			filterEntry.SetPlaceHolder(lang.X("tree.filter.placeholder.resource", "Filter with glob (e.g. */objects/**)"))
+			filterEntry.SetToolTip(lang.X("tree.filter.toolTip.glob", "Use Glob syntax to match resource paths"))
 		} else {
 			displayByTag.Set(true)
 			filterEntry.SetPlaceHolder(lang.X("tree.filter.placeholder.tags", "Filter by tag name"))
+			filterEntry.SetToolTip(lang.X(
+				"tree.filter.toolTip.tag",
+				"Filter by a set of tags. Seperate tags with spaces to use multiple.\n"+
+					"If a tag contains spaces surround it with \"\".\n"+
+					"By default filters use OR (filter includes any resource that"+
+					" has at least one of the filter tags).\n"+
+					"Start the filter with a single \"&\" to filter by AND (e.g `& aTag \"another Tag\" tagC`).\n"+
+					"By Default tags use a fuzzy match, prefix a tag with a `%` to make it match exactly (e.g \" `%exactly_this_tag`\").",
+			))
 		}
 	})
 	displayByRadio.Required = true
@@ -104,6 +124,10 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
 				}
 				return a.buildInfoPane(info, editable)
 			}
+			// else if strings.HasPrefix(tni, "tag://") {
+			// tag := strings.TrimPrefix(tni, "tag://")
+			// TODO: add bulk operations pane
+			// }
 			return defaultPreview
 		}()
 
@@ -220,10 +244,12 @@ func (a *App) buildPackageTree(editable bool) (*widget.Tree, binding.String, bin
 			return filtered, nil
 		}
 		if byTag {
+			tagFilter := ParseTagFilter(filter)
+			log.Tracef("filtering tree list with %#v", tagFilter)
 			return filtered.Filter(func(fi *structures.FileInfo) bool {
-				return utils.Any(a.pkg.Tags().TagsFor(fi.ResPath).Values(), func(tag string) bool {
-					return strings.Contains(strings.ToLower(tag), strings.ToLower(filter))
-				})
+				ret := tagFilter.Apply(a.pkg.Tags().TagsFor(fi.ResPath))
+				log.Tracef("%s matches = %t", fi.ResPath, ret)
+				return ret
 			}), nil
 		}
 		log.Tracef("filtering tree list with '%s'", filter)
@@ -863,8 +889,9 @@ func buildTagMaps(fil structures.FileInfoList, pt *structures.PackageTags, filte
 	}
 	allTags := pt.AllTags()
 	slices.Sort(allTags)
+	tagFilter := ParseTagFilter(filter)
 	for _, tag := range allTags {
-		if filter != "" && !strings.Contains(strings.ToLower(tag), strings.ToLower(filter)) {
+		if filter != "" && !tagFilter.ApplyToTag(tag) {
 			continue
 		}
 		if len(nodeTree["tag://"+tag]) == 0 {
