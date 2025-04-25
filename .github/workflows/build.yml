@@ -85,7 +85,7 @@ jobs:
           lipo -create -output dungeondraft-packager ./bin/dungeondraft-packager-amd64 ./bin/dungeondraft-packager-arm64
           file dungeondraft-packager
           rm -r ./bin
-          fyne package -os linux -exe ./dungeondraft-packager --release --icon ./cmd/dungeondraft-packager/Icon.png -app-id io.github.ryex.dungondraft-gopackager
+          fyne package -os darwin -exe ./dungeondraft-packager --release --icon ./cmd/dungeondraft-packager/Icon.png -app-id io.github.ryex.dungondraft-gopackager
       - name: Build Cli (Windows)
         if: ${{ runner.os == 'Windows' }}
         # shell: msys2 {0}
@@ -140,8 +140,8 @@ jobs:
         if: ${{ runner.os == 'macOS' }}
         run: |
           mkdir install
-          ls -lah .
           mkdir prep
+          ls -lah .
           cp -r "./Dungeondraft GoPackager.app" ./prep
           cp ./dungeondraft-packager* ./prep
           cp *.md ./prep
