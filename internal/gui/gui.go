@@ -24,6 +24,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	xdialog "fyne.io/x/fyne/dialog"
+	fynetooltip "github.com/dweymouth/fyne-tooltip"
 	"github.com/fsnotify/fsnotify"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/assets"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/bindings"
@@ -313,11 +314,12 @@ func (a *App) buildMainUI() {
 			),
 		),
 	)
-	a.window.SetContent(content)
+	// a.window.SetContent(content)
+	a.window.SetContent(fynetooltip.AddWindowToolTipLayer(content, a.window.Canvas()))
 }
 
 func (a *App) setMainContent(o fyne.CanvasObject, disableButtonsListeners ...func(bool)) {
-	go func() {
+	fyne.Do(func() {
 		a.mainContentLock.Lock()
 		defer a.mainContentLock.Unlock()
 
@@ -347,7 +349,7 @@ func (a *App) setMainContent(o fyne.CanvasObject, disableButtonsListeners ...fun
 		// winSize := a.window.Canvas().Size()
 		// a.mainContentContainer.Refresh()
 		// a.window.Resize(winSize)
-	}()
+	})
 }
 
 func (a *App) setupPathHandler() {
