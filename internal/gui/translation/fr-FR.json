@@ -24,6 +24,8 @@
   "tree.displayby.resource": "Ressource",
   "tree.displayby.tag": "Tag",
   "tree.filter.error": "Syntaxe Glob incorrecte",
+  "tree.filter.toolTip.glob": "Use Glob syntax to match resource paths",
+  "tree.filter.toolTip.tag": "If a tag contains spaces surround it with \"\".\nBy default filters use OR (filter includes any resource that has at least one of the filter tags).\nStart the filter with a single `&` to filter by AND (e.g `& aTag \"another Tag\" tagC`).\nBy Default tags use a fuzzy match, prefix a tag with a `%` to make it match exactly (e.g \" `%exactly_this_tag`\").",
   "preview.defaultText": "Sélectionner une ressource",
   "preview.tooLarge": "Ce fichier est trop volumineux !\nOuvrez-le dans un éditeur de texte.",
   "preview.path.label": "Emplacement",
