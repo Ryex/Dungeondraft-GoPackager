@@ -12,7 +12,7 @@ import (
 )
 
 var CLI struct {
-	LogLevel string `enum:"debug,info,warn,error" default:"warn"`
+	LogLevel string `enum:"trace,debug,info,warn,error" default:"warn"`
 	LogFile  string `short:"L" type:"path" default:"./logs/packager.log"`
 }
 
@@ -39,6 +39,8 @@ func main() {
 
 	var logLevel log.Level
 	switch CLI.LogLevel {
+	case "trace":
+		logLevel = log.TraceLevel
 	case "debug":
 		logLevel = log.DebugLevel
 	case "info":
