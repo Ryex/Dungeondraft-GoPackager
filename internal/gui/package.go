@@ -170,7 +170,7 @@ func (a *App) buildPackageTree(editable bool) (*widget.Tree, binding.String, bin
 			}
 		},
 		func(tni widget.TreeNodeID) bool {
-			return !strings.HasPrefix(tni, "res://")
+			return !strings.HasPrefix(tni, "res://") && !strings.HasPrefix(tni, "empty://")
 		},
 		func(b bool) fyne.CanvasObject {
 			var icon, btn fyne.CanvasObject
@@ -228,7 +228,8 @@ func (a *App) buildPackageTree(editable bool) (*widget.Tree, binding.String, bin
 				icn := c.Objects[1].(*widget.FileIcon)
 				if strings.HasPrefix(tni, "empty://") {
 					l.TextStyle = fyne.TextStyle{Italic: true}
-					l.SetText(lang.X("tag.enpty", "No resources"))
+					l.SetText(lang.X("tree.empty", "No resources"))
+					icn.SetURI(nil)
 				} else {
 					icn.SetURI(
 						storage.NewFileURI(
@@ -406,7 +407,7 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 		textEntry := widget.NewMultiLineEntry()
 		textEntry.Text = textContent
 		copyBtn := widget.NewButtonWithIcon("", theme.ContentCopyIcon(), func() {
-			a.window.Clipboard().SetContent(string(fileData))
+			a.app.Clipboard().SetContent(string(fileData))
 		})
 		content := container.NewPadded(
 			layouts.NewBottomExpandVBox(
@@ -881,7 +882,9 @@ func buildInfoMaps(fil structures.FileInfoList) map[string][]string {
 		node := nodeID(next)
 		path := fi.RelPath
 		var nodeLeaf string
-		nodeTree[node] = append(nodeTree[node], fi.ResPath)
+		if !slices.Contains(nodeTree[node], fi.ResPath) {
+			nodeTree[node] = append(nodeTree[node], fi.ResPath)
+		}
 		for next != "" {
 			path = next
 			dir, _ = filepath.Split(next)
@@ -893,17 +896,20 @@ func buildInfoMaps(fil structures.FileInfoList) map[string][]string {
 			}
 		}
 	}
-
+	if len(nodeTree[binding.DataTreeRootID]) == 0 {
+		nodeTree[binding.DataTreeRootID] = append(nodeTree[binding.DataTreeRootID], "empty://")
+	}
 	return nodeTree
 }
 
 func buildTagMaps(fil structures.FileInfoList, pt *structures.PackageTags, filter string) map[string][]string {
 	nodeTree := make(map[string][]string)
+	untaggedPath := "notag://" + lang.X("tree.untagged.label", "Untagged")
 	for _, fi := range fil {
 		if fi.IsTaggable() {
 			tags := pt.TagsFor(fi.ResPath)
 			if tags.Size() == 0 {
-				nodeTree["notag://objects"] = append(nodeTree["notag://objects"], fi.ResPath)
+				nodeTree[untaggedPath] = append(nodeTree[untaggedPath], fi.ResPath)
 			} else {
 				for _, tag := range tags.AsSlice() {
 					nodeTree["tag://"+tag] = append(nodeTree["tag://"+tag], fi.ResPath)
@@ -922,6 +928,12 @@ func buildTagMaps(fil structures.FileInfoList, pt *structures.PackageTags, filte
 			nodeTree["tag://"+tag] = append(nodeTree["tag://"+tag], "empty://"+tag)
 		}
 		nodeTree[binding.DataTreeRootID] = append(nodeTree[binding.DataTreeRootID], "tag://"+tag)
+	}
+	if len(nodeTree[untaggedPath]) > 0 {
+		nodeTree[binding.DataTreeRootID] = append(nodeTree[binding.DataTreeRootID], untaggedPath)
+	}
+	if len(nodeTree[binding.DataTreeRootID]) == 0 {
+		nodeTree[binding.DataTreeRootID] = append(nodeTree[binding.DataTreeRootID], "empty://")
 	}
 	return nodeTree
 }

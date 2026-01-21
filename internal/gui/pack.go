@@ -3,6 +3,7 @@ package gui
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -130,6 +131,18 @@ func (a *App) setupPackageWatcher() {
 		eventTimer = nil
 		toUpdate := paths.AsSlice()
 		paths = structures.NewSet[string]()
+		for _, path := range toUpdate {
+			statInfo, err := os.Stat(path)
+			if err != nil {
+				if slices.Contains(watcher.WatchList(), path) {
+					_ = watcher.Remove(path) // remove non existant paths 
+				}
+				continue
+			}
+			if statInfo.IsDir() {
+				watcher.Add(path) // watch new paths
+			}
+		}
 		if a.packageWatcherIgnoreThumbnails {
 			thumbnailPrefix := filepath.Join(a.pkg.UnpackedPath(), "thumbnails")
 			toUpdate = slices.Collect(utils.Filter(slices.Values(toUpdate), func(path string) bool {
@@ -137,6 +150,7 @@ func (a *App) setupPackageWatcher() {
 			}))
 		}
 		if a.pkg != nil {
+			log.Debugf("updating resource paths... %s", toUpdate)
 			a.pkg.UpdateFromPaths(toUpdate)
 		}
 		a.packageUpdated.Set(a.pkgUpdateCounter + 1)
@@ -159,7 +173,7 @@ func (a *App) setupPackageWatcher() {
 						}
 						paths.Add(path)
 						eventTimer = time.AfterFunc(
-							2*time.Second,
+							1*time.Second,
 							updatePackage,
 						)
 					}()
@@ -177,7 +191,7 @@ func (a *App) setupPackageWatcher() {
 					}
 					paths.Add(a.pkg.UnpackedPath())
 					eventTimer = time.AfterFunc(
-						2*time.Second,
+						1*time.Second,
 						updatePackage,
 					)
 				}
@@ -188,6 +202,10 @@ func (a *App) setupPackageWatcher() {
 
 	toWatchPath := a.pkg.UnpackedPath()
 	if toWatchPath != "" {
+		err := watcher.Add(toWatchPath)
+		if err != nil {
+			log.WithError(err).WithField("package", toWatchPath).Warnf("failed to watch %s", toWatchPath)
+		}
 		_, dirs, _ := utils.ListDir(toWatchPath)
 		for _, dir := range dirs {
 			log.WithField("package", toWatchPath).Infof("watching %s", dir)

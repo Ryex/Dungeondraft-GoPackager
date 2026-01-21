@@ -85,7 +85,6 @@ func (p *Package) LoadUnpackedPackJSON(dirPath string) error {
 	return nil
 }
 
-
 // PackPackage packs up a directory into a .dungeondraft_pack file
 // assumes BuildFileList has been called first
 // includes progress callback
@@ -105,6 +104,7 @@ func (p *Package) PackPackage(
 ) (err error) {
 	return p.packPackage(outDir, options, nil)
 }
+
 func (p *Package) packPackage(
 	outDir string,
 	options PackOptions,
@@ -224,6 +224,14 @@ func (p *Package) updateFromPaths(paths []string, progressCallback func(p float6
 		statInfo, err := os.Stat(absPath)
 		if err != nil {
 			errs = append(errs, err)
+			if isSub, _ := utils.PathIsSub(p.unpackedPath, absPath); isSub {
+				fi := p.fileList.Find(func(fi *structures.FileInfo) bool {
+					return fi.Path == absPath
+				})
+				if fi != nil {
+					toRemove.Add(fi.ResPath)
+				}
+			}
 			continue
 		}
 		if statInfo.IsDir() {
@@ -239,6 +247,8 @@ func (p *Package) updateFromPaths(paths []string, progressCallback func(p float6
 
 	p.flLock.Lock()
 	defer p.flLock.Unlock()
+
+	p.log.WithField("dirs", dirs).Debug("Rechecking files under paths")
 
 	for _, dir := range dirs.AsSlice() {
 		for _, fi := range p.fileList {
