@@ -14,6 +14,7 @@ import (
 	cLayout "fyne.io/x/fyne/layout"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/bindings"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/widgets"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -124,9 +125,11 @@ func (a *App) createTagSetsDialog(editable bool) dialog.Dialog {
 	)
 
 	tagSetHeader := container.NewStack(
-		&canvas.Rectangle{
-			FillColor:    theme.Color(theme.ColorNameHeaderBackground),
-			CornerRadius: 4,
+		&widgets.ThemedRectangle{
+			Rectangle: canvas.Rectangle{
+				FillColor:    theme.Color(theme.ColorNameHeaderBackground),
+				CornerRadius: 4,
+			}, Color: theme.ColorNameHeaderBackground,
 		},
 		container.NewPadded(
 			widget.NewLabel(
@@ -136,9 +139,12 @@ func (a *App) createTagSetsDialog(editable bool) dialog.Dialog {
 	)
 
 	tagsHeader := container.NewStack(
-		&canvas.Rectangle{
-			FillColor:    theme.Color(theme.ColorNameHeaderBackground),
-			CornerRadius: 4,
+		&widgets.ThemedRectangle{
+			Rectangle: canvas.Rectangle{
+				FillColor:    theme.Color(theme.ColorNameHeaderBackground),
+				CornerRadius: 4,
+			},
+			Color: theme.ColorNameHeaderBackground,
 		},
 		container.NewPadded(
 			widget.NewLabelWithData(
@@ -162,9 +168,12 @@ func (a *App) createTagSetsDialog(editable bool) dialog.Dialog {
 		layouts.NewBottomExpandVBox(
 			tagSetHeader,
 			container.NewStack(
-				&canvas.Rectangle{
-					FillColor:    theme.Color(theme.ColorNameInputBackground),
-					CornerRadius: 4,
+				&widgets.ThemedRectangle{
+					Rectangle: canvas.Rectangle{
+						FillColor:    theme.Color(theme.ColorNameInputBackground),
+						CornerRadius: 4,
+					},
+					Color: theme.ColorNameInputBackground,
 				},
 				tagSetList,
 			),
@@ -175,9 +184,12 @@ func (a *App) createTagSetsDialog(editable bool) dialog.Dialog {
 		layouts.NewBottomExpandVBox(
 			tagsHeader,
 			container.NewStack(
-				&canvas.Rectangle{
-					FillColor:    theme.Color(theme.ColorNameInputBackground),
-					CornerRadius: 4,
+				&widgets.ThemedRectangle{
+					Rectangle: canvas.Rectangle{
+						FillColor:    theme.Color(theme.ColorNameInputBackground),
+						CornerRadius: 4,
+					},
+					Color: theme.ColorNameInputBackground,
 				},
 				tagList,
 			),

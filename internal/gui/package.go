@@ -99,8 +99,11 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
 				filterEntry,
 			),
 			container.NewStack(
-				&canvas.Rectangle{
-					FillColor: theme.Color(theme.ColorNameInputBackground),
+				&widgets.ThemedRectangle{
+					Rectangle: canvas.Rectangle{
+						FillColor: theme.Color(theme.ColorNameInputBackground),
+					},
+					Color: theme.ColorNameInputBackground,
 				},
 				container.NewPadded(tree),
 			),
@@ -348,9 +351,12 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 	}
 
 	path := container.NewStack(
-		&canvas.Rectangle{
-			FillColor:    theme.Color(theme.ColorNameHeaderBackground),
-			CornerRadius: 4,
+		&widgets.ThemedRectangle{
+			Rectangle: canvas.Rectangle{
+				FillColor:    theme.Color(theme.ColorNameHeaderBackground),
+				CornerRadius: 4,
+			},
+			Color: theme.ColorNameHeaderBackground,
 		},
 		layouts.NewRightExpandHBox(
 			container.NewCenter(
@@ -361,9 +367,12 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 			),
 			container.NewPadded(
 				container.NewStack(
-					&canvas.Rectangle{
-						FillColor:    theme.Color(theme.ColorNameInputBackground),
-						CornerRadius: 4,
+					&widgets.ThemedRectangle{
+						Rectangle: canvas.Rectangle{
+							FillColor:    theme.Color(theme.ColorNameInputBackground),
+							CornerRadius: 4,
+						},
+						Color: theme.ColorNameInputBackground,
 					},
 					container.NewPadded(
 						container.NewHScroll(
@@ -379,9 +388,12 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 		widget.NewLabel(lang.X("preview.tooLarge", "This file is too large!\nOpen it in a text editor.")),
 	)
 
-	bg := &canvas.Rectangle{
-		FillColor:    theme.Color(theme.ColorNameInputBackground),
-		CornerRadius: 4,
+	bg := &widgets.ThemedRectangle{
+		Rectangle: canvas.Rectangle{
+			FillColor:    theme.Color(theme.ColorNameInputBackground),
+			CornerRadius: 4,
+		},
+		Color: theme.ColorNameInputBackground,
 	}
 	if !ddimage.PathIsSupportedImage(info.RelPath) {
 		textContent := string(fileData)
@@ -432,9 +444,12 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 	thumbnailErr := binding.BindString(&thumbnailErrString)
 	thumbnailErrObj := container.NewCenter(
 		container.NewStack(
-			&canvas.Rectangle{
-				FillColor:    theme.Color(theme.ColorNameBackground),
-				CornerRadius: 8,
+			&widgets.ThemedRectangle{
+				Rectangle: canvas.Rectangle{
+					FillColor:    theme.Color(theme.ColorNameBackground),
+					CornerRadius: 8,
+				},
+				Color: theme.ColorNameBackground,
 			},
 			widget.NewLabelWithData(thumbnailErr),
 		),
@@ -547,9 +562,12 @@ func (a *App) buildTagInfo(info *structures.FileInfo, editable bool) fyne.Canvas
 	content := layouts.NewTopExpandVBox(
 		layouts.NewBottomExpandVBox(
 			container.NewStack(
-				&canvas.Rectangle{
-					FillColor:    theme.Color(theme.ColorNameHeaderBackground),
-					CornerRadius: 4,
+				&widgets.ThemedRectangle{
+					Rectangle: canvas.Rectangle{
+						FillColor:    theme.Color(theme.ColorNameHeaderBackground),
+						CornerRadius: 4,
+					},
+					Color: theme.ColorNameHeaderBackground,
 				},
 				layouts.NewRightExpandHBox(
 					container.NewCenter(
@@ -560,9 +578,12 @@ func (a *App) buildTagInfo(info *structures.FileInfo, editable bool) fyne.Canvas
 					),
 					container.NewPadded(
 						container.NewStack(
-							&canvas.Rectangle{
-								FillColor:    theme.Color(theme.ColorNameInputBackground),
-								CornerRadius: 4,
+							&widgets.ThemedRectangle{
+								Rectangle: canvas.Rectangle{
+									FillColor:    theme.Color(theme.ColorNameInputBackground),
+									CornerRadius: 4,
+								},
+								Color: theme.ColorNameInputBackground,
 							},
 							container.NewPadded(
 								container.NewHScroll(
@@ -574,9 +595,12 @@ func (a *App) buildTagInfo(info *structures.FileInfo, editable bool) fyne.Canvas
 				),
 			),
 			container.NewStack(
-				&canvas.Rectangle{
-					FillColor:    theme.Color(theme.ColorNameInputBackground),
-					CornerRadius: 4,
+				&widgets.ThemedRectangle{
+					Rectangle: canvas.Rectangle{
+						FillColor:    theme.Color(theme.ColorNameInputBackground),
+						CornerRadius: 4,
+					},
+					Color: theme.ColorNameInputBackground,
 				},
 				container.NewPadded(
 					tagsList,

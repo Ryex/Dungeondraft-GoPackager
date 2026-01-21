@@ -18,6 +18,7 @@ import (
 	xlayout "fyne.io/x/fyne/layout"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/bindings"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/widgets"
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddpackage"
 	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
@@ -249,18 +250,24 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 		xlayout.NewHPortion([]float64{50, 0.1, 50}),
 		layouts.NewBottomExpandVBox(
 			container.NewStack(
-				&canvas.Rectangle{
-					FillColor:    theme.Color(theme.ColorNameHeaderBackground),
-					CornerRadius: 4,
+				&widgets.ThemedRectangle{
+					Rectangle: canvas.Rectangle{
+						FillColor:    theme.Color(theme.ColorNameHeaderBackground),
+						CornerRadius: 4,
+					},
+					Color: theme.ColorNameHeaderBackground,
 				},
 				container.NewPadded(
 					widget.NewLabel(lang.X("pathGen.exampleTags.label", "Example Tags")),
 				),
 			),
 			container.NewStack(
-				&canvas.Rectangle{
-					FillColor:    theme.Color(theme.ColorNameInputBackground),
-					CornerRadius: 4,
+				&widgets.ThemedRectangle{
+					Rectangle: canvas.Rectangle{
+						FillColor:    theme.Color(theme.ColorNameInputBackground),
+						CornerRadius: 4,
+					},
+					Color: theme.ColorNameInputBackground,
 				},
 				tagsList,
 			),
@@ -268,18 +275,24 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 		widget.NewSeparator(),
 		layouts.NewBottomExpandVBox(
 			container.NewStack(
-				&canvas.Rectangle{
-					FillColor:    theme.Color(theme.ColorNameHeaderBackground),
-					CornerRadius: 4,
+				&widgets.ThemedRectangle{
+					Rectangle: canvas.Rectangle{
+						FillColor:    theme.Color(theme.ColorNameHeaderBackground),
+						CornerRadius: 4,
+					},
+					Color: theme.ColorNameHeaderBackground,
 				},
 				container.NewPadded(
 					widget.NewLabel(lang.X("pathGen.exampleSets.label", "Example sets tag is in")),
 				),
 			),
 			container.NewStack(
-				&canvas.Rectangle{
-					FillColor:    theme.Color(theme.ColorNameInputBackground),
-					CornerRadius: 4,
+				&widgets.ThemedRectangle{
+					Rectangle: canvas.Rectangle{
+						FillColor:    theme.Color(theme.ColorNameInputBackground),
+						CornerRadius: 4,
+					},
+					Color: theme.ColorNameInputBackground,
 				},
 				setsList,
 			),

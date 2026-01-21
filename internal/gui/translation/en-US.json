@@ -1,6 +1,7 @@
 {
   "window.title": "Dungeondraft-GoPackager",
   "website.link": "Website",
+  "app.darkTheme.toggle.label": "Dark Mode",
   "creditsWindow.title": "Credits",
   "greeting.title": "Dungeondraft-GoPackager",
   "greeting.sub-title": "Package, edit, and prepare Dungeondraft resource packs",
