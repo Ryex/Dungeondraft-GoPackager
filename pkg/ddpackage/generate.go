@@ -12,6 +12,9 @@ import (
 
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
+
+	dderrors "github.com/ryex/dungeondraft-gopackager/internal/errors"
+
 	"github.com/sirupsen/logrus"
 )
 
@@ -68,7 +71,7 @@ func SavePackageJSON(log logrus.FieldLogger, options SavePackageJSONOptions, ove
 	if dirExists := utils.DirExists(folderPath); !dirExists {
 		err = os.MkdirAll(folderPath, 0o777)
 		if err != nil {
-			return errors.Join(err, fmt.Errorf("failed to make directory %s", folderPath))
+			return dderrors.CausedBy(fmt.Errorf("failed to make directory %s", folderPath), err)
 		}
 	}
 

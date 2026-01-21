@@ -21,6 +21,8 @@ import (
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddpackage"
 
+	dderrors "github.com/ryex/dungeondraft-gopackager/internal/errors"
+
 	log "github.com/sirupsen/logrus"
 )
 
@@ -65,12 +67,12 @@ func (a *App) loadPack(path string) {
 
 		err = pkg.LoadTags()
 		if err != nil {
-			a.showErrorDialog(errors.Join(err, fmt.Errorf(lang.X("package.tags.error", "Failed to read tags"))))
+			a.showErrorDialog(dderrors.CausedBy(fmt.Errorf(lang.X("package.tags.error", "Failed to read tags")), err))
 			err = nil
 		}
 		err = pkg.LoadResourceMetadata()
 		if err != nil {
-			a.showErrorDialog(errors.Join(err, fmt.Errorf(lang.X("package.metadata.error", "Failed to read metadata"))))
+			a.showErrorDialog(dderrors.CausedBy(fmt.Errorf(lang.X("package.metadata.error", "Failed to read metadata")), err))
 			err = nil
 		}
 		a.setPackContent(pkg)
@@ -233,14 +235,15 @@ func (a *App) extractPackage(path string, options ddpackage.UnpackOptions) {
 		packPath, _ := a.operatingPath.Get()
 		if err != nil {
 			errDlg := dialog.NewError(
-				errors.Join(err, errors.New(lang.X(
+				dderrors.CausedBy(errors.New(lang.X(
+
 					"unpack.extract.error.text",
 					"Error extracting {{.Pack}} to {{.Path}}",
 					map[string]any{
 						"Pack": packPath,
 						"Path": targetPath,
 					},
-				))),
+				)), err),
 				a.window,
 			)
 			errDlg.Show()
