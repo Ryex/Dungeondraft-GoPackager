@@ -30,6 +30,7 @@ import (
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/bindings"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/credits"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/widgets"
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddpackage"
 	log "github.com/sirupsen/logrus"
@@ -85,6 +86,9 @@ func (a *App) Main() {
 	if translationErr != nil {
 		log.WithError(translationErr).Error("Failed to load translations")
 	}
+
+	a.app.Settings().SetTheme(&betterDisabledContrast{Theme: theme.DefaultTheme()})
+
 	a.window = a.app.NewWindow(lang.X("window.title", "Dungeondraft-GoPackager"))
 	a.window.SetIcon(assets.Icon)
 	a.window.Resize(fyne.NewSize(1200, 800))
@@ -141,11 +145,52 @@ func (a *App) clean() {
 func (a *App) buildMainUI() {
 	siteURL, _ := url.Parse("https://ryex.github.io/Dungeondraft-GoPackager/")
 	githubURL, _ := url.Parse("https://github.com/Ryex/Dungeondraft-GoPackager")
-	welcome := container.NewPadded(container.NewStack(
-		&canvas.Rectangle{
+
+	darkThemeToggleLbl := widget.NewLabel(lang.X("app.darkTheme.toggle.label", "Dark Mode"))
+
+	forceDarkMode := binding.BindPreferenceBool("forceDarkMode", a.app.Preferences())
+	darkThemeToggle := widgets.NewToggleWithData(forceDarkMode)
+
+	headerBg := widgets.ThemedRectangle{
+		Rectangle: canvas.Rectangle{
 			FillColor:    theme.Color(theme.ColorNameHeaderBackground),
 			CornerRadius: 4,
 		},
+		Color: theme.ColorNameHeaderBackground,
+	}
+
+	infoIcon := widget.NewButtonWithIcon("", theme.InfoIcon(), func() {
+		crdWin := credits.CreditsWindow(a.app, fyne.NewSize(800, 400))
+		crdWin.SetIcon(assets.Icon)
+		crdWin.SetTitle(lang.X("creditsWindow.title", "Credits"))
+		crdWin.Show()
+	})
+
+	ghIcon := widget.NewButtonWithIcon("", assets.GithubWhite, func() {
+		a.app.OpenURL(githubURL)
+	})
+
+	refreshTheme := func() {
+		// headerBg.FillColor = theme.Color(theme.ColorNameHeaderBackground)
+		// headerBg.Refresh()
+		infoIcon.Icon = theme.InfoIcon()
+		infoIcon.Refresh()
+		ghIcon.Icon = func() *fyne.StaticResource {
+			forceDark, err := forceDarkMode.Get()
+			if err != nil {
+				forceDark = false
+			}
+			if forceDark || a.app.Settings().ThemeVariant() == theme.VariantDark {
+				return assets.GithubWhite
+			} else {
+				return assets.Github
+			}
+		}()
+		ghIcon.Refresh()
+	}
+
+	welcome := container.NewPadded(container.NewStack(
+		&headerBg,
 		container.NewPadded(container.NewVBox(
 			&canvas.Text{
 				Text:      lang.X("greeting.title", "Dungeondraft-GoPackager"),
@@ -162,7 +207,9 @@ func (a *App) buildMainUI() {
 		)),
 		container.NewVBox(
 			layout.NewSpacer(),
-			container.NewHBox(
+			container.NewPadded(container.NewHBox(
+				darkThemeToggleLbl,
+				darkThemeToggle,
 				layout.NewSpacer(),
 				widget.NewButtonWithIcon("", assets.Icon, func() {
 					aboutDlg := xdialog.NewAbout(
@@ -183,19 +230,22 @@ func (a *App) buildMainUI() {
 					)
 					aboutDlg.Show()
 				}),
-				widget.NewButtonWithIcon("", assets.GithubWhite, func() {
-					a.app.OpenURL(githubURL)
-				}),
-				widget.NewButtonWithIcon("", theme.InfoIcon(), func() {
-					crdWin := credits.CreditsWindow(a.app, fyne.NewSize(800, 400))
-					crdWin.SetIcon(assets.Icon)
-					crdWin.SetTitle(lang.X("creditsWindow.title", "Credits"))
-					crdWin.Show()
-				}),
-			),
+				ghIcon,
+				infoIcon,
+			)),
 			layout.NewSpacer(),
 		),
 	))
+
+	bindings.Listen(forceDarkMode, func(force bool) {
+		log.Infof("darkmode toggled: %t", force)
+		if force {
+			a.app.Settings().SetTheme(&forcedVariantTheme{Theme: &betterDisabledContrast{Theme: theme.DefaultTheme()}, variant: theme.VariantDark})
+		} else {
+			a.app.Settings().SetTheme(&betterDisabledContrast{Theme: theme.DefaultTheme()})
+		}
+		refreshTheme()
+	})
 
 	pathInput := widget.NewEntryWithData(a.operatingPath)
 	pathInput.SetPlaceHolder(lang.X("pathInput.placeholder", "Path to .dungeondraft_pack or folder"))
