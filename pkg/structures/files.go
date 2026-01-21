@@ -13,6 +13,9 @@ import (
 	"strings"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
+
+	dderrors "github.com/ryex/dungeondraft-gopackager/internal/errors"
+
 	log "github.com/sirupsen/logrus"
 )
 
@@ -273,7 +276,7 @@ func (fil FileInfoList) Glob(filter FileInfoFilterFunc, patterns ...string) (Fil
 	for _, pattern := range patterns {
 		regexpPat, err := GlobToRelPathRegexp(pattern)
 		if err != nil {
-			return nil, errors.Join(err, ErrBadFileInfoListGlobPattern)
+			return nil, dderrors.CausedBy(ErrBadFileInfoListGlobPattern, err)
 		}
 		log.Debugf("compiled glob pattern %s", regexpPat.String())
 

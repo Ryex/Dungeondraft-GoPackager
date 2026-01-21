@@ -16,6 +16,8 @@ import (
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddimage"
 	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
 	"github.com/sirupsen/logrus"
+
+	dderrors "github.com/ryex/dungeondraft-gopackager/internal/errors"
 )
 
 type PackOptions struct {
@@ -39,7 +41,7 @@ const (
 
 type Package struct {
 	log           logrus.FieldLogger
-mode          PackageMode
+	mode          PackageMode
 	name          string
 	id            string
 	unpackOptions *UnpackOptions
@@ -192,12 +194,12 @@ func (p *Package) LoadFromPackedPath(
 	packFilePath, pathErr := filepath.Abs(path)
 	if pathErr != nil {
 		p.log.WithField("path", packFilePath).WithError(pathErr).Error("could not get absolute path for package file")
-		return errors.Join(pathErr, errors.New("could not get absolute path for package file"))
+		return dderrors.CausedBy(errors.New("could not get absolute path for package file"), pathErr)
 	}
 	file, fileErr := os.Open(packFilePath)
 	if fileErr != nil {
 		p.log.WithField("path", packFilePath).WithError(fileErr).Error("could not open package file for reading")
-		return errors.Join(fileErr, errors.New("could not open package file for reading"))
+		return dderrors.CausedBy(errors.New("could not open package file for reading"), fileErr)
 	}
 
 	p.SetUnpackOptions(UnpackOptions{})
@@ -206,13 +208,13 @@ func (p *Package) LoadFromPackedPath(
 	if err != nil {
 		p.log.WithError(err).Error("failed to read file list")
 		file.Close()
-		return errors.Join(err, errors.New("failed to read file list"))
+		return dderrors.CausedBy(errors.New("failed to read file list"), err)
 	}
 	err = p.loadPackedPackJSON(file)
 	if err != nil {
 		p.log.WithError(err).Error("failed to read pack json")
 		file.Close()
-		return errors.Join(err, errors.New("failed to read pack json"))
+		return dderrors.CausedBy(errors.New("failed to read pack json"), err)
 	}
 	p.packedPath = packFilePath
 	p.pkgFile = file
@@ -227,7 +229,7 @@ func (p *Package) LoadUnpackedFromFolder(dirPath string) error {
 		p.log.WithField("path", dirPath).
 			WithError(pathErr).
 			Error("could not get absolute path for package folder")
-		return errors.Join(pathErr, errors.New("could not get absolute path for package folder"))
+		return dderrors.CausedBy(errors.New("could not get absolute path for package folder"), pathErr)
 	}
 
 	if dirExists := utils.DirExists(dirPath); !dirExists {
@@ -415,7 +417,7 @@ func (p *Package) NewFileInfo(options NewFileInfoOptions) (*structures.FileInfo,
 			img, format, err := ddimage.OpenImage(options.Path)
 			if err != nil {
 				l.WithError(err).Error("can not open path with image extension as image")
-				err = errors.Join(err, fmt.Errorf("failed to open %s as an image", options.Path))
+				err = dderrors.CausedBy(fmt.Errorf("failed to open %s as an image", options.Path), err)
 				// log but let info construction continue
 			} else {
 				l.WithField("imageFormat", format).Trace("read image")

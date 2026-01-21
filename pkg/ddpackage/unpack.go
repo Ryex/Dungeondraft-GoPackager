@@ -15,6 +15,9 @@ import (
 
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
+
+	dderrors "github.com/ryex/dungeondraft-gopackager/internal/errors"
+
 	"github.com/tailscale/hujson"
 )
 
@@ -223,7 +226,7 @@ func (p *Package) readPackedFileFromPackage(r io.ReadSeeker, info *structures.Fi
 	var n int
 	n, err = r.Read(fileData)
 	if !utils.CheckErrorRead(l, err, n, int(info.Size)) {
-		return nil, errors.Join(err, ErrReadPacked)
+		return nil, dderrors.CausedBy(ErrReadPacked, err)
 	}
 
 	// if the md5 isn't blank verify
@@ -285,20 +288,19 @@ func (p *Package) loadPackedPackJSON(r io.ReadSeeker) (err error) {
 	packJSONBytes, err := p.readPackedFileFromPackage(r, packJSONInfo)
 	if err != nil {
 		p.log.WithError(err).WithField("res", packJSONInfo.ResPath).Error("failed to read pack json")
-		return errors.Join(err, ErrPackJSONRead)
+		return dderrors.CausedBy(fmt.Errorf("failed to read pack json"), err, ErrPackJSONRead)
 	}
 
 	packJSONBytes, err = hujson.Standardize(packJSONBytes)
 	if err != nil {
 		p.log.WithError(err).WithField("res", packJSONInfo.ResPath).Error("failed to parse pack json")
-		return errors.Join(err, ErrJSONStandardize, ErrPackJSONParse)
+		return dderrors.CausedBy(fmt.Errorf("failed to parse pack json"), err, ErrJSONStandardize, ErrPackJSONParse)
 	}
-
 
 	err = json.Unmarshal(packJSONBytes, &p.info)
 	if err != nil {
 		p.log.WithError(err).WithField("res", packJSONInfo.ResPath).Error("failed to parse pack json")
-		return errors.Join(err, ErrPackJSONParse)
+		return dderrors.CausedBy(fmt.Errorf("failed to parse pack json"), err, ErrPackJSONParse)
 	}
 
 	p.id = p.info.ID
@@ -420,9 +422,9 @@ func (p *Package) readPackageHeaders(r io.ReadSeeker) (headers structures.Packag
 		p.log.WithError(err).Error("Could not read package headers")
 	}
 	if headers.PackFormatVersion != structures.GodotPackageFormat {
-		err = errors.Join(
-			ErrUnsupportedGodot,
+		err = dderrors.CausedBy(
 			fmt.Errorf("package format %d is not supported", headers.PackFormatVersion),
+			ErrUnsupportedGodot,
 		)
 		p.log.
 			WithError(err).

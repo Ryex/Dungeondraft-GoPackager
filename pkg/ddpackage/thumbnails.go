@@ -1,7 +1,6 @@
 package ddpackage
 
 import (
-	"errors"
 	"fmt"
 	"image"
 	"image/png"
@@ -13,6 +12,9 @@ import (
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddimage"
 	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
+
+	dderrors "github.com/ryex/dungeondraft-gopackager/internal/errors"
+
 	"github.com/sirupsen/logrus"
 )
 
@@ -33,7 +35,9 @@ func (p *Package) generateThumbnails(progressCallback func(p float64)) []error {
 	if dirExists := utils.DirExists(thumbnailDir); !dirExists {
 		err := os.MkdirAll(thumbnailDir, 0o777)
 		if err != nil {
-			return []error{errors.Join(err, fmt.Errorf("failed to create thumbnail directory %s", thumbnailDir))}
+			return []error{
+				dderrors.CausedBy(fmt.Errorf("failed to create thumbnail directory %s", thumbnailDir), err),
+			}
 		}
 	}
 
@@ -56,7 +60,7 @@ func (p *Package) generateThumbnails(progressCallback func(p float64)) []error {
 		if fi.Image == nil {
 			img, _, err = ddimage.OpenImage(fi.Path)
 			if err != nil {
-				err = errors.Join(err, fmt.Errorf("failed to open %s as an image", fi.Path))
+				err = dderrors.CausedBy(fmt.Errorf("failed to open %s as an image", fi.Path), err)
 				ch <- result{err, fi.ResPath}
 				return
 			}
@@ -85,10 +89,13 @@ func (p *Package) generateThumbnails(progressCallback func(p float64)) []error {
 			l.WithError(err).
 				WithField("thumbnail", fi.ThumbnailPath).
 				Error("failed to open thumbnail file for writing")
-			err = errors.Join(
-				err,
-				fmt.Errorf("failed to open thumbnail file %s for writing", fi.ThumbnailPath),
+			err = dderrors.CausedBy(
 				fmt.Errorf("failed generate thumbnail for %s", fi.RelPath),
+				dderrors.CausedBy(
+
+					fmt.Errorf("failed to open thumbnail file %s for writing", fi.ThumbnailPath),
+					err,
+				),
 			)
 			ch <- result{err, fi.ResPath}
 			return
@@ -99,10 +106,11 @@ func (p *Package) generateThumbnails(progressCallback func(p float64)) []error {
 			l.WithError(err).
 				WithField("thumbnail", fi.ThumbnailPath).
 				Error("failed to encode thumbnail png")
-			err = errors.Join(
-				err,
-				fmt.Errorf("failed to encode thumbnail png"),
+			err = dderrors.CausedBy(
 				fmt.Errorf("failed generate thumbnail for %s", fi.RelPath),
+				dderrors.CausedBy(
+					fmt.Errorf("failed to encode thumbnail png"),
+					err),
 			)
 			ch <- result{err, fi.ResPath}
 			return
@@ -133,7 +141,7 @@ func (p *Package) generateThumbnails(progressCallback func(p float64)) []error {
 					return
 				}
 				fi := fileList[index]
-			  makeThumb(fi, log.WithField("res", fi.ResPath), chResult)
+				makeThumb(fi, log.WithField("res", fi.ResPath), chResult)
 			}
 		}()
 	}

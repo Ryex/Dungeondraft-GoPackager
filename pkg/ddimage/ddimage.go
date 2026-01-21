@@ -35,6 +35,8 @@ import (
 
 	"github.com/srwiley/oksvg"
 	"github.com/srwiley/rasterx"
+
+	dderrors "github.com/ryex/dungeondraft-gopackager/internal/errors"
 )
 
 func unmultiplyAlpha(c color.Color) (r, g, b, a int) {
@@ -90,7 +92,7 @@ func ConvertRGBAToNRGBA(c color.RGBA) color.NRGBA {
 func OpenImage(path string) (image.Image, string, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return nil, "", errors.Join(err, fmt.Errorf("cannot open file: %s", path))
+		return nil, "", dderrors.CausedBy(fmt.Errorf("cannot open file: %s", path), err)
 	}
 	defer file.Close()
 
@@ -118,7 +120,7 @@ var ErrInvalidSVG = errors.New("invalid svg")
 func ReadSvg(r io.Reader) (image.Image, error) {
 	icon, err := oksvg.ReadIconStream(r)
 	if err != nil {
-		return nil, errors.Join(err, ErrInvalidSVG)
+		return nil, dderrors.CausedBy(ErrInvalidSVG, err)
 	}
 	return SvgToImage(icon)
 }

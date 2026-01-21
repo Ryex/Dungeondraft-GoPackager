@@ -26,6 +26,9 @@ import (
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddpackage"
 	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
+
+	dderrors "github.com/ryex/dungeondraft-gopackager/internal/errors"
+
 	log "github.com/sirupsen/logrus"
 )
 
@@ -97,12 +100,12 @@ func (a *App) loadUnpackedPath(path string) {
 		err = pkg.LoadTags()
 		if err != nil {
 			a.showErrorDialog(
-				errors.Join(err, fmt.Errorf(lang.X("package.tags.error", "Failed to read tags"))))
+				dderrors.CausedBy(fmt.Errorf(lang.X("package.tags.error", "Failed to read tags")), err))
 			err = nil
 		}
 		err = pkg.LoadResourceMetadata()
 		if err != nil {
-			a.showErrorDialog(errors.Join(err, fmt.Errorf(lang.X("package.metadata.error", "Failed to read metadata"))))
+			a.showErrorDialog(dderrors.CausedBy(fmt.Errorf(lang.X("package.metadata.error", "Failed to read metadata")), err))
 			err = nil
 		}
 		a.setUnpackedContent(pkg)
@@ -325,13 +328,13 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 				)
 				if err != nil {
 					errDlg := dialog.NewError(
-						errors.Join(err, errors.New(lang.X(
+						dderrors.CausedBy(errors.New(lang.X(
 							"pack.edit.error.text",
 							"Error saving {{.Path}}",
 							map[string]any{
 								"Path": filepath.Join(options.Path, "pack.json"),
 							},
-						))),
+						)), err),
 						a.window,
 					)
 					errDlg.Show()
@@ -341,13 +344,13 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 				err = a.pkg.LoadUnpackedPackJSON(options.Path)
 				if err != nil {
 					errDlg := dialog.NewError(
-						errors.Join(err, errors.New(lang.X(
+						dderrors.CausedBy(errors.New(lang.X(
 							"pack.reload.error.text",
 							"Error loading {{.Path}}",
 							map[string]any{
 								"Path": filepath.Join(options.Path, "pack.json"),
 							},
-						))),
+						)), err),
 						a.window,
 					)
 					errDlg.Show()
@@ -443,13 +446,13 @@ func (a *App) genthumbnails() {
 		if len(errs) != 0 {
 			progressDlg.Hide()
 			errDlg := dialog.NewError(
-				errors.Join(append(errs, errors.New(lang.X(
+				dderrors.CausedBy(errors.New(lang.X(
 					"pack.thumbnails.error.text",
 					"Error generating thumbnails for {{.Path}}",
 					map[string]any{
 						"Path": a.pkg.UnpackedPath(),
 					},
-				)))...),
+				)), errs...),
 				a.window,
 			)
 			errDlg.Show()
@@ -493,14 +496,14 @@ func (a *App) packPackage(path string, options ddpackage.PackOptions) {
 		progressDlg.Hide()
 		if err != nil {
 			errDlg := dialog.NewError(
-				errors.Join(err, errors.New(lang.X(
+				dderrors.CausedBy(errors.New(lang.X(
 					"pack.package.error.text",
 					"Error packing {{.Path}} to {{.Pack}}",
 					map[string]any{
 						"Path": a.pkg.UnpackedPath(),
 						"Pack": targetPath,
 					},
-				))),
+				)), err),
 				a.window,
 			)
 			errDlg.Show()
