@@ -196,11 +196,16 @@ func (fil FileInfoList) Filter(P func(fi *FileInfo) bool) FileInfoList {
 	return res
 }
 
-func (fil FileInfoList) Remove(i int) *FileInfo {
-	res := fil[i]
-	fil[i] = fil[len(fil)-1]
-	fil = fil[:len(fil)-1]
+func (fil *FileInfoList) Remove(i int) *FileInfo {
+	res := (*fil)[i]
+	*fil = slices.Delete(*fil, i, i+1)
 	return res
+}
+
+func (fil *FileInfoList) Add(info *FileInfo) {
+	if index := fil.IndexOfRes(info.ResPath); index == -1 {
+		*fil = append(*fil, info)
+	}
 }
 
 func (fil FileInfoList) IndexOf(info *FileInfo) int {
@@ -221,7 +226,7 @@ func (fil FileInfoList) IndexOfRes(res string) int {
 	return -1
 }
 
-func (fil FileInfoList) RemoveRes(res string) *FileInfo {
+func (fil *FileInfoList) RemoveRes(res string) *FileInfo {
 	index := fil.IndexOfRes(res)
 	if index != -1 {
 		return fil.Remove(index)
@@ -333,15 +338,15 @@ func (fil FileInfoList) SetCapacity(capacity int) {
 	}
 }
 
-func (fil FileInfoList) UpdateThumbnailRefrences() {
+func (fil *FileInfoList) UpdateThumbnailRefrences() {
 	thumbnailMap := make(map[string]string)
-	for _, fi := range fil {
+	for _, fi := range *fil {
 		if fi.IsTexture() && fi.ThumbnailPath != "" {
 			thumbnailMap[fi.ThumbnailResPath] = fi.ResPath
 		}
 	}
 	toRemove := NewSet[string]()
-	for _, fi := range fil {
+	for _, fi := range *fil {
 		if fi.IsThumbnail() {
 			forRes, ok := thumbnailMap[fi.ResPath]
 			if ok {
@@ -394,10 +399,10 @@ func cmpResAndThumb(a, b *FileInfo) int {
 }
 
 // places the file list
-func (fil FileInfoList) Sort() {
+func (fil *FileInfoList) Sort() {
 	fil.UpdateThumbnailRefrences()
 
-	slices.SortFunc(fil, func(a, b *FileInfo) int {
+	slices.SortFunc(*fil, func(a, b *FileInfo) int {
 		return cmpResPaths(a.ResPath, b.ResPath)
 	})
 }

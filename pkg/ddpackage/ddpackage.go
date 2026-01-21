@@ -273,8 +273,7 @@ func (p *Package) AddResource(fInfo *structures.FileInfo) {
 // DO NOT USE WITHOUT flLock
 func (p *Package) addResource(fInfo *structures.FileInfo) {
 	if _, ok := p.resourceMap[fInfo.ResPath]; !ok {
-		p.fileList = append(p.fileList, fInfo)
-		p.resourceMap[fInfo.ResPath] = fInfo
+		p.fileList.Add(fInfo)
 		p.log.Debugf("added %s", fInfo.ResPath)
 	}
 }
