@@ -251,7 +251,7 @@ func (p *Package) updateFromPaths(paths []string, progressCallback func(p float6
 	p.log.WithField("dirs", dirs).Debug("Rechecking files under paths")
 
 	for _, dir := range dirs.AsSlice() {
-		for _, fi := range p.fileList {
+		for _, fi := range p.fileList.AsSlice() {
 			if isSub, _ := utils.PathIsSub(dir, fi.Path); isSub && !files.Has(fi.Path) {
 				toRemove.Add(fi.ResPath)
 			}
@@ -329,13 +329,13 @@ func (p *Package) updateFromPaths(paths []string, progressCallback func(p float6
 	p.resourceMap[packJSONResPath] = packJSONInfo
 
 	// remove duplicates
-	p.fileList = slices.CompactFunc(p.fileList, func(a, b *structures.FileInfo) bool {
+	p.fileList.DeduplicateBy(func(a, b *structures.FileInfo) bool {
 		return a.ResPath == b.ResPath
 	})
 
 	// sort list and assure pack json is first
 	p.fileList.Sort()
-	p.fileList = slices.Insert(p.fileList, 0, packJSONInfo)
+	p.fileList.Insert(0, packJSONInfo)
 	return
 }
 
@@ -360,7 +360,7 @@ func (p *Package) makeResPath(l logrus.FieldLogger, path string) (string, error)
 
 func (p *Package) writePackage(l logrus.FieldLogger, out io.WriteSeeker, progressCallback func(p float64)) (err error) {
 	headers := structures.DefaultPackageHeader()
-	headers.FileCount = uint32(len(p.fileList))
+	headers.FileCount = uint32(p.fileList.Length())
 
 	l.Debug("writing package headers...")
 	// write file header

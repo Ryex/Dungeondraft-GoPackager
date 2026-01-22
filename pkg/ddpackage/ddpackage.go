@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	// "io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -121,11 +122,10 @@ func (p *Package) PackedPath() string {
 	return p.packedPath
 }
 
-func (p *Package) FileList() structures.FileInfoList {
+func (p *Package) FileList() *structures.FileInfoList {
 	p.flLock.RLock()
 	defer p.flLock.RUnlock()
-	res := make(structures.FileInfoList, len(p.fileList))
-	copy(res, p.fileList)
+	res := p.fileList.Copy()
 	return res
 }
 
@@ -401,63 +401,90 @@ func (p *Package) NewFileInfo(options NewFileInfoOptions) (*structures.FileInfo,
 		Size:        options.Size,
 	}
 
-	if options.Path != "" && info.IsTexture() {
+	if options.Path != "" {
 
 		l := p.log.WithField("filePath", options.Path)
 
-		thumbnailDir := filepath.Join(p.unpackedPath, "thumbnails")
-		hash := md5.Sum([]byte(info.ResPath))
-		thumbnailName := hex.EncodeToString(hash[:]) + ".png"
-		thumbnailPath := filepath.Join(thumbnailDir, thumbnailName)
-		info.ThumbnailPath = thumbnailPath
-		info.ThumbnailResPath = fmt.Sprintf("res://packs/%s/thumbnails/%s", p.id, thumbnailName)
+		// calc file Md5
+		// err := func() error {
+		// 	file, err := os.Open(options.Path)
+		// 	if err != nil {
+		// 		l.WithError(err).Error("can not open path to compute md5")
+		// 		err = dderrors.CausedBy(fmt.Errorf("failed to open %s for hashing", options.Path), err)
+		// 		return err
+		// 	}
+		// 	defer file.Close()
+		//
+		// 	hash := md5.New()
+		// 	if _, err := io.Copy(hash, file); err != nil {
+		// 		return dderrors.CausedBy(fmt.Errorf("failed to read file: %s", options.Path, err))
+		// 	}
+		//
+		// 	hashBytes := hash.Sum(nil)
+		// 	info.Md5 = hex.EncodeToString(hashBytes[:])
+		// 	return nil
+		// }()
+		//
+		// if err != nil {
+		// 	return info, err
+		// }
 
-		if !ddimage.PathIsSupportedDDImage(options.Path) {
-			img, format, err := ddimage.OpenImage(options.Path)
-			if err != nil {
-				l.WithError(err).Error("can not open path with image extension as image")
-				err = dderrors.CausedBy(fmt.Errorf("failed to open %s as an image", options.Path), err)
-				// log but let info construction continue
-			} else {
-				l.WithField("imageFormat", format).Trace("read image")
-				info.ImageFormat = format
+		if info.IsTexture() {
 
-				info.Image = img
-				l.WithField("imageFormat", format).
-					Info("format is not supported by dungeondraft, converting to png")
-				buf := new(bytes.Buffer)
-				err = ddimage.PngImageBytes(img, buf)
+			thumbnailDir := filepath.Join(p.unpackedPath, "thumbnails")
+			hash := md5.Sum([]byte(info.ResPath))
+			thumbnailName := hex.EncodeToString(hash[:]) + ".png"
+			thumbnailPath := filepath.Join(thumbnailDir, thumbnailName)
+			info.ThumbnailPath = thumbnailPath
+			info.ThumbnailResPath = fmt.Sprintf("res://packs/%s/thumbnails/%s", p.id, thumbnailName)
+
+			if !ddimage.PathIsSupportedDDImage(options.Path) {
+				img, format, err := ddimage.OpenImage(options.Path)
 				if err != nil {
-					l.WithError(err).Error("failed to encode png version of image")
+					l.WithError(err).Error("can not open path with image extension as image")
+					err = dderrors.CausedBy(fmt.Errorf("failed to open %s as an image", options.Path), err)
 					// log but let info construction continue
 				} else {
-					imgBytes := buf.Bytes()
-					info.PngImage = make([]byte, len(imgBytes))
-					copy(info.PngImage, imgBytes)
+					l.WithField("imageFormat", format).Trace("read image")
+					info.ImageFormat = format
 
-					info.Size = int64(len(info.PngImage))
+					info.Image = img
+					l.WithField("imageFormat", format).
+						Info("format is not supported by dungeondraft, converting to png")
+					buf := new(bytes.Buffer)
+					err = ddimage.PngImageBytes(img, buf)
+					if err != nil {
+						l.WithError(err).Error("failed to encode png version of image")
+						// log but let info construction continue
+					} else {
+						imgBytes := buf.Bytes()
+						info.PngImage = make([]byte, len(imgBytes))
+						copy(info.PngImage, imgBytes)
 
-					ext := filepath.Ext(options.Path)
-					info.ResPath = info.ResPath[0:len(info.ResPath)-len(ext)] + ".png"
-					info.RelPath = info.RelPath[0:len(info.RelPath)-len(ext)] + ".png"
+						info.Size = int64(len(info.PngImage))
+
+						ext := filepath.Ext(options.Path)
+						info.ResPath = info.ResPath[0:len(info.ResPath)-len(ext)] + ".png"
+						info.RelPath = info.RelPath[0:len(info.RelPath)-len(ext)] + ".png"
+					}
 				}
 			}
-		}
 
-		isWall := info.IsWall()
-		isTileset := info.IsTileset()
+			isWall := info.IsWall()
+			isTileset := info.IsTileset()
 
-		if isWall || isTileset {
-			fName := filepath.Base(info.RelPath)
-			bName := fName[:len(fName)-len(filepath.Ext(fName))]
+			if isWall || isTileset {
+				fName := filepath.Base(info.RelPath)
+				bName := fName[:len(fName)-len(filepath.Ext(fName))]
 
-			if isWall {
-				info.MetadataPath = fmt.Sprintf("res://packs/%s/data/walls/%s.dungeondraft_wall", p.id, bName)
-			} else {
-				info.MetadataPath = fmt.Sprintf("res://packs/%s/data/tilesets/%s.dungeondraft_tileset", p.id, bName)
+				if isWall {
+					info.MetadataPath = fmt.Sprintf("res://packs/%s/data/walls/%s.dungeondraft_wall", p.id, bName)
+				} else {
+					info.MetadataPath = fmt.Sprintf("res://packs/%s/data/tilesets/%s.dungeondraft_tileset", p.id, bName)
+				}
 			}
-		}
 
+		}
 	}
 
 	return info, nil

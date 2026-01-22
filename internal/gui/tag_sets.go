@@ -4,7 +4,6 @@ import (
 	"slices"
 
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/dialog"
@@ -125,12 +124,7 @@ func (a *App) createTagSetsDialog(editable bool) dialog.Dialog {
 	)
 
 	tagSetHeader := container.NewStack(
-		&widgets.ThemedRectangle{
-			Rectangle: canvas.Rectangle{
-				FillColor:    theme.Color(theme.ColorNameHeaderBackground),
-				CornerRadius: 4,
-			}, Color: theme.ColorNameHeaderBackground,
-		},
+		widgets.NewThemedRect(theme.ColorNameHeaderBackground, 4),
 		container.NewPadded(
 			widget.NewLabel(
 				lang.X("tagSets.tagSet.label.text", "Tag Sets"),
@@ -139,13 +133,7 @@ func (a *App) createTagSetsDialog(editable bool) dialog.Dialog {
 	)
 
 	tagsHeader := container.NewStack(
-		&widgets.ThemedRectangle{
-			Rectangle: canvas.Rectangle{
-				FillColor:    theme.Color(theme.ColorNameHeaderBackground),
-				CornerRadius: 4,
-			},
-			Color: theme.ColorNameHeaderBackground,
-		},
+		widgets.NewThemedRect(theme.ColorNameHeaderBackground, 4),
 		container.NewPadded(
 			widget.NewLabelWithData(
 				bindings.NewMapping(
@@ -168,13 +156,7 @@ func (a *App) createTagSetsDialog(editable bool) dialog.Dialog {
 		layouts.NewBottomExpandVBox(
 			tagSetHeader,
 			container.NewStack(
-				&widgets.ThemedRectangle{
-					Rectangle: canvas.Rectangle{
-						FillColor:    theme.Color(theme.ColorNameInputBackground),
-						CornerRadius: 4,
-					},
-					Color: theme.ColorNameInputBackground,
-				},
+				widgets.NewThemedRect(theme.ColorNameInputBackground, 4),
 				tagSetList,
 			),
 		),
@@ -184,13 +166,7 @@ func (a *App) createTagSetsDialog(editable bool) dialog.Dialog {
 		layouts.NewBottomExpandVBox(
 			tagsHeader,
 			container.NewStack(
-				&widgets.ThemedRectangle{
-					Rectangle: canvas.Rectangle{
-						FillColor:    theme.Color(theme.ColorNameInputBackground),
-						CornerRadius: 4,
-					},
-					Color: theme.ColorNameInputBackground,
-				},
+				widgets.NewThemedRect(theme.ColorNameInputBackground, 4),
 				tagList,
 			),
 		),

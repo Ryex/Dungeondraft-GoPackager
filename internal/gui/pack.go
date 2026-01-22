@@ -234,7 +234,7 @@ func (a *App) setNotAPackageContent(path string) {
 		16,
 		fyne.TextStyle{},
 		fyne.TextAlignCenter,
-		theme.Color(theme.ColorNameForeground),
+		theme.ColorNameForeground,
 	)
 	errTxtContainer := container.NewVBox()
 
@@ -258,7 +258,7 @@ func (a *App) setNotAPackageContent(path string) {
 								12,
 								fyne.TextStyle{Italic: true},
 								fyne.TextAlignCenter,
-								theme.Color(theme.ColorNameError),
+								theme.ColorNameError,
 							),
 						)
 						return

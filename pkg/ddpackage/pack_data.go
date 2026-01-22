@@ -14,7 +14,7 @@ import (
 )
 
 func (p *Package) loadPackedTags(r io.ReadSeeker) error {
-	if p.fileList == nil || len(p.fileList) == 0 {
+	if p.fileList.IsEmpty() {
 		return ErrEmptyFileList
 	}
 	if p.id == "" {
@@ -23,7 +23,7 @@ func (p *Package) loadPackedTags(r io.ReadSeeker) error {
 	tagsResPath := fmt.Sprintf("res://packs/%s/data/default.dungeondraft_tags", p.id)
 
 	var tagsInfo *structures.FileInfo
-	for _, fi := range p.fileList {
+	for _, fi := range p.fileList.AsSlice() {
 		if fi.ResPath == tagsResPath {
 			tagsInfo = fi
 			break
@@ -61,7 +61,7 @@ func (p *Package) loadPackedResourceMetadata(r io.ReadSeeker) error {
 		return ErrUnsetPackID
 	}
 
-	for _, fi := range p.fileList {
+	for _, fi := range p.fileList.AsSlice() {
 
 		if !fi.IsWallData() && !fi.IsTilesetData() {
 			continue
@@ -226,7 +226,7 @@ func (p *Package) loadUnpackedResourceMetadata() error {
 		return ErrUnsetUnpackedPath
 	}
 
-	for _, fi := range p.fileList {
+	for _, fi := range p.fileList.AsSlice() {
 
 		if !fi.IsWallData() && !fi.IsTilesetData() {
 			continue
@@ -330,7 +330,7 @@ func (p *Package) WriteResourceMetadata() error {
 		return ErrUnsetUnpackedPath
 	}
 
-	for _, fi := range p.fileList {
+	for _, fi := range p.fileList.AsSlice() {
 
 		if !fi.IsWallData() && !fi.IsTilesetData() {
 			continue

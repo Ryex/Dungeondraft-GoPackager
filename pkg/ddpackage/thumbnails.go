@@ -43,7 +43,7 @@ func (p *Package) generateThumbnails(progressCallback func(p float64)) []error {
 
 	var texCount float64
 
-	for _, info := range p.fileList {
+	for _, info := range p.fileList.AsSlice() {
 		if info.IsTexture() {
 			texCount += 1
 		}
@@ -127,7 +127,7 @@ func (p *Package) generateThumbnails(progressCallback func(p float64)) []error {
 	p.flLock.RLock()
 	defer p.flLock.RUnlock()
 
-	fileList := p.fileList
+	fileList := p.fileList.AsSlice()
 	log := p.log
 
 	// start a limited number of go routines to process thumbnails
@@ -148,7 +148,7 @@ func (p *Package) generateThumbnails(progressCallback func(p float64)) []error {
 
 	// send thumbnails into input buffer
 	go func() {
-		for index, fi := range p.fileList {
+		for index, fi := range p.fileList.AsSlice() {
 			if fi.IsTexture() {
 				chInput <- index
 			}

@@ -52,7 +52,7 @@ func (pc *PackCmd) Run(ctx *Context) error {
 	}
 
 	if pc.Progress {
-		total := int64(len(pkg.FileList()))
+		total := int64(pkg.FileList().Length())
 		bar := progressbar.Default(total, "Packing ...")
 		err = pkg.PackPackageProgress(outDirPath, ddpackage.PackOptions{Overwrite: pc.Overwrite}, func(p float64) {
 			bar.Set(int(p * float64(total)))

@@ -41,7 +41,7 @@ func (pt *PackageTags) SetExists(set string) bool {
 	return ok
 }
 
-// tags a set of resources with a tag
+// Tag tags a set of resources with a tag
 func (pt *PackageTags) Tag(tag string, resources ...string) {
 	s, ok := pt.Tags[tag]
 	if !ok {

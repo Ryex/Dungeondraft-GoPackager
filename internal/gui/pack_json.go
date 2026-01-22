@@ -155,7 +155,7 @@ func (dlg *PackJSONDialog) buildUI() {
 		12,
 		fyne.TextStyle{},
 		fyne.TextAlignLeading,
-		theme.Color(theme.ColorNameForeground),
+		theme.ColorNameForeground,
 	)
 
 	minRednessLbl := widget.NewLabel(lang.X("packJson.minRedness.label", "Minimum Redness"))
