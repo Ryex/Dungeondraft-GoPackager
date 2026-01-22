@@ -56,7 +56,7 @@ func (uc *UnpackCmd) Run(ctx *Context) error {
 	}
 	var err error
 	if uc.Progress {
-		total := int64(len(pkg.FileList()))
+		total := int64(pkg.FileList().Length())
 		bar := progressbar.Default(total, "Unpacking ...")
 		err = pkg.ExtractPackageProgress(outDirPath, options, func(p float64) {
 			bar.Set(int(p * float64(total)))

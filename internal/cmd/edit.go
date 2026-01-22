@@ -117,7 +117,7 @@ func (etc *EditTagsCmd) Run(ctx *Context) error {
 		return err
 	}
 
-	resPaths := slices.Collect(utils.Map(slices.Values(fileList), func(fi *structures.FileInfo) string {
+	resPaths := slices.Collect(utils.Map(slices.Values(fileList.AsSlice()), func(fi *structures.FileInfo) string {
 		return fi.ResPath
 	}))
 

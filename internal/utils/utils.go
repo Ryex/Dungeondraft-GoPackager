@@ -1,3 +1,4 @@
+// Package utils
 package utils
 
 import (
@@ -147,7 +148,7 @@ func Align(n int64, alignment int) int64 {
 }
 
 func Pad(out io.Writer, bytes int64) error {
-	for i := int64(0); i < bytes; i++ {
+	for range bytes {
 		var b byte = 0
 		err := binary.Write(out, binary.LittleEndian, b)
 		if err != nil {

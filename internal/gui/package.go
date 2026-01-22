@@ -32,11 +32,11 @@ import (
 )
 
 func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
-	tree, filter, treeSelected, displayByTag := a.buildPackageTree(editable)
+	tree, filter, treeSelected, displayByTag, nodeTree := a.buildPackageTree(editable)
 
 	filterEntry := widgets.NewToolTipEntryWithData(filter)
 	filterEntry.SetPlaceHolder(lang.X("tree.filter.placeholder.resource", "Filter with glob (e.g. */objects/**)"))
-	filterErrorText := canvas.NewText(lang.X("tree.filter.error", "Bad glob syntax"), theme.Color(theme.ColorNameError))
+	filterErrorText := widgets.NewThemedText(lang.X("tree.filter.error", "Bad glob syntax"), theme.ColorNameError)
 	filterErrorText.Hide()
 	filterEntry.Validator = func(s string) error {
 		byTag, err := displayByTag.Get()
@@ -47,7 +47,7 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
 			filterErrorText.Hide()
 		} else {
 			_, err := structures.GlobToRelPathRegexp(s)
-			filterErrorText.Text = lang.X("tree.filter.error", "Bad glob syntax")
+			filterErrorText.Text.Text = lang.X("tree.filter.error", "Bad glob syntax")
 			if err != nil {
 				filterErrorText.Show()
 			} else {
@@ -99,12 +99,7 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
 				filterEntry,
 			),
 			container.NewStack(
-				&widgets.ThemedRectangle{
-					Rectangle: canvas.Rectangle{
-						FillColor: theme.Color(theme.ColorNameInputBackground),
-					},
-					Color: theme.ColorNameInputBackground,
-				},
+				widgets.NewThemedRect(theme.ColorNameInputBackground, 4),
 				container.NewPadded(tree),
 			),
 		),
@@ -126,11 +121,12 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
 					return defaultPreview
 				}
 				return a.buildInfoPane(info, editable)
+			} else {
+				_ = resourcesUnderTreeUid(tni, nodeTree)
+				// else if strings.HasPrefix(tni, "tag://") {
+				// tag := strings.TrimPrefix(tni, "tag://")
+				// TODO: add bulk operations pane
 			}
-			// else if strings.HasPrefix(tni, "tag://") {
-			// tag := strings.TrimPrefix(tni, "tag://")
-			// TODO: add bulk operations pane
-			// }
 			return defaultPreview
 		}()
 
@@ -147,7 +143,7 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
 	return split
 }
 
-func (a *App) buildPackageTree(editable bool) (*widget.Tree, binding.String, binding.String, binding.Bool) {
+func (a *App) buildPackageTree(editable bool) (*widget.Tree, binding.String, binding.String, binding.Bool, map[string][]string) {
 	filterFunc := func(fi *structures.FileInfo) bool {
 		return !fi.IsThumbnail() && !strings.HasSuffix(fi.ResPath, ".json")
 	}
@@ -242,7 +238,7 @@ func (a *App) buildPackageTree(editable bool) (*widget.Tree, binding.String, bin
 		},
 	)
 
-	filteredList := func() ([]*structures.FileInfo, error) {
+	filteredList := func() (*structures.FileInfoList, error) {
 		filtered := a.pkg.FileList().Filter(filterFunc)
 		if filter == "" {
 			return filtered, nil
@@ -264,6 +260,7 @@ func (a *App) buildPackageTree(editable bool) (*widget.Tree, binding.String, bin
 		fil, err := filteredList()
 		if err != nil {
 			log.WithError(err).Error("failed to retrieve filtered file list")
+			return
 		}
 		log.Trace("rebuilding tree")
 		if byTag {
@@ -272,6 +269,7 @@ func (a *App) buildPackageTree(editable bool) (*widget.Tree, binding.String, bin
 			nodeTree = buildInfoMaps(fil)
 		}
 		tree.Refresh()
+		tree.OpenBranch(packageTreeRootID())
 	}
 
 	bindings.AddListenerToAll(
@@ -285,7 +283,7 @@ func (a *App) buildPackageTree(editable bool) (*widget.Tree, binding.String, bin
 		selected.Set(uid)
 	}
 
-	return tree, boundFilter, selected, boundByTag
+	return tree, boundFilter, selected, boundByTag, nodeTree
 }
 
 func (a *App) buildInfoPane(info *structures.FileInfo, editable bool) fyne.CanvasObject {
@@ -352,13 +350,7 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 	}
 
 	path := container.NewStack(
-		&widgets.ThemedRectangle{
-			Rectangle: canvas.Rectangle{
-				FillColor:    theme.Color(theme.ColorNameHeaderBackground),
-				CornerRadius: 4,
-			},
-			Color: theme.ColorNameHeaderBackground,
-		},
+		widgets.NewThemedRect(theme.ColorNameHeaderBackground, 4),
 		layouts.NewRightExpandHBox(
 			container.NewCenter(
 				widget.NewLabel(lang.X(
@@ -368,17 +360,31 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 			),
 			container.NewPadded(
 				container.NewStack(
-					&widgets.ThemedRectangle{
-						Rectangle: canvas.Rectangle{
-							FillColor:    theme.Color(theme.ColorNameInputBackground),
-							CornerRadius: 4,
-						},
-						Color: theme.ColorNameInputBackground,
-					},
+					widgets.NewThemedRect(theme.ColorNameInputBackground, 4),
 					container.NewPadded(
 						container.NewHScroll(
-							canvas.NewText(info.ResPath, theme.Color(theme.ColorNameForeground)),
+							widgets.NewThemedText(info.ResPath, theme.ColorNameForeground),
 						),
+					),
+				),
+			),
+		),
+	)
+
+	resMd5 := container.NewStack(
+		widgets.NewThemedRect(theme.ColorNameHeaderBackground, 4),
+		layouts.NewRightExpandHBox(
+			container.NewCenter(
+				widget.NewLabel(lang.X(
+					"preview.md5.label",
+					"Md5 Hash",
+				)),
+			),
+			container.NewPadded(
+				container.NewStack(
+					widgets.NewThemedRect(theme.ColorNameInputBackground, 4),
+					container.NewPadded(
+						widgets.NewThemedText(info.Md5, theme.ColorNameForeground),
 					),
 				),
 			),
@@ -389,17 +395,12 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 		widget.NewLabel(lang.X("preview.tooLarge", "This file is too large!\nOpen it in a text editor.")),
 	)
 
-	bg := &widgets.ThemedRectangle{
-		Rectangle: canvas.Rectangle{
-			FillColor:    theme.Color(theme.ColorNameInputBackground),
-			CornerRadius: 4,
-		},
-		Color: theme.ColorNameInputBackground,
-	}
+	bg := widgets.NewThemedRect(theme.ColorNameInputBackground, 4)
+
 	if !ddimage.PathIsSupportedImage(info.RelPath) {
 		textContent := string(fileData)
 		if len(strings.Split(textContent, "\n")) > 200 {
-			return container.NewPadded(layouts.NewBottomExpandVBox(path, container.NewStack(
+			return container.NewPadded(layouts.NewBottomExpandVBox(path, resMd5, container.NewStack(
 				bg, tooLarge,
 			)))
 		}
@@ -412,6 +413,7 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 		content := container.NewPadded(
 			layouts.NewBottomExpandVBox(
 				path,
+				resMd5,
 				container.NewStack(
 					bg,
 					container.NewPadded(textEntry),
@@ -445,13 +447,7 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 	thumbnailErr := binding.BindString(&thumbnailErrString)
 	thumbnailErrObj := container.NewCenter(
 		container.NewStack(
-			&widgets.ThemedRectangle{
-				Rectangle: canvas.Rectangle{
-					FillColor:    theme.Color(theme.ColorNameBackground),
-					CornerRadius: 8,
-				},
-				Color: theme.ColorNameBackground,
-			},
+			widgets.NewThemedRect(theme.ColorNameBackground, 8),
 			widget.NewLabelWithData(thumbnailErr),
 		),
 	)
@@ -505,6 +501,7 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 	content := container.NewPadded(layouts.NewBottomExpandVBox(
 		thumbToggle,
 		path,
+		resMd5,
 		container.NewStack(
 			canvas.NewRasterWithPixels(func(x, y, w, h int) color.Color {
 				if ((x/8)+(y/8))%2 == 0 {
@@ -563,13 +560,7 @@ func (a *App) buildTagInfo(info *structures.FileInfo, editable bool) fyne.Canvas
 	content := layouts.NewTopExpandVBox(
 		layouts.NewBottomExpandVBox(
 			container.NewStack(
-				&widgets.ThemedRectangle{
-					Rectangle: canvas.Rectangle{
-						FillColor:    theme.Color(theme.ColorNameHeaderBackground),
-						CornerRadius: 4,
-					},
-					Color: theme.ColorNameHeaderBackground,
-				},
+				widgets.NewThemedRect(theme.ColorNameHeaderBackground, 4),
 				layouts.NewRightExpandHBox(
 					container.NewCenter(
 						widget.NewLabel(lang.X(
@@ -579,16 +570,10 @@ func (a *App) buildTagInfo(info *structures.FileInfo, editable bool) fyne.Canvas
 					),
 					container.NewPadded(
 						container.NewStack(
-							&widgets.ThemedRectangle{
-								Rectangle: canvas.Rectangle{
-									FillColor:    theme.Color(theme.ColorNameInputBackground),
-									CornerRadius: 4,
-								},
-								Color: theme.ColorNameInputBackground,
-							},
+							widgets.NewThemedRect(theme.ColorNameInputBackground, 4),
 							container.NewPadded(
 								container.NewHScroll(
-									canvas.NewText(info.ResPath, theme.Color(theme.ColorNameForeground)),
+									widgets.NewThemedText(info.ResPath, theme.ColorNameForeground),
 								),
 							),
 						),
@@ -596,13 +581,7 @@ func (a *App) buildTagInfo(info *structures.FileInfo, editable bool) fyne.Canvas
 				),
 			),
 			container.NewStack(
-				&widgets.ThemedRectangle{
-					Rectangle: canvas.Rectangle{
-						FillColor:    theme.Color(theme.ColorNameInputBackground),
-						CornerRadius: 4,
-					},
-					Color: theme.ColorNameInputBackground,
-				},
+				widgets.NewThemedRect(theme.ColorNameInputBackground, 4),
 				container.NewPadded(
 					tagsList,
 				),
@@ -869,14 +848,39 @@ func (a *App) saveTilesetMetadata(metaPath string) {
 func nodeID(dir string) string {
 	id := "dir://" + dir
 	if dir == "" {
-		id = binding.DataTreeRootID
+		id = packageTreeRootID()
 	}
 	return id
 }
 
-func buildInfoMaps(fil structures.FileInfoList) map[string][]string {
+func packageTreeRootID() string {
+	return "root://" + lang.X("tree.root.label", "Package")
+}
+
+func resourcesUnderTreeUid(tni string, tree map[string][]string) []string {
+	res := []string{}
+	stack := structures.NewStack[string]()
+	stack.Push(tni)
+	for !stack.IsEmpty() {
+		uid, _ := stack.Pop()
+		leaves, exists := tree[uid]
+		if exists {
+			for _, leaf := range leaves {
+				if strings.HasPrefix(leaf, "res://") {
+					res = append(res, uid)
+				} else {
+					stack.Push(uid)
+				}
+			}
+		}
+	}
+	return res
+}
+
+func buildInfoMaps(fil *structures.FileInfoList) map[string][]string {
 	nodeTree := make(map[string][]string)
-	for _, fi := range fil {
+
+	for _, fi := range fil.AsSlice() {
 		dir, _ := filepath.Split(fi.RelPath)
 		next := dir[:max(len(dir)-1, 0)]
 		node := nodeID(next)
@@ -896,16 +900,22 @@ func buildInfoMaps(fil structures.FileInfoList) map[string][]string {
 			}
 		}
 	}
-	if len(nodeTree[binding.DataTreeRootID]) == 0 {
+
+	rootId := packageTreeRootID()
+
+	if len(nodeTree[rootId]) == 0 {
 		nodeTree[binding.DataTreeRootID] = append(nodeTree[binding.DataTreeRootID], "empty://")
+	} else {
+		nodeTree[binding.DataTreeRootID] = append(nodeTree[binding.DataTreeRootID], rootId)
 	}
+
 	return nodeTree
 }
 
-func buildTagMaps(fil structures.FileInfoList, pt *structures.PackageTags, filter string) map[string][]string {
+func buildTagMaps(fil *structures.FileInfoList, pt *structures.PackageTags, filter string) map[string][]string {
 	nodeTree := make(map[string][]string)
 	untaggedPath := "notag://" + lang.X("tree.untagged.label", "Untagged")
-	for _, fi := range fil {
+	for _, fi := range fil.AsSlice() {
 		if fi.IsTaggable() {
 			tags := pt.TagsFor(fi.ResPath)
 			if tags.Size() == 0 {
@@ -917,9 +927,13 @@ func buildTagMaps(fil structures.FileInfoList, pt *structures.PackageTags, filte
 			}
 		}
 	}
+
 	allTags := pt.AllTags()
 	slices.Sort(allTags)
 	tagFilter := ParseTagFilter(filter)
+
+	rootId := packageTreeRootID()
+
 	for _, tag := range allTags {
 		if filter != "" && !tagFilter.ApplyToTag(tag) {
 			continue
@@ -927,13 +941,18 @@ func buildTagMaps(fil structures.FileInfoList, pt *structures.PackageTags, filte
 		if len(nodeTree["tag://"+tag]) == 0 {
 			nodeTree["tag://"+tag] = append(nodeTree["tag://"+tag], "empty://"+tag)
 		}
-		nodeTree[binding.DataTreeRootID] = append(nodeTree[binding.DataTreeRootID], "tag://"+tag)
+		nodeTree[rootId] = append(nodeTree[rootId], "tag://"+tag)
 	}
+
 	if len(nodeTree[untaggedPath]) > 0 {
-		nodeTree[binding.DataTreeRootID] = append(nodeTree[binding.DataTreeRootID], untaggedPath)
+		nodeTree[rootId] = append(nodeTree[rootId], untaggedPath)
 	}
-	if len(nodeTree[binding.DataTreeRootID]) == 0 {
+
+	if len(nodeTree[rootId]) == 0 {
 		nodeTree[binding.DataTreeRootID] = append(nodeTree[binding.DataTreeRootID], "empty://")
+	} else {
+		nodeTree[binding.DataTreeRootID] = append(nodeTree[binding.DataTreeRootID], rootId)
 	}
+
 	return nodeTree
 }

@@ -3,7 +3,6 @@ package gui
 import (
 	"embed"
 	"fmt"
-	"image/color"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -14,7 +13,6 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
-	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/dialog"
@@ -151,13 +149,7 @@ func (a *App) buildMainUI() {
 	forceDarkMode := binding.BindPreferenceBool("forceDarkMode", a.app.Preferences())
 	darkThemeToggle := widgets.NewToggleWithData(forceDarkMode)
 
-	headerBg := widgets.ThemedRectangle{
-		Rectangle: canvas.Rectangle{
-			FillColor:    theme.Color(theme.ColorNameHeaderBackground),
-			CornerRadius: 4,
-		},
-		Color: theme.ColorNameHeaderBackground,
-	}
+	headerBg := widgets.NewThemedRect(theme.ColorNameHeaderBackground, 4)
 
 	infoIcon := widget.NewButtonWithIcon("", theme.InfoIcon(), func() {
 		crdWin := credits.CreditsWindow(a.app, fyne.NewSize(800, 400))
@@ -170,40 +162,25 @@ func (a *App) buildMainUI() {
 		a.app.OpenURL(githubURL)
 	})
 
-	refreshTheme := func() {
-		// headerBg.FillColor = theme.Color(theme.ColorNameHeaderBackground)
-		// headerBg.Refresh()
-		infoIcon.Icon = theme.InfoIcon()
-		infoIcon.Refresh()
-		ghIcon.Icon = func() *fyne.StaticResource {
-			forceDark, err := forceDarkMode.Get()
-			if err != nil {
-				forceDark = false
-			}
-			if forceDark || a.app.Settings().ThemeVariant() == theme.VariantDark {
-				return assets.GithubWhite
-			} else {
-				return assets.Github
-			}
-		}()
-		ghIcon.Refresh()
-	}
+	titleText := widgets.NewThemedText(
+		lang.X("greeting.title", "Dungeondraft-GoPackager"),
+		theme.ColorNameForeground,
+		18,
+	)
+	titleText.Text.Alignment = fyne.TextAlignCenter
+
+	subTitleText := widgets.NewThemedText(
+		lang.X("greeting.sub-title", "Package, edit, and prepare Dungeondraft resource packs"),
+		theme.ColorNameForeground,
+		14,
+	)
+	subTitleText.Text.Alignment = fyne.TextAlignCenter
 
 	welcome := container.NewPadded(container.NewStack(
-		&headerBg,
+		headerBg,
 		container.NewPadded(container.NewVBox(
-			&canvas.Text{
-				Text:      lang.X("greeting.title", "Dungeondraft-GoPackager"),
-				Color:     theme.Color(theme.ColorNameForeground),
-				TextSize:  18,
-				Alignment: fyne.TextAlignCenter,
-			},
-			&canvas.Text{
-				Text:      lang.X("greeting.sub-title", "Package, edit, and prepare Dungeondraft resource packs"),
-				Color:     theme.Color(theme.ColorNameForeground),
-				TextSize:  14,
-				Alignment: fyne.TextAlignCenter,
-			},
+			titleText,
+			subTitleText,
 		)),
 		container.NewVBox(
 			layout.NewSpacer(),
@@ -236,16 +213,6 @@ func (a *App) buildMainUI() {
 			layout.NewSpacer(),
 		),
 	))
-
-	bindings.Listen(forceDarkMode, func(force bool) {
-		log.Infof("darkmode toggled: %t", force)
-		if force {
-			a.app.Settings().SetTheme(&forcedVariantTheme{Theme: &betterDisabledContrast{Theme: theme.DefaultTheme()}, variant: theme.VariantDark})
-		} else {
-			a.app.Settings().SetTheme(&betterDisabledContrast{Theme: theme.DefaultTheme()})
-		}
-		refreshTheme()
-	})
 
 	pathInput := widget.NewEntryWithData(a.operatingPath)
 	pathInput.SetPlaceHolder(lang.X("pathInput.placeholder", "Path to .dungeondraft_pack or folder"))
@@ -342,7 +309,7 @@ func (a *App) buildMainUI() {
 		28,
 		fyne.TextStyle{Italic: true},
 		fyne.TextAlignCenter,
-		theme.Color(theme.ColorNameForeground),
+		theme.ColorNameForeground,
 	)
 
 	a.defaultMainContent = container.NewBorder(
@@ -366,6 +333,36 @@ func (a *App) buildMainUI() {
 	)
 	// a.window.SetContent(content)
 	a.window.SetContent(fynetooltip.AddWindowToolTipLayer(content, a.window.Canvas()))
+
+	refreshTheme := func() {
+		// headerBg.Refresh()
+		infoIcon.Icon = theme.InfoIcon()
+		// infoIcon.Refresh()
+		ghIcon.Icon = func() *fyne.StaticResource {
+			forceDark, err := forceDarkMode.Get()
+			if err != nil {
+				forceDark = false
+			}
+			if forceDark || a.app.Settings().ThemeVariant() == theme.VariantDark {
+				return assets.GithubWhite
+			} else {
+				return assets.Github
+			}
+		}()
+		// ghIcon.Refresh()
+		// welcome.Refresh()
+		content.Refresh()
+	}
+
+	bindings.Listen(forceDarkMode, func(force bool) {
+		log.Infof("darkmode toggled: %t", force)
+		if force {
+			a.app.Settings().SetTheme(&forcedVariantTheme{Theme: &betterDisabledContrast{Theme: theme.DefaultTheme()}, variant: theme.VariantDark})
+		} else {
+			a.app.Settings().SetTheme(&betterDisabledContrast{Theme: theme.DefaultTheme()})
+		}
+		refreshTheme()
+	})
 }
 
 func (a *App) setMainContent(o fyne.CanvasObject, disableButtonsListeners ...func(bool)) {
@@ -433,9 +430,8 @@ func (a *App) setupPathHandler() {
 }
 
 func (a *App) setErrContent(msg string, errs ...error) {
-	msgText := canvas.NewText(msg, theme.Color(theme.ColorNameForeground))
-	msgText.TextSize = 16
-	msgText.Alignment = fyne.TextAlignCenter
+	msgText := widgets.NewThemedText(msg, theme.ColorNameForeground, 16)
+	msgText.Text.Alignment = fyne.TextAlignCenter
 
 	errContainer := container.NewVBox()
 	for i, err := range errs {
@@ -444,7 +440,7 @@ func (a *App) setErrContent(msg string, errs ...error) {
 			14,
 			fyne.TextStyle{Italic: true},
 			fyne.TextAlignLeading,
-			theme.Color(theme.ColorNameError),
+			theme.ColorNameError,
 		)
 		errContainer.Add(errText)
 	}
@@ -468,16 +464,16 @@ func multilineCanvasText(
 	size float32,
 	style fyne.TextStyle,
 	align fyne.TextAlign,
-	color color.Color,
+	color fyne.ThemeColorName,
 ) fyne.CanvasObject {
 	lines := strings.Split(text, "\n")
 	content := container.NewVBox(slices.Collect(utils.Map(
 		slices.Values(lines),
 		func(line string) fyne.CanvasObject {
-			text := canvas.NewText(line, color)
-			text.TextSize = size
-			text.TextStyle = style
-			text.Alignment = align
+			text := widgets.NewThemedText(line, color)
+			text.Text.TextSize = size
+			text.Text.TextStyle = style
+			text.Text.Alignment = align
 			return text
 		},
 	))...)
@@ -487,15 +483,15 @@ func multilineCanvasText(
 func (a *App) setWaitContent(msg string) (binding.Float, binding.String) {
 	activity := widget.NewActivity()
 	activity.Start()
-	msgText := canvas.NewText(msg, theme.Color(theme.ColorNameForeground))
-	msgText.TextSize = 16
-	msgText.Alignment = fyne.TextAlignCenter
-	activityText := canvas.NewText("", theme.Color(theme.ColorNameForeground))
-	activityText.TextSize = 12
-	activityText.Alignment = fyne.TextAlignCenter
+	msgText := widgets.NewThemedText(msg, theme.ColorNameForeground)
+	msgText.Text.TextSize = 16
+	msgText.Text.Alignment = fyne.TextAlignCenter
+	activityText := widgets.NewThemedText("", theme.ColorNameForeground)
+	activityText.Text.TextSize = 12
+	activityText.Text.Alignment = fyne.TextAlignCenter
 	activityStr := binding.NewString()
 	bindings.Listen(activityStr, func(str string) {
-		activityText.Text = str
+		activityText.Text.Text = str
 		activityText.Refresh()
 	})
 	progressBar := widget.NewProgressBar()

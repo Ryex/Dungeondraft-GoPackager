@@ -162,14 +162,44 @@ func (fi *FileInfo) IsTaggable() bool {
 	return fi.IsObject()
 }
 
-type FileInfoList []*FileInfo
+type FileInfoList struct {
+	data []*FileInfo
+}
 
-func (fil FileInfoList) AsSlice() []*FileInfo {
+func NewFileInfoList() *FileInfoList {
+	fil := &FileInfoList{ make([]*FileInfo, 0) }
 	return fil
 }
 
-func (fil FileInfoList) GetRessource(path string) *FileInfo {
-	for _, fi := range fil {
+func (fil *FileInfoList) Clear() {
+	fil.data = nil
+}
+
+func (fil *FileInfoList) CopyTo(other *FileInfoList) {
+	other.data = make([]*FileInfo, len(fil.data))
+	copy(other.data, fil.data)
+}
+
+func (fil *FileInfoList) Length() int {
+	return len(fil.data)
+}
+
+func (fil *FileInfoList) IsEmpty() bool {
+	return len(fil.data) == 0
+}
+
+func (fil *FileInfoList) Copy() *FileInfoList {
+	other := NewFileInfoList()
+	fil.CopyTo(other)
+	return other
+}
+
+func (fil *FileInfoList) AsSlice() []*FileInfo {
+	return fil.data
+}
+
+func (fil *FileInfoList) GetRessource(path string) *FileInfo {
+	for _, fi := range fil.data {
 		if fi.ResPath == path {
 			return fi
 		}
@@ -177,8 +207,8 @@ func (fil FileInfoList) GetRessource(path string) *FileInfo {
 	return nil
 }
 
-func (fil FileInfoList) Find(P func(fi *FileInfo) bool) *FileInfo {
-	for _, fi := range fil {
+func (fil *FileInfoList) Find(P func(fi *FileInfo) bool) *FileInfo {
+	for _, fi := range fil.data {
 		if P(fi) {
 			return fi
 		}
@@ -186,30 +216,38 @@ func (fil FileInfoList) Find(P func(fi *FileInfo) bool) *FileInfo {
 	return nil
 }
 
-func (fil FileInfoList) Filter(P func(fi *FileInfo) bool) FileInfoList {
+func (fil *FileInfoList) Filter(P func(fi *FileInfo) bool) *FileInfoList {
 	res := []*FileInfo{}
-	for _, fi := range fil {
+	for _, fi := range fil.data {
 		if P(fi) {
 			res = append(res, fi)
 		}
 	}
-	return res
+	return &FileInfoList { data: res }
+}
+
+func (fil *FileInfoList) DeduplicateBy(P func(a, b *FileInfo) bool) {
+	fil.data = slices.CompactFunc(fil.data, P)
 }
 
 func (fil *FileInfoList) Remove(i int) *FileInfo {
-	res := (*fil)[i]
-	*fil = slices.Delete(*fil, i, i+1)
+	res := fil.data[i]
+	fil.data = slices.Delete(fil.data, i, i+1)
 	return res
 }
 
 func (fil *FileInfoList) Add(info *FileInfo) {
 	if index := fil.IndexOfRes(info.ResPath); index == -1 {
-		*fil = append(*fil, info)
+		fil.data = append(fil.data, info)
 	}
 }
 
-func (fil FileInfoList) IndexOf(info *FileInfo) int {
-	for i, fi := range fil {
+func (fil *FileInfoList) Insert(i int, infos ...*FileInfo) {
+	fil.data = slices.Insert(fil.data, i, infos...)
+}
+
+func (fil *FileInfoList) IndexOf(info *FileInfo) int {
+	for i, fi := range fil.data {
 		if fi == info {
 			return i
 		}
@@ -217,8 +255,8 @@ func (fil FileInfoList) IndexOf(info *FileInfo) int {
 	return -1
 }
 
-func (fil FileInfoList) IndexOfRes(res string) int {
-	for i, fi := range fil {
+func (fil *FileInfoList) IndexOfRes(res string) int {
+	for i, fi := range fil.data {
 		if fi.ResPath == res {
 			return i
 		}
@@ -275,17 +313,17 @@ var ErrBadFileInfoListGlobPattern = errors.New("could not compile glob pattern")
 
 type FileInfoFilterFunc func(*FileInfo) bool
 
-func (fil FileInfoList) Glob(filter FileInfoFilterFunc, patterns ...string) (FileInfoList, error) {
+func (fil *FileInfoList) Glob(filter FileInfoFilterFunc, patterns ...string) (*FileInfoList, error) {
 	matches := make(map[string]*FileInfo)
 
 	for _, pattern := range patterns {
 		regexpPat, err := GlobToRelPathRegexp(pattern)
 		if err != nil {
-			return nil, dderrors.CausedBy(ErrBadFileInfoListGlobPattern, err)
+			return &FileInfoList{ data: nil }, dderrors.CausedBy(ErrBadFileInfoListGlobPattern, err)
 		}
 		log.Debugf("compiled glob pattern %s", regexpPat.String())
 
-		for _, info := range fil {
+		for _, info := range fil.data {
 			if filter != nil && !filter(info) {
 				continue
 			}
@@ -303,50 +341,50 @@ func (fil FileInfoList) Glob(filter FileInfoFilterFunc, patterns ...string) (Fil
 		i++
 	}
 
-	return matchesS, nil
+	return &FileInfoList{ data: matchesS}, nil
 }
 
-func (fil FileInfoList) Paths() (paths []string) {
-	for _, info := range fil {
+func (fil *FileInfoList) Paths() (paths []string) {
+	for _, info := range fil.data {
 		paths = append(paths, info.Path)
 	}
 	return
 }
 
-func (fil FileInfoList) ResPaths() (paths []string) {
-	for _, info := range fil {
+func (fil *FileInfoList) ResPaths() (paths []string) {
+	for _, info := range fil.data {
 		paths = append(paths, info.ResPath)
 	}
 	return
 }
 
-func (fil FileInfoList) RelPaths() (paths []string) {
-	for _, info := range fil {
+func (fil *FileInfoList) RelPaths() (paths []string) {
+	for _, info := range fil.data {
 		paths = append(paths, info.CalcRelPath())
 	}
 	return
 }
 
-func (fil FileInfoList) SetCapacity(capacity int) {
-	if capacity < len(fil) {
-		capacity = len(fil)
+func (fil *FileInfoList) SetCapacity(capacity int) {
+	if capacity < len(fil.data) {
+		capacity = len(fil.data)
 	}
-	if capacity > cap(fil) {
-		sized := make([]*FileInfo, len(fil), capacity)
-		copy(sized, fil)
-		fil = sized
+	if capacity > cap(fil.data) {
+		sized := make([]*FileInfo, len(fil.data), capacity)
+		copy(sized, fil.data)
+		fil.data = sized
 	}
 }
 
 func (fil *FileInfoList) UpdateThumbnailRefrences() {
 	thumbnailMap := make(map[string]string)
-	for _, fi := range *fil {
+	for _, fi := range fil.data {
 		if fi.IsTexture() && fi.ThumbnailPath != "" {
 			thumbnailMap[fi.ThumbnailResPath] = fi.ResPath
 		}
 	}
 	toRemove := NewSet[string]()
-	for _, fi := range *fil {
+	for _, fi := range fil.data {
 		if fi.IsThumbnail() {
 			forRes, ok := thumbnailMap[fi.ResPath]
 			if ok {
@@ -398,16 +436,16 @@ func cmpResAndThumb(a, b *FileInfo) int {
 	return 0
 }
 
-// places the file list
+// Sort the file list in place
 func (fil *FileInfoList) Sort() {
 	fil.UpdateThumbnailRefrences()
 
-	slices.SortFunc(*fil, func(a, b *FileInfo) int {
+	slices.SortFunc(fil.data, func(a, b *FileInfo) int {
 		return cmpResPaths(a.ResPath, b.ResPath)
 	})
 }
 
-func (fil FileInfoList) Write(
+func (fil *FileInfoList) Write(
 	log log.FieldLogger,
 	out io.WriteSeeker,
 	alignment int,
@@ -421,13 +459,13 @@ func (fil FileInfoList) Write(
 	return fil.WriteFiles(log, out, alignment, progressCallback)
 }
 
-func (fil FileInfoList) WriteHeaders(
+func (fil *FileInfoList) WriteHeaders(
 	log log.FieldLogger,
 	out io.WriteSeeker,
 	alignment int,
 ) error {
 	log.Debug("writing headers...")
-	for _, fi := range fil {
+	for _, fi := range fil.data {
 		// write path length
 		err := binary.Write(out, binary.LittleEndian, fi.ResPathSize)
 		if !utils.CheckErrorWrite(log, err) {
@@ -461,7 +499,7 @@ func (fil FileInfoList) WriteHeaders(
 	return nil
 }
 
-func (fil FileInfoList) WriteFiles(
+func (fil *FileInfoList) WriteFiles(
 	log log.FieldLogger,
 	out io.WriteSeeker,
 	alignment int,
@@ -478,7 +516,7 @@ func (fil FileInfoList) WriteFiles(
 		return err
 	}
 
-	for i, fi := range fil {
+	for i, fi := range fil.data {
 
 		{
 
@@ -552,7 +590,7 @@ func (fil FileInfoList) WriteFiles(
 		}
 
 		if progressCallback != nil {
-			progressCallback(float64(i+1) / float64(len(fil)))
+			progressCallback(float64(i+1) / float64(len(fil.data)))
 		}
 	}
 

@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/dialog"
@@ -250,50 +249,26 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 		xlayout.NewHPortion([]float64{50, 0.1, 50}),
 		layouts.NewBottomExpandVBox(
 			container.NewStack(
-				&widgets.ThemedRectangle{
-					Rectangle: canvas.Rectangle{
-						FillColor:    theme.Color(theme.ColorNameHeaderBackground),
-						CornerRadius: 4,
-					},
-					Color: theme.ColorNameHeaderBackground,
-				},
+				widgets.NewThemedRect(theme.ColorNameHeaderBackground, 4),
 				container.NewPadded(
 					widget.NewLabel(lang.X("pathGen.exampleTags.label", "Example Tags")),
 				),
 			),
 			container.NewStack(
-				&widgets.ThemedRectangle{
-					Rectangle: canvas.Rectangle{
-						FillColor:    theme.Color(theme.ColorNameInputBackground),
-						CornerRadius: 4,
-					},
-					Color: theme.ColorNameInputBackground,
-				},
+				widgets.NewThemedRect(theme.ColorNameInputBackground, 4),
 				tagsList,
 			),
 		),
 		widget.NewSeparator(),
 		layouts.NewBottomExpandVBox(
 			container.NewStack(
-				&widgets.ThemedRectangle{
-					Rectangle: canvas.Rectangle{
-						FillColor:    theme.Color(theme.ColorNameHeaderBackground),
-						CornerRadius: 4,
-					},
-					Color: theme.ColorNameHeaderBackground,
-				},
+				widgets.NewThemedRect(theme.ColorNameHeaderBackground, 4),
 				container.NewPadded(
 					widget.NewLabel(lang.X("pathGen.exampleSets.label", "Example sets tag is in")),
 				),
 			),
 			container.NewStack(
-				&widgets.ThemedRectangle{
-					Rectangle: canvas.Rectangle{
-						FillColor:    theme.Color(theme.ColorNameInputBackground),
-						CornerRadius: 4,
-					},
-					Color: theme.ColorNameInputBackground,
-				},
+				widgets.NewThemedRect(theme.ColorNameInputBackground, 4),
 				setsList,
 			),
 		),

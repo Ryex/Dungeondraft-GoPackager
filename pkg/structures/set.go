@@ -14,8 +14,7 @@ type Set[T cmp.Ordered] struct {
 }
 
 func NewSet[T cmp.Ordered]() *Set[T] {
-	s := &Set[T]{}
-	s.data = make(map[T]struct{})
+	s := &Set[T]{ make(map[T]struct{})}
 	return s
 }
 

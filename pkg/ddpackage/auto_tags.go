@@ -20,7 +20,7 @@ func (p *Package) GenerateTagsProgress(generator *GenerateTags, progressCallback
 }
 
 func (p *Package) generateTags(generator *GenerateTags, pcb func(p float64)) {
-	for i, fi := range p.fileList {
+	for i, fi := range p.fileList.AsSlice() {
 		if fi.IsTaggable() {
 			tagsMap := generator.TagsFromPath(fi.CalcRelPath())
 			for tag, sets := range tagsMap {
@@ -31,7 +31,7 @@ func (p *Package) generateTags(generator *GenerateTags, pcb func(p float64)) {
 			}
 		}
 		if pcb != nil {
-			pcb(float64(i) / float64(len(p.fileList)))
+			pcb(float64(i) / float64(p.fileList.Length()))
 		}
 	}
 	p.SaveUnpackedTags()

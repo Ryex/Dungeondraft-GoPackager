@@ -54,7 +54,7 @@ func (p *Package) extractPackage(
 }
 
 func (p *Package) MapResourcePaths() {
-	for _, fi := range p.fileList {
+	for _, fi := range p.fileList.AsSlice() {
 		fi.Path = utils.NormalizeResourcePath(fi.ResPath)
 	}
 }
@@ -97,10 +97,10 @@ func (p *Package) extractFilelist(outDir string, progressCallback func(p float64
 
 	extractedPaths := make(map[string]string)
 
-	for i, fi := range p.fileList {
+	for i, fi := range p.fileList.AsSlice() {
 
 		if progressCallback != nil {
-			progressCallback(float64(i) / float64(len(p.fileList)))
+			progressCallback(float64(i) / float64(p.fileList.Length()))
 		}
 
 		if strings.HasPrefix(fi.ResPath, thumbnailPrefix) && !p.unpackOptions.Thumbnails {
@@ -269,11 +269,11 @@ func (p *Package) loadPackedFilelist(
 }
 
 func (p *Package) loadPackedPackJSON(r io.ReadSeeker) (err error) {
-	if p.fileList == nil || len(p.fileList) == 0 {
+	if p.fileList.IsEmpty() {
 		return ErrEmptyFileList
 	}
 	var packJSONInfo *structures.FileInfo
-	for _, fi := range p.fileList {
+	for _, fi := range p.fileList.AsSlice() {
 		match := utils.PackJSONPathRegex.MatchString(fi.ResPath)
 		if match {
 			packJSONInfo = fi
@@ -465,7 +465,7 @@ func (p *Package) newFileInfoPacked(resPath []byte, infoBytes structures.FileInf
 }
 
 func (p *Package) updatePackedFileInfoAfter() {
-	for _, fi := range p.fileList {
+	for _, fi := range p.fileList.AsSlice() {
 		fi.RelPath = strings.TrimPrefix(strings.TrimPrefix(fi.ResPath, "res://packs/"), p.id+"/")
 		if fi.IsTexture() {
 			hash := md5.Sum([]byte(fi.ResPath))

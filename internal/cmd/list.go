@@ -87,15 +87,15 @@ func (lsf *ListFilesCmd) Run(ctx *Context) error {
 	return nil
 }
 
-func (lsf *ListFilesCmd) printList(list structures.FileInfoList) {
-	for _, fi := range list {
+func (lsf *ListFilesCmd) printList(list *structures.FileInfoList) {
+	for _, fi := range list.AsSlice() {
 		fmt.Fprintln(os.Stdout, fi.ResPath)
 	}
 }
 
 func (lsf *ListFilesCmd) printTree(
 	l logrus.FieldLogger,
-	list structures.FileInfoList,
+	list *structures.FileInfoList,
 ) {
 	tree := treeprint.New()
 	branchMap := make(map[string]treeprint.Tree)
@@ -130,7 +130,7 @@ func (lsf *ListFilesCmd) printTree(
 			return branchMap[path]
 		}
 	}
-	for i, fi := range list {
+	for i, fi := range list.AsSlice() {
 		path := utils.NormalizeResourcePath(fi.ResPath)
 		l.WithField("res", fi.ResPath).
 			WithField("size", fi.Size).

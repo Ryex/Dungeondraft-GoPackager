@@ -250,12 +250,12 @@ type toggleRenderer struct {
 	focusIndicatorOnPos  fyne.Position
 }
 
-func (r *toggleRenderer) Destroy() {}
-func (r *toggleRenderer) Objects() []fyne.CanvasObject {
+func (t *toggleRenderer) Destroy() {}
+func (t *toggleRenderer) Objects() []fyne.CanvasObject {
 	return []fyne.CanvasObject{
-		r.bg,
-		r.focusIndicator,
-		r.indicator,
+		t.bg,
+		t.focusIndicator,
+		t.indicator,
 	}
 }
 

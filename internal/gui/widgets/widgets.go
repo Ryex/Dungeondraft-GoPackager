@@ -1,3 +1,4 @@
+// Package widgets provides custom widgets
 package widgets
 
 import (

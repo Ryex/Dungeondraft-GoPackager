@@ -1,3 +1,4 @@
+// Package structures privides data structures for use in the rest of the program
 package structures
 
 import (
