@@ -132,18 +132,16 @@ func (p *Package) generateThumbnails(progressCallback func(p float64)) []error {
 
 	// start a limited number of go routines to process thumbnails
 	for j := 0; j < (numCpus * 2); j++ {
-		wg.Add(1)
-		go func() {
+		wg.Go(func() {
 			for {
 				index, ok := <-chInput
 				if !ok { // no more input and channel closed
-					wg.Done()
 					return
 				}
 				fi := fileList[index]
 				makeThumb(fi, log.WithField("res", fi.ResPath), chResult)
 			}
-		}()
+		})
 	}
 
 	// send thumbnails into input buffer
@@ -161,8 +159,7 @@ func (p *Package) generateThumbnails(progressCallback func(p float64)) []error {
 	var errs []error
 
 	// process results
-	wg.Add(1)
-	go func() {
+	wg.Go(func() {
 		for i := 0; i < int(texCount); i++ {
 			r := <-chResult
 			if r.Err != nil {
@@ -174,8 +171,7 @@ func (p *Package) generateThumbnails(progressCallback func(p float64)) []error {
 			}
 			p.log.WithField("res", r.Resource).Trace("thumbnail generated")
 		}
-		wg.Done()
-	}()
+	})
 
 	// wait for all threads to finish
 	wg.Wait()
