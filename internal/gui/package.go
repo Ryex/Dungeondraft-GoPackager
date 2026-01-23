@@ -127,7 +127,7 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
 				}
 				return a.buildInfoPane(info, editable)
 			} else {
-				_ = resourcesUnderTreeUid(tni, nodeTree)
+				_ = resourcesUnderTreeUID(tni, nodeTree)
 				// else if strings.HasPrefix(tni, "tag://") {
 				// tag := strings.TrimPrefix(tni, "tag://")
 				// TODO: add bulk operations pane
@@ -376,6 +376,7 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 		),
 	)
 
+	resMd5Text := widgets.NewThemedText(info.Md5.String(), theme.ColorNameForeground)
 	resMd5 := container.NewStack(
 		widgets.NewThemedRect(theme.ColorNameHeaderBackground, 4),
 		layouts.NewRightExpandHBox(
@@ -389,12 +390,20 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 				container.NewStack(
 					widgets.NewThemedRect(theme.ColorNameInputBackground, 4),
 					container.NewPadded(
-						widgets.NewThemedText(info.Md5, theme.ColorNameForeground),
+						resMd5Text,
 					),
 				),
 			),
 		),
 	)
+
+	a.pkg.GetOrUpdateResourceMd5(info, func(md5 string, err error) {
+		if err != nil {
+			log.WithError(err).Errorf("Failed to update hash for %s", info.ResPath)
+		} 	
+		resMd5Text.Text.Text = md5
+		resMd5Text.Text.Refresh()
+	})
 
 	tooLarge := container.NewCenter(
 		widget.NewLabel(lang.X("preview.tooLarge", "This file is too large!\nOpen it in a text editor.")),
@@ -862,7 +871,7 @@ func packageTreeRootID() string {
 	return "root://" + lang.X("tree.root.label", "Package")
 }
 
-func resourcesUnderTreeUid(tni string, tree map[string][]string) []string {
+func resourcesUnderTreeUID(tni string, tree map[string][]string) []string {
 	res := []string{}
 	stack := structures.NewStack[string]()
 	stack.Push(tni)

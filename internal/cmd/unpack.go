@@ -2,11 +2,9 @@ package cmd
 
 import (
 	"errors"
-	"os"
 	"path/filepath"
 
 	"github.com/schollz/progressbar/v3"
-	log "github.com/sirupsen/logrus"
 
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddpackage"
 )
@@ -22,50 +20,35 @@ type UnpackCmd struct {
 }
 
 func (uc *UnpackCmd) Run(ctx *Context) error {
-	packFilePath, pathErr := filepath.Abs(uc.InputPath)
-	if pathErr != nil {
-		return errors.Join(pathErr, errors.New("could not get absolute path for packfile"))
+	err := ctx.LoadPkg(uc.InputPath)
+	if err != nil {
+		return err
 	}
-
-	packFileName := filepath.Base(packFilePath)
+	defer ctx.Pkg.Close()
 
 	outDirPath, pathErr := filepath.Abs(uc.DestinationPath)
 	if pathErr != nil {
 		return errors.Join(pathErr, errors.New("could not get absolute path for dest folder"))
 	}
 
-	l := log.WithFields(log.Fields{
-		"filename": packFileName,
-		"outPath":  outDirPath,
-	})
-
-	pkg := ddpackage.NewPackage(l)
-
-	file, fileErr := os.Open(packFilePath)
-	if fileErr != nil {
-		log.WithField("path", packFilePath).WithError(fileErr).Error("could not open file for reading.")
-		return fileErr
-	}
-
-	defer file.Close()
-
 	options := ddpackage.UnpackOptions{
 		Overwrite:   uc.Overwrite,
 		RipTextures: uc.RipTextures,
 		Thumbnails:  uc.Thumbnails,
 	}
-	var err error
+
 	if uc.Progress {
-		total := int64(pkg.FileList().Length())
+		total := int64(ctx.Pkg.FileList().Length())
 		bar := progressbar.Default(total, "Unpacking ...")
-		err = pkg.ExtractPackageProgress(outDirPath, options, func(p float64) {
+		err = ctx.Pkg.ExtractPackageProgress(outDirPath, options, func(p float64) {
 			bar.Set(int(p * float64(total)))
 		})
 	} else {
-		err = pkg.ExtractPackage(outDirPath, options)
+		err = ctx.Pkg.ExtractPackage(outDirPath, options)
 	}
+
 	if err != nil {
-		l.WithError(err).Error("failed to extract package")
+		ctx.Log.WithError(err).Error("failed to extract package")
 		return err
 	}
 	return nil

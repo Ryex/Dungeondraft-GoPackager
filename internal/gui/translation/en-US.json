@@ -33,7 +33,7 @@
   "preview.defaultText": "Select a resource",
   "preview.tooLarge": "This file is too large!\nOpen it in a text editor.",
   "preview.path.label": "Path",
-  "preview.mdf.label": "Md5 Hash",
+  "preview.md5.label": "Md5 Hash",
   "preview.tab.resource": "Resource",
   "preview.tab.tags": "Tags",
   "preview.tab.tags.label": "Tags for",

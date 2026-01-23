@@ -1,7 +1,9 @@
 package structures
 
 import (
+	"crypto/md5"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"image"
 	"io"
@@ -18,6 +20,35 @@ import (
 
 	log "github.com/sirupsen/logrus"
 )
+
+type Md5Hash struct {
+	Md5 [16]byte
+}
+
+func (m *Md5Hash) String() string {
+	return hex.EncodeToString(m.Md5[:])
+}
+
+func (m *Md5Hash) IsValid() bool {
+	encoded := m.String()
+	return encoded != "00000000000000000000000000000000" && encoded != ""
+}
+
+func (m *Md5Hash) UpdateWith(data []byte) {
+	copy(m.Md5[:], data)
+}
+
+var ErrHashLenIncorrect = errors.New("length of hex encoded hash incorrect, != 16")
+
+func DecodeMd5HashFromString(str string) (Md5Hash, error) {
+	h := Md5Hash{}
+	if hex.DecodedLen(len(str)) != 16 {
+		return h, ErrHashLenIncorrect
+	}
+	decoded, err := hex.DecodeString(str)
+	copy(h.Md5[:], decoded)
+	return h, err
+}
 
 // FileInfoBytes is a struct used for readign and writing the encoded file information bytes
 type FileInfoBytes struct {
@@ -41,7 +72,7 @@ type FileInfo struct {
 	Path string
 
 	Size        int64
-	Md5         string
+	Md5         Md5Hash
 	ResPath     string
 	ResPathSize int32
 	RelPath     string
@@ -49,6 +80,9 @@ type FileInfo struct {
 	// used whenreading and writing files
 	Offset       int64
 	HeaderOffset int64
+
+	// Package
+	Package  *PackageInfo
 
 	// if the file should have metadata this resource path points to that metadata
 	// but that resource may not exist
@@ -160,6 +194,15 @@ func (fi *FileInfo) IsWall() bool {
 
 func (fi *FileInfo) IsTaggable() bool {
 	return fi.IsObject()
+}
+
+func (fi *FileInfo) ToInfoBytes() FileInfoBytes {
+	infoBytes := FileInfoBytes{
+		Offset: uint64(fi.Offset),
+		Size: uint64(fi.Size),
+	}
+	copy(infoBytes.Md5[:], fi.Md5.Md5[:])
+	return infoBytes
 }
 
 type FileInfoList struct {
@@ -478,16 +521,13 @@ func (fil *FileInfoList) WriteHeaders(
 			return err
 		}
 
-		fInfoBytes := FileInfoBytes{}
-
 		curPos, err := utils.Tell(out)
 		if err != nil {
 			return err
 		}
 		fi.HeaderOffset = curPos
 
-		fInfoBytes.Size = uint64(fi.Size)
-		fInfoBytes.Offset = uint64(fi.Offset)
+		fInfoBytes := fi.ToInfoBytes()
 
 		// write fileinfo
 		err = fInfoBytes.Write(out)
@@ -535,6 +575,15 @@ func (fil *FileInfoList) WriteFiles(
 			}
 			// store the size of the data
 			fi.Size = int64(len(data))
+			// store reall offset
+			fi.Offset = offset
+			// update md5
+			{
+			  hash := md5.New()
+				if _, err := hash.Write(data); err == nil {
+					fi.Md5.UpdateWith(hash.Sum(nil))
+				}
+			}
 
 			// write out the data
 			n, err := out.Write(data)
@@ -554,17 +603,16 @@ func (fil *FileInfoList) WriteFiles(
 				return err
 			}
 
-			// go back to update the stored size and offset
+			// go back to update the stored size, offset, and md5
 			_, err = out.Seek(fi.HeaderOffset, io.SeekStart)
 			if err != nil {
 				return err
 			}
 
-			err = binary.Write(out, binary.LittleEndian, offset)
-			if !utils.CheckErrorWrite(log, err) {
-				return err
-			}
-			err = binary.Write(out, binary.LittleEndian, fi.Size)
+			fInfoBytes := fi.ToInfoBytes()
+
+			// write fileinfo
+			err = fInfoBytes.Write(out)
 			if !utils.CheckErrorWrite(log, err) {
 				return err
 			}

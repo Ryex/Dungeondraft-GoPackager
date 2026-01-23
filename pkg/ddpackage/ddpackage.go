@@ -1,3 +1,4 @@
+// Package ddpackage provides the Package structures and functions
 package ddpackage
 
 import (
@@ -6,6 +7,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
+
 	// "io"
 	"os"
 	"path/filepath"
@@ -52,15 +55,15 @@ type Package struct {
 	alignment     int
 
 	flLock      sync.RWMutex // guards the resourceMap and fileList
-	fileList    structures.FileInfoList
+	fileList    *structures.FileInfoList
 	resourceMap map[string]*structures.FileInfo
 
-	info structures.PackageInfo
+	info *structures.PackageInfo
 
 	walls    map[string]structures.PackageWall
 	tilesets map[string]structures.PackageTileset
 
-	tags structures.PackageTags
+	tags *structures.PackageTags
 
 	pkgFile *os.File
 }
@@ -129,7 +132,7 @@ func (p *Package) FileList() *structures.FileInfoList {
 	return res
 }
 
-func (p *Package) Info() structures.PackageInfo {
+func (p *Package) Info() *structures.PackageInfo {
 	return p.info
 }
 
@@ -138,7 +141,7 @@ func (p *Package) Walls() *map[string]structures.PackageWall {
 }
 
 func (p *Package) Tags() *structures.PackageTags {
-	return &p.tags
+	return p.tags
 }
 
 func (p *Package) Tilesets() *map[string]structures.PackageTileset {
@@ -153,11 +156,11 @@ func NewPackage(log logrus.FieldLogger) *Package {
 		walls:       make(map[string]structures.PackageWall),
 		tilesets:    make(map[string]structures.PackageTileset),
 		resourceMap: make(map[string]*structures.FileInfo),
-		tags:        *structures.NewPackageTags(),
+		tags:        structures.NewPackageTags(),
 	}
 }
 
-// set packed file alignment
+// SetAlignment sets packed file alignment
 func (p *Package) SetAlignment(alignment int) error {
 	if alignment < 0 {
 		return errors.New("alignment must be greater than 0")
@@ -171,7 +174,7 @@ func (p *Package) SetUnpackOptions(options UnpackOptions) {
 }
 
 func (p *Package) SetPackOptions(options PackOptions) {
-	if options.ValidExts == nil || len(options.ValidExts) == 0 {
+	if len(options.ValidExts) == 0 {
 		options.ValidExts = DefaultValidExt()
 	}
 	p.packOptions = &options
@@ -281,14 +284,14 @@ func (p *Package) addResource(fInfo *structures.FileInfo) {
 func (p *Package) resetData() {
 	p.flLock.Lock()
 	defer p.flLock.Unlock()
-	p.fileList = structures.FileInfoList{}
+	p.fileList = &structures.FileInfoList{}
 	p.resourceMap = make(map[string]*structures.FileInfo)
 	p.walls = make(map[string]structures.PackageWall)
 	p.tilesets = make(map[string]structures.PackageTileset)
-	p.tags = *structures.NewPackageTags()
+	p.tags = structures.NewPackageTags()
 }
 
-// get the *FileInfo for a resource identified by the passed 'res://' path
+// GetResourceInfo gets the *FileInfo for a resource identified by the passed 'res://' path
 func (p *Package) GetResourceInfo(resPath string) (*structures.FileInfo, error) {
 	info, found := p.resourceMap[resPath]
 	if found && info != nil {
@@ -336,7 +339,7 @@ func (p *Package) LoadResourceMetadata() error {
 	return ErrPackageNotLoaded
 }
 
-// Load the resource identified by the passed 'res://' path
+// LoadResource Loads the resource identified by the passed 'res://' path
 func (p *Package) LoadResource(resPath string) ([]byte, error) {
 	if p.mode != PackageModePacked && p.mode != PackageModeUnpacked {
 		return nil, ErrPackageNotLoaded
@@ -405,30 +408,6 @@ func (p *Package) NewFileInfo(options NewFileInfoOptions) (*structures.FileInfo,
 
 		l := p.log.WithField("filePath", options.Path)
 
-		// calc file Md5
-		// err := func() error {
-		// 	file, err := os.Open(options.Path)
-		// 	if err != nil {
-		// 		l.WithError(err).Error("can not open path to compute md5")
-		// 		err = dderrors.CausedBy(fmt.Errorf("failed to open %s for hashing", options.Path), err)
-		// 		return err
-		// 	}
-		// 	defer file.Close()
-		//
-		// 	hash := md5.New()
-		// 	if _, err := io.Copy(hash, file); err != nil {
-		// 		return dderrors.CausedBy(fmt.Errorf("failed to read file: %s", options.Path, err))
-		// 	}
-		//
-		// 	hashBytes := hash.Sum(nil)
-		// 	info.Md5 = hex.EncodeToString(hashBytes[:])
-		// 	return nil
-		// }()
-		//
-		// if err != nil {
-		// 	return info, err
-		// }
-
 		if info.IsTexture() {
 
 			thumbnailDir := filepath.Join(p.unpackedPath, "thumbnails")
@@ -442,7 +421,6 @@ func (p *Package) NewFileInfo(options NewFileInfoOptions) (*structures.FileInfo,
 				img, format, err := ddimage.OpenImage(options.Path)
 				if err != nil {
 					l.WithError(err).Error("can not open path with image extension as image")
-					err = dderrors.CausedBy(fmt.Errorf("failed to open %s as an image", options.Path), err)
 					// log but let info construction continue
 				} else {
 					l.WithField("imageFormat", format).Trace("read image")
@@ -489,3 +467,74 @@ func (p *Package) NewFileInfo(options NewFileInfoOptions) (*structures.FileInfo,
 
 	return info, nil
 }
+
+func (p *Package) GetOrUpdateResourceMd5(fi *structures.FileInfo, callback func(string, error)) {
+	if fi.Md5.IsValid() {
+		callback(fi.Md5.String(), nil)
+	} else {
+		go func() {
+			hash := md5.New()
+			if p.mode == PackageModeUnpacked {
+
+				l := p.log.WithField("filePath", fi.Path)
+				file, err := os.Open(fi.Path)
+				if err != nil {
+					l.WithError(err).Error("can not open path to compute md5")
+					err = dderrors.CausedBy(fmt.Errorf("failed to open %s for hashing", fi.Path), err)
+
+					callback("", err)
+					return
+				}
+				defer file.Close()
+
+				if _, err := io.Copy(hash, file); err != nil {
+					l.WithError(err).Errorf("failed to read file")
+					callback("", dderrors.CausedBy(fmt.Errorf("failed to read file"), err))
+					return
+				}
+
+			} else if p.mode == PackageModePacked && p.pkgFile != nil {
+				l := p.log.WithField("resPath", fi.ResPath)
+				data, err := p.readPackedFileFromPackage(p.pkgFile, fi)
+				if err != nil {
+					l.WithError(err).Errorf("failed to read packed file")
+					callback("", dderrors.CausedBy(errors.New("failed to read packed file"), err))
+					return
+				}
+				if _, err := hash.Write(data); err != nil {
+					callback("", dderrors.CausedBy(errors.New("failed to write hash"), err))
+					return
+				}
+			} else {
+				p.log.Error("Can not update hash for file info, unknown package state")
+			}
+			hashBytes := hash.Sum(nil)
+			fi.Md5.UpdateWith(hashBytes)
+			callback(fi.Md5.String(), nil)
+		}()
+	}
+}
+
+// calc file Md5
+// err := func() error {
+// 	file, err := os.Open(options.Path)
+// 	if err != nil {
+// 		l.WithError(err).Error("can not open path to compute md5")
+// 		err = dderrors.CausedBy(fmt.Errorf("failed to open %s for hashing", options.Path), err)
+// 		return err
+// 	}
+// 	defer file.Close()
+//
+// 	hash := md5.New()
+// 	if _, err := io.Copy(hash, file); err != nil {
+// 		return dderrors.CausedBy(fmt.Errorf("failed to read file: %s", options.Path, err))
+// 	}
+//
+// 	hashBytes := hash.Sum(nil)
+// 	info.Md5 = hex.EncodeToString(hashBytes[:])
+// 	return nil
+// }()
+//
+// if err != nil {
+// 	return info, err
+// }
