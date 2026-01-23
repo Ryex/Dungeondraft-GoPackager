@@ -10,15 +10,18 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/dialog"
-	"fyne.io/fyne/v2/lang"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	
 	xlayout "fyne.io/x/fyne/layout"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/lang"
+
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
+
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddpackage"
 
 	dderrors "github.com/ryex/dungeondraft-gopackager/internal/errors"
