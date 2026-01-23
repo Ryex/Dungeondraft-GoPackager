@@ -16,27 +16,35 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/dialog"
-	"fyne.io/fyne/v2/lang"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+
 	xdialog "fyne.io/x/fyne/dialog"
 	fynetooltip "github.com/dweymouth/fyne-tooltip"
 	"github.com/fsnotify/fsnotify"
+
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/assets"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/bindings"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/credits"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/lang"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/widgets"
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
+
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddpackage"
+	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
+
 	log "github.com/sirupsen/logrus"
 )
 
 type App struct {
 	app    fyne.App
 	window fyne.Window
+
+	knownLanguages []string
+	prefLocale     binding.String
 
 	operatingPath binding.String
 
@@ -78,19 +86,48 @@ func NewApp() *App {
 
 func (a *App) Main() {
 	a.app = app.NewWithID("io.github.ryex.dungondraft-gopackager")
-	local := lang.SystemLocale()
-	log.Infof("system local %s : %s", local.LanguageString(), local.String())
+	locale := lang.SystemLocale()
+
+	log.Infof("system local %s : %s", locale.LanguageString(), locale.String())
 	translationErr := lang.AddTranslationsFS(translations, "translation")
 	if translationErr != nil {
 		log.WithError(translationErr).Error("Failed to load translations")
 	}
 
-	a.app.Settings().SetTheme(&betterDisabledContrast{Theme: theme.DefaultTheme()})
+	localeString := lang.ClosestSupportedLocale([]string{locale.LanguageString()}).LanguageString()
+	prefLocaleBinding := binding.BindPreferenceString("locale", a.app.Preferences())
+	prefLocale, err := prefLocaleBinding.Get()
+	if err != nil || prefLocale == "" {
+		prefLocaleBinding.Set(localeString)
+		prefLocale = localeString
+	}
+	a.prefLocale = prefLocaleBinding
+	lang.SetupLang(prefLocale)
 
+	a.app.Settings().SetTheme(&betterDisabledContrast{Theme: theme.DefaultTheme()})
 	a.window = a.app.NewWindow(lang.X("window.title", "Dungeondraft-GoPackager"))
 	a.window.SetIcon(assets.Icon)
 	a.window.Resize(fyne.NewSize(1200, 800))
 
+	a.setupWindow()
+
+	a.prefLocale.AddListener(binding.NewDataListener(func() {
+		newLocale, err := prefLocaleBinding.Get()
+		// ignore fetch error and if the local hansn't actualy changed (first run)
+		if err != nil || newLocale == prefLocale {
+			return
+		}
+		prefLocale = newLocale
+		lang.SetupLang(prefLocale)
+		a.setupWindow()
+	}))
+
+	a.app.Run()
+	a.clean()
+}
+
+func (a *App) setupWindow() {
+	a.window.SetTitle(lang.X("window.title", "Dungeondraft-GoPackager"))
 	a.window.SetOnDropped(func(_ fyne.Position, u []fyne.URI) {
 		if len(u) > 1 {
 			dialog.ShowInformation(
@@ -121,10 +158,7 @@ func (a *App) Main() {
 	})
 	a.buildMainUI()
 	a.setupPathHandler()
-
 	a.window.Show()
-	a.app.Run()
-	a.clean()
 }
 
 func (a *App) resetPkg() {
@@ -140,11 +174,41 @@ func (a *App) clean() {
 	fmt.Println("Exited")
 }
 
+func languageChoices() ([]string, map[string]string, map[string]string) {
+	choices := structures.NewSet[string]()
+	mapping := map[string]string{}
+	reversed := map[string]string{}
+	for _, tag := range lang.Translated {
+		locale := lang.LocaleFromTag(tag)
+		flag := lang.UnicodeFlagFromLocale(locale)
+		choice := flag
+		if choice != "" {
+			choice += " "
+		}
+		choice += locale.LanguageString()
+		mapping[choice] = locale.LanguageString()
+		reversed[locale.LanguageString()] = choice
+		choices.Add(choice)
+	}
+	return choices.AsSlice(), mapping, reversed
+}
+
 func (a *App) buildMainUI() {
 	siteURL, _ := url.Parse("https://ryex.github.io/Dungeondraft-GoPackager/")
 	githubURL, _ := url.Parse("https://github.com/Ryex/Dungeondraft-GoPackager")
 
 	darkThemeToggleLbl := widget.NewLabel(lang.X("app.darkTheme.toggle.label", "Dark Mode"))
+
+	langChoices,  choiceLangMap, langChoiceMap := languageChoices()
+	langChoiceBinding := bindings.NewReversableMapping(
+		a.prefLocale,
+		func(lang string) (string, error) {
+			return langChoiceMap[lang], nil
+		},
+		func(choice string) (string, error){
+			return choiceLangMap[choice], nil
+		})
+	langSelect := widget.NewSelectWithData(langChoices, langChoiceBinding)
 
 	forceDarkMode := binding.BindPreferenceBool("forceDarkMode", a.app.Preferences())
 	darkThemeToggle := widgets.NewToggleWithData(forceDarkMode)
@@ -187,6 +251,7 @@ func (a *App) buildMainUI() {
 			container.NewPadded(container.NewHBox(
 				darkThemeToggleLbl,
 				darkThemeToggle,
+				langSelect,
 				layout.NewSpacer(),
 				widget.NewButtonWithIcon("", assets.Icon, func() {
 					aboutDlg := xdialog.NewAbout(

@@ -14,19 +14,24 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/dialog"
-	"fyne.io/fyne/v2/lang"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+
 	"github.com/davecgh/go-spew/spew"
+
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/bindings"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/widgets"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/lang"
+
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
+
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddimage"
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddpackage"
 	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
+
 	ddcolor "github.com/ryex/dungeondraft-gopackager/pkg/structures/color"
 	log "github.com/sirupsen/logrus"
 )
