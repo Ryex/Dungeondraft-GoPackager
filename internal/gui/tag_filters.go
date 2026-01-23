@@ -149,8 +149,8 @@ func ParseTagFilter(s string) (filter TagFilter) {
 	} else if lenArgs == 1 {
 		arg := args[0]
 		fuzzy := true
-		if strings.HasPrefix(arg, "%") {
-			arg = strings.TrimPrefix(arg, "%")
+		if after, ok :=strings.CutPrefix(arg, "%"); ok  {
+			arg = after
 			fuzzy = false
 		}
 		if strings.TrimSpace(arg) == "" {
@@ -168,13 +168,13 @@ func ParseTagFilter(s string) (filter TagFilter) {
 		}
 		for _, arg := range args {
 			invert := false
-			if strings.HasPrefix(arg, "not:") {
-				arg = strings.TrimPrefix(arg, "not:")
+			if after, ok :=strings.CutPrefix(arg, "not:"); ok  {
+				arg = after
 				invert = true
 			}
 			fuzzy := true
-			if strings.HasPrefix(arg, "%") {
-				arg = strings.TrimPrefix(arg, "%")
+			if after, ok :=strings.CutPrefix(arg, "%"); ok  {
+				arg = after
 				fuzzy = false
 			}
 			var f TagFilter

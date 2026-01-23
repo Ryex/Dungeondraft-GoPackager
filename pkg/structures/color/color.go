@@ -1,3 +1,4 @@
+// Package color
 package color
 
 import (

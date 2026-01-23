@@ -59,7 +59,7 @@ func NewGenerateTags(options *GenerateTagsOptions) *GenerateTags {
 	return gt
 }
 
-// returns a map of tasg to the set of sets they should live in
+// TagsFromPath returns a map of tasg to the set of sets they should live in
 func (gt *GenerateTags) TagsFromPath(path string) (tagsMap map[string]*structures.Set[string]) {
 	tagsMap = make(map[string]*structures.Set[string])
 	if gt.tagSetSplitter == nil {

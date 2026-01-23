@@ -61,7 +61,7 @@ func SavePackageJSONOptionsFromPkg(pkg *Package) SavePackageJSONOptions {
 	return options
 }
 
-// NewPackerFromFolder builds a new Packer from a folder with a valid pack.json
+// SavePackageJSON saves the pack.json
 func SavePackageJSON(log logrus.FieldLogger, options SavePackageJSONOptions, overwrite bool) (err error) {
 	folderPath, err := filepath.Abs(options.Path)
 	if err != nil {

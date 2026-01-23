@@ -230,10 +230,10 @@ func (p *Package) readPackedFileFromPackage(r io.ReadSeeker, info *structures.Fi
 	}
 
 	// if the md5 isn't blank verify
-	if info.Md5 != "00000000000000000000000000000000" && info.Md5 != "" {
+	if info.Md5.IsValid() {
 		hash := md5.Sum(fileData)
 		md5Hash := hex.EncodeToString(hash[:])
-		if info.Md5 != md5Hash {
+		if info.Md5.String() != md5Hash {
 			err = errors.New("md5 hash mismatch")
 			l.WithError(err).
 				WithField("packedDataMd5", md5Hash).
@@ -453,8 +453,8 @@ func (p *Package) newFileInfoPacked(resPath []byte, infoBytes structures.FileInf
 		ResPathSize: int32(len(resPath)),
 		Offset:      int64(infoBytes.Offset),
 		Size:        int64(infoBytes.Size),
-		Md5:         hex.EncodeToString(infoBytes.Md5[:]),
 	}
+	info.Md5.UpdateWith(infoBytes.Md5[:])
 
 	if info.IsTexture() {
 		hash := md5.Sum([]byte(info.ResPath))

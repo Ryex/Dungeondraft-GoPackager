@@ -218,7 +218,7 @@ func fallbackWithData(key, fallback string, data any) string {
 	return str.String()
 }
 
-// A utility for setting up languages 
+// SetupLang is A utility for setting up languages 
 func SetupLang(lang string) {
 	Localizer = i18n.NewLocalizer(Bundle, lang)
 }

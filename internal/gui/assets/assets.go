@@ -1,3 +1,4 @@
+// Package assets
 package assets
 
 var (

@@ -1,3 +1,4 @@
+// Package bindings
 package bindings
 
 import (
@@ -161,8 +162,6 @@ type ExternalBound[T any] interface {
 	Bound[T]
 	Reload() error
 }
-
-var errWrongType = errors.New("wrong type provided")
 
 type mappedBinding[T any] struct {
 	Bound[T]

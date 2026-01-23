@@ -78,14 +78,14 @@ func (p *Package) LoadUnpackedPackJSON(dirPath string) error {
 		return errors.Join(ErrInvalidPackJSON, err)
 	}
 
-	p.info = pack
+	p.info = &pack
 	p.id = pack.ID
 	p.name = pack.Name
 
 	return nil
 }
 
-// PackPackage packs up a directory into a .dungeondraft_pack file
+// PackPackageProgress packs up a directory into a .dungeondraft_pack file
 // assumes BuildFileList has been called first
 // includes progress callback
 func (p *Package) PackPackageProgress(

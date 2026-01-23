@@ -21,6 +21,22 @@ type PackageInfo struct {
 	ColorOverrides CustomColorOverrides `json:"custom_color_overrides,omitempty"`
 }
 
+func (p *PackageInfo) Copy() PackageInfo {
+	pkg := PackageInfo{
+		Name: p.Name,
+		ID: p.ID,
+		Version: p.Version,
+		Author: p.Author,
+		KeywordsRaw: p.KeywordsRaw,
+		ColorOverrides: p.ColorOverrides,
+	}
+	copy(pkg.Keywords, p.Keywords)
+	if p.Allow3rdParty != nil {
+		*pkg.Allow3rdParty = *p.Allow3rdParty
+	}
+	return  pkg
+}
+
 type CustomColorOverrides struct {
 	Enabled       bool    `json:"enabled"`
 	MinRedness    float64 `json:"min_redness"`
