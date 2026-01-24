@@ -351,9 +351,13 @@ func (a *App) buildMainUI() {
 		if disable {
 			packBtn.Disable()
 			folderBtn.Disable()
+			langSelect.Disable()
+			darkThemeToggle.Disable()
 		} else {
 			packBtn.Enable()
 			folderBtn.Enable()
+			langSelect.Enable()
+			darkThemeToggle.Enable()
 		}
 	})
 

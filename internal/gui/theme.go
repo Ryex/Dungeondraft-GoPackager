@@ -33,7 +33,7 @@ func (b *betterDisabledContrast) Color(name fyne.ThemeColorName, v fyne.ThemeVar
 		if v == theme.VariantDark {
 			return ddimage.Lignten(c, 0.1)
 		} else {
-			return ddimage.Darken(c, 0.5)
+			return ddimage.Darken(c, 0.6)
 		}
 	}
 	return c

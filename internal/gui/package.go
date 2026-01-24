@@ -22,9 +22,9 @@ import (
 	"github.com/davecgh/go-spew/spew"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/bindings"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/lang"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/widgets"
-	"github.com/ryex/dungeondraft-gopackager/internal/gui/lang"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 
@@ -354,6 +354,9 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 		thumbToggle.Hide()
 	}
 
+	pathText := widget.NewEntry()
+	pathText.Disable()
+	pathText.SetText(info.ResPath)
 	path := container.NewStack(
 		widgets.NewThemedRect(theme.ColorNameHeaderBackground, 4),
 		layouts.NewRightExpandHBox(
@@ -368,7 +371,7 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 					widgets.NewThemedRect(theme.ColorNameInputBackground, 4),
 					container.NewPadded(
 						container.NewHScroll(
-							widgets.NewThemedText(info.ResPath, theme.ColorNameForeground),
+							pathText,
 						),
 					),
 				),
@@ -376,7 +379,9 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 		),
 	)
 
-	resMd5Text := widgets.NewThemedText(info.Md5.String(), theme.ColorNameForeground)
+	resMd5Text := widget.NewEntry()
+	resMd5Text.Disable()
+
 	resMd5 := container.NewStack(
 		widgets.NewThemedRect(theme.ColorNameHeaderBackground, 4),
 		layouts.NewRightExpandHBox(
@@ -400,9 +405,8 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 	a.pkg.GetOrUpdateResourceMd5(info, func(md5 string, err error) {
 		if err != nil {
 			log.WithError(err).Errorf("Failed to update hash for %s", info.ResPath)
-		} 	
-		resMd5Text.Text.Text = md5
-		resMd5Text.Text.Refresh()
+		}
+		resMd5Text.SetText(md5)
 	})
 
 	tooLarge := container.NewCenter(

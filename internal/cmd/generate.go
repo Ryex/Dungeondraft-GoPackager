@@ -122,7 +122,7 @@ func (gtc *GenTumbCmd) Run(ctx *Context) error {
 	if gtc.Progress {
 		total := int64(pkg.FileList().Filter(func(info *structures.FileInfo) bool {
 			return info.IsTexture()
-		}).Length())
+		}).Size())
 		bar := progressbar.Default(total, "Generating Thumbnails ...")
 		errs = pkg.GenerateThumbnailsProgress(func(p float64) {
 			bar.Set(int(p * float64(total)))

@@ -23,9 +23,11 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/fsnotify/fsnotify"
 
-	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
-	"github.com/ryex/dungeondraft-gopackager/internal/utils"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/bindings"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/lang"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/widgets"
+	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddpackage"
 	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
@@ -116,6 +118,69 @@ func (a *App) loadUnpackedPath(path string) {
 	}()
 }
 
+func (a *App) updateFromPaths(paths []string) {
+	activity := widget.NewActivity()
+	activity.Start()
+	msgText := widgets.NewThemedText(lang.X(
+		"pack.filesystemUpdate",
+		"Updating resources from {{.Path}} (updating index) ...",
+		map[string]any{
+			"Path": utils.TruncatePathHumanFriendly(a.pkg.UnpackedPath(), 80),
+		},
+	), theme.ColorNameForeground)
+	msgText.Text.TextSize = 16
+	msgText.Text.Alignment = fyne.TextAlignCenter
+	activityText := widgets.NewThemedText("", theme.ColorNameForeground)
+	activityText.Text.TextSize = 12
+	activityText.Text.Alignment = fyne.TextAlignCenter
+	activityStr := binding.NewString()
+	bindings.Listen(activityStr, func(str string) {
+		activityText.Text.Text = str
+		activityText.Refresh()
+	})
+	progressBar := widget.NewProgressBar()
+	activityProgress := binding.NewFloat()
+	progressBar.Bind(activityProgress)
+
+	activityContent := container.NewVBox(
+		layout.NewSpacer(),
+		activity,
+		msgText,
+		activityText,
+		container.NewPadded(progressBar),
+		layout.NewSpacer(),
+	)
+
+	progressDlg := dialog.NewCustomWithoutButtons(
+		lang.X("task.updatePackage.text", "Updating pack recources ..."),
+		activityContent,
+		a.window)
+	progressDlg.Show()
+
+	a.pkg.UpdateFromPathsProgress(paths, func(p float64, path string) {
+		activityStr.Set(lang.X(
+			"pack.buildList.activity",
+			"Loading {{.Path}} ...",
+			map[string]any{
+				"Path": utils.TruncatePathHumanFriendly(path, 80),
+			},
+		))
+	})
+	err := a.pkg.LoadTags()
+	if err != nil {
+		a.showErrorDialog(
+			dderrors.CausedBy(fmt.Errorf(lang.X("package.tags.error", "Failed to read tags")), err))
+		err = nil
+	}
+	err = a.pkg.LoadResourceMetadata()
+	if err != nil {
+		a.showErrorDialog(dderrors.CausedBy(fmt.Errorf(lang.X("package.metadata.error", "Failed to read metadata")), err))
+		err = nil
+	}
+	progressDlg.Hide()
+	a.packageUpdated.Set(a.pkgUpdateCounter + 1)
+}
+
 func (a *App) setupPackageWatcher() {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -137,7 +202,7 @@ func (a *App) setupPackageWatcher() {
 			statInfo, err := os.Stat(path)
 			if err != nil {
 				if slices.Contains(watcher.WatchList(), path) {
-					_ = watcher.Remove(path) // remove non existant paths 
+					_ = watcher.Remove(path) // remove non existant paths
 				}
 				continue
 			}
@@ -153,9 +218,8 @@ func (a *App) setupPackageWatcher() {
 		}
 		if a.pkg != nil {
 			log.Debugf("updating resource paths... %s", toUpdate)
-			a.pkg.UpdateFromPaths(toUpdate)
+			a.updateFromPaths(toUpdate)
 		}
-		a.packageUpdated.Set(a.pkgUpdateCounter + 1)
 	}
 
 	go func() {
@@ -175,7 +239,7 @@ func (a *App) setupPackageWatcher() {
 						}
 						paths.Add(path)
 						eventTimer = time.AfterFunc(
-							1*time.Second,
+							2*time.Second,
 							updatePackage,
 						)
 					}()
@@ -193,7 +257,7 @@ func (a *App) setupPackageWatcher() {
 					}
 					paths.Add(a.pkg.UnpackedPath())
 					eventTimer = time.AfterFunc(
-						1*time.Second,
+						2*time.Second,
 						updatePackage,
 					)
 				}
@@ -479,7 +543,7 @@ func (a *App) genthumbnails() {
 			return
 		}
 		a.pkg.UpdateFromPaths([]string{filepath.Join(a.pkg.UnpackedPath(), "thumbnails")})
-		a.packageWatcherIgnoreThumbnails = true
+		a.packageWatcherIgnoreThumbnails = false
 		a.disableButtons.Set(false)
 	}()
 }

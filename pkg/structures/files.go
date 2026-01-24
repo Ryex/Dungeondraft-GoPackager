@@ -223,7 +223,7 @@ func (fil *FileInfoList) CopyTo(other *FileInfoList) {
 	copy(other.data, fil.data)
 }
 
-func (fil *FileInfoList) Length() int {
+func (fil *FileInfoList) Size() int {
 	return len(fil.data)
 }
 
