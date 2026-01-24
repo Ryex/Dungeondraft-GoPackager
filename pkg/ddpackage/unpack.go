@@ -100,7 +100,7 @@ func (p *Package) extractFilelist(outDir string, progressCallback func(p float64
 	for i, fi := range p.fileList.AsSlice() {
 
 		if progressCallback != nil {
-			progressCallback(float64(i) / float64(p.fileList.Length()))
+			progressCallback(float64(i) / float64(p.fileList.Size()))
 		}
 
 		if strings.HasPrefix(fi.ResPath, thumbnailPrefix) && !p.unpackOptions.Thumbnails {

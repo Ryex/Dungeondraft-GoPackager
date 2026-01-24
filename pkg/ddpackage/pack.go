@@ -258,7 +258,7 @@ func (p *Package) updateFromPaths(paths []string, progressCallback func(p float6
 		}
 	}
 
-	p.fileList.SetCapacity(files.Size())
+	p.fileList.SetCapacity( max(files.Size(), p.fileList.Size()) )
 
 	cbPoint := max(files.Size()/200, 1)
 
@@ -360,7 +360,7 @@ func (p *Package) makeResPath(l logrus.FieldLogger, path string) (string, error)
 
 func (p *Package) writePackage(l logrus.FieldLogger, out io.WriteSeeker, progressCallback func(p float64)) (err error) {
 	headers := structures.DefaultPackageHeader()
-	headers.FileCount = uint32(p.fileList.Length())
+	headers.FileCount = uint32(p.fileList.Size())
 
 	l.Debug("writing package headers...")
 	// write file header

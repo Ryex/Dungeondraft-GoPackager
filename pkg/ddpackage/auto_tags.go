@@ -31,7 +31,7 @@ func (p *Package) generateTags(generator *GenerateTags, pcb func(p float64)) {
 			}
 		}
 		if pcb != nil {
-			pcb(float64(i) / float64(p.fileList.Length()))
+			pcb(float64(i) / float64(p.fileList.Size()))
 		}
 	}
 	p.SaveUnpackedTags()
