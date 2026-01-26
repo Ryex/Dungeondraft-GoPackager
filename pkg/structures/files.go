@@ -26,7 +26,7 @@ type Md5Hash struct {
 }
 
 func (m *Md5Hash) String() string {
-	return hex.EncodeToString(m.Md5[:])
+	return strings.ToLower(hex.EncodeToString(m.Md5[:]))
 }
 
 func (m *Md5Hash) IsValid() bool {
@@ -82,7 +82,7 @@ type FileInfo struct {
 	HeaderOffset int64
 
 	// Package
-	Package  *PackageInfo
+	Package *PackageInfo
 
 	// if the file should have metadata this resource path points to that metadata
 	// but that resource may not exist
@@ -107,13 +107,27 @@ func (fi *FileInfo) CalcRelPath() string {
 		path = fi.RelPath
 	} else {
 		path = utils.CleanRelativeResourcePath(fi.ResPath)
-		// path = strings.TrimPrefix(fi.ResPath, "res://packs/")
-		// path = idTrimPrefixRegex.ReplaceAllString(path, "")
 	}
 	if runtime.GOOS == "windows" {
 		path = strings.ReplaceAll(path, "\\", "/")
 	}
 	return path
+}
+
+func (fi *FileInfo) GetOrUpdateFilesystemSize(callback func(int64, error)) {
+	if fi.Size > 0 || fi.Path == "" {
+		callback(fi.Size, nil)
+	} else {
+		go func() {
+			info, err := os.Stat(fi.Path)
+			if err != nil {
+				callback(fi.Size, err)
+				return
+			}
+			fi.Size = info.Size()
+			callback(fi.Size, nil)
+		}()
+	}
 }
 
 func (fi *FileInfo) IsMetadata() bool {
@@ -199,7 +213,7 @@ func (fi *FileInfo) IsTaggable() bool {
 func (fi *FileInfo) ToInfoBytes() FileInfoBytes {
 	infoBytes := FileInfoBytes{
 		Offset: uint64(fi.Offset),
-		Size: uint64(fi.Size),
+		Size:   uint64(fi.Size),
 	}
 	copy(infoBytes.Md5[:], fi.Md5.Md5[:])
 	return infoBytes
@@ -210,7 +224,7 @@ type FileInfoList struct {
 }
 
 func NewFileInfoList() *FileInfoList {
-	fil := &FileInfoList{ make([]*FileInfo, 0) }
+	fil := &FileInfoList{make([]*FileInfo, 0)}
 	return fil
 }
 
@@ -266,7 +280,7 @@ func (fil *FileInfoList) Filter(P func(fi *FileInfo) bool) *FileInfoList {
 			res = append(res, fi)
 		}
 	}
-	return &FileInfoList { data: res }
+	return &FileInfoList{data: res}
 }
 
 func (fil *FileInfoList) DeduplicateBy(P func(a, b *FileInfo) bool) {
@@ -362,7 +376,7 @@ func (fil *FileInfoList) Glob(filter FileInfoFilterFunc, patterns ...string) (*F
 	for _, pattern := range patterns {
 		regexpPat, err := GlobToRelPathRegexp(pattern)
 		if err != nil {
-			return &FileInfoList{ data: nil }, dderrors.CausedBy(ErrBadFileInfoListGlobPattern, err)
+			return &FileInfoList{data: nil}, dderrors.CausedBy(ErrBadFileInfoListGlobPattern, err)
 		}
 		log.Debugf("compiled glob pattern %s", regexpPat.String())
 
@@ -384,7 +398,7 @@ func (fil *FileInfoList) Glob(filter FileInfoFilterFunc, patterns ...string) (*F
 		i++
 	}
 
-	return &FileInfoList{ data: matchesS}, nil
+	return &FileInfoList{data: matchesS}, nil
 }
 
 func (fil *FileInfoList) Paths() (paths []string) {
@@ -419,7 +433,12 @@ func (fil *FileInfoList) SetCapacity(capacity int) {
 	}
 }
 
-func (fil *FileInfoList) UpdateThumbnailRefrences() {
+func (fil *FileInfoList) UpdateThumbnailRefrences(removeOrphan ...bool) (removed []*FileInfo) {
+	remove := true
+	removed = []*FileInfo{}
+	if len(removeOrphan) > 0 {
+		remove = removeOrphan[0]
+	}
 	thumbnailMap := make(map[string]string)
 	for _, fi := range fil.data {
 		if fi.IsTexture() && fi.ThumbnailPath != "" {
@@ -438,10 +457,17 @@ func (fil *FileInfoList) UpdateThumbnailRefrences() {
 		}
 	}
 
-	for _, res := range toRemove.AsSlice() {
-		log.Warnf("removing thumbnail %s (does not have a linked texture)", filepath.Base(res))
-		fil.RemoveRes(res)
+	if remove {
+		for _, res := range toRemove.AsSlice() {
+			log.Warnf("removing thumbnail %s (does not have a linked texture)", filepath.Base(res))
+			removedInfo := fil.RemoveRes(res)
+			if removedInfo != nil {
+				removed = append(removed, removedInfo)
+			}
+		}
+		log.Warnf("removed %d thumbnail(s) that did not have a linked texture", toRemove.Size())
 	}
+	return
 }
 
 func cmpResPaths(a, b string) int {
@@ -481,8 +507,6 @@ func cmpResAndThumb(a, b *FileInfo) int {
 
 // Sort the file list in place
 func (fil *FileInfoList) Sort() {
-	fil.UpdateThumbnailRefrences()
-
 	slices.SortFunc(fil.data, func(a, b *FileInfo) int {
 		return cmpResPaths(a.ResPath, b.ResPath)
 	})
@@ -557,9 +581,7 @@ func (fil *FileInfoList) WriteFiles(
 	}
 
 	for i, fi := range fil.data {
-
 		{
-
 			// collect file data
 			var data []byte
 			if fi.Image != nil && fi.PngImage != nil {
@@ -579,7 +601,7 @@ func (fil *FileInfoList) WriteFiles(
 			fi.Offset = offset
 			// update md5
 			{
-			  hash := md5.New()
+				hash := md5.New()
 				if _, err := hash.Write(data); err == nil {
 					fi.Md5.UpdateWith(hash.Sum(nil))
 				}

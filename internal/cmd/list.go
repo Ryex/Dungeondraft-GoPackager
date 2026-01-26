@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"strings"
 
 	humanize "github.com/dustin/go-humanize"
+	"github.com/schollz/progressbar/v3"
 	"github.com/sirupsen/logrus"
 	treeprint "github.com/xlab/treeprint"
 
@@ -27,7 +29,7 @@ type ListFilesCmd struct {
 	Textures   bool     `short:"X" default:"true" negatable:"" help:"list texture files. default is true but negatable with --no-textures"`
 	Thumbnails bool     `short:"T" default:"false" negatable:"" help:"list thumbnail files"`
 	Data       bool     `short:"D" default:"false" negatable:"" help:"list Data files (tags, and wall/terrain metadata )"`
-	Type       string   `enum:"tree,list" default:"list" help:"print the files in a resource path tree or a list as packed"`
+	Type       string   `enum:"tree,list,json" default:"list" help:"print the files in a resource path tree or a list as packed"`
 	InputPath  string   `arg:"" type:"path" help:"the .dungeondraft_pack file or resource directory to work with"`
 	ByTag      []string `short:"t" help:"List objects that match these tags (comma separated)"`
 	Globs      []string `arg:"" optional:"" help:"optional glob patterns to filter the output by"`
@@ -38,6 +40,7 @@ func (lsf *ListFilesCmd) Run(ctx *Context) error {
 	if err != nil {
 		return err
 	}
+	defer ctx.Pkg.Close()
 
 	filterFunc := func(fi *structures.FileInfo) bool {
 		if fi.IsMetadata() && !lsf.All {
@@ -53,6 +56,30 @@ func (lsf *ListFilesCmd) Run(ctx *Context) error {
 			return false
 		}
 		return true
+	}
+
+	updateOptions := ddpackage.UpdateResourcesOptions{}
+	switch lsf.Type {
+	case "json":
+		ctx.LoadTags()
+		ctx.LoadMetadata()
+		updateOptions.Md5 = true
+		fallthrough
+	case "tree":
+		updateOptions.Size = true
+		bar := progressbar.Default(-1, "Collecting resource information ...")
+		errs := ctx.Pkg.UpdateResources(updateOptions, func(p float64, max int64) {
+			bar.ChangeMax64(max)
+			bar.Set64(int64(p * float64(max)))
+		})
+		bar.Finish()
+		if len(errs) > 0 {
+			for _, err := range errs {
+				if err != nil {
+					ctx.Log.Error(err)
+				}
+			}
+		}
 	}
 
 	fileList := ctx.Pkg.FileList()
@@ -75,14 +102,17 @@ func (lsf *ListFilesCmd) Run(ctx *Context) error {
 			fmt.Fprintln(os.Stderr, err)
 		}
 	} else {
-		logrus.Warn("no globs")
+		logrus.Info("no globs")
 		fileList = fileList.Filter(filterFunc)
 	}
 
-	if lsf.Type == "tree" {
+	switch lsf.Type {
+	case "tree":
 		lsf.printTree(ctx.Log, fileList)
-	} else {
+	case "list":
 		lsf.printList(fileList)
+	case "json":
+		lsf.printJSON(ctx, fileList)
 	}
 	return nil
 }
@@ -142,6 +172,57 @@ func (lsf *ListFilesCmd) printTree(
 	fmt.Println(tree.String())
 }
 
+func (lsf *ListFilesCmd) printJSON(
+	ctx *Context,
+	list *structures.FileInfoList,
+) {
+	tags := ctx.Pkg.Tags()
+	walls := ctx.Pkg.Walls()
+	tilesets := ctx.Pkg.Tilesets()
+
+	jsonInfos := slices.Collect(utils.Map(slices.Values(list.AsSlice()), func(fi *structures.FileInfo) *FileInfoJSON {
+		wallData := func() *structures.PackageWall {
+			if fi.IsWall() {
+				data, ok := walls[fi.MetadataPath]
+				if ok {
+					return &data
+				}
+			}
+			return nil
+		}()
+		tilesetData := func() *structures.PackageTileset {
+			if fi.IsTileset() {
+				data, ok := tilesets[fi.MetadataPath]
+				if ok {
+					return &data
+				}
+			}
+
+			return nil
+		}()
+		return &FileInfoJSON{
+			PackID:        ctx.Pkg.ID(),
+			MD5:           fi.Md5.String(),
+			ResPath:       fi.ResPath,
+			RelPath:       fi.CalcRelPath(),
+			Name:          strings.TrimSuffix(filepath.Base(fi.ResPath), filepath.Ext(fi.ResPath)),
+			Tags:          tags.TagsFor(fi.ResPath).AsSlice(),
+			ThumbnailPath: fi.ThumbnailPath,
+			ThumbnailFor:  fi.ThubnailFor,
+			MetadataPath:  fi.MetadataPath,
+			WallData:      wallData,
+			TilesetsData:  tilesetData,
+		}
+	}))
+
+	jsonBytes, err := json.MarshalIndent(jsonInfos, "", "  ")
+	if err != nil {
+		ctx.Log.Error(err)
+		return
+	}
+	os.Stdout.Write(jsonBytes)
+}
+
 type ListTagsCmd struct {
 	InputPath    string   `arg:"" type:"path" help:"the .dungeondraft_pack file or resource directory to work with"`
 	GlobPatterns []string `arg:"" optional:"" help:"glob patterns to match against paths relative to package root (paths should not stor with a dot (./) and must use slash separation even on windows (a/b))"`
@@ -159,12 +240,12 @@ func (lst *ListTagsCmd) Run(ctx *Context) error {
 	return lst.printTags(ctx.Log, ctx.Pkg)
 }
 
-func (ls *ListTagsCmd) printTags(l logrus.FieldLogger, pkg *ddpackage.Package) error {
+func (lst *ListTagsCmd) printTags(l logrus.FieldLogger, pkg *ddpackage.Package) error {
 	var tags []string
-	if len(ls.GlobPatterns) < 1 {
+	if len(lst.GlobPatterns) < 1 {
 		tags = pkg.Tags().AllTags()
 	} else {
-		files, err := pkg.FileList().Glob(func(fi *structures.FileInfo) bool { return fi.IsObject() }, ls.GlobPatterns...)
+		files, err := pkg.FileList().Glob(func(fi *structures.FileInfo) bool { return fi.IsObject() }, lst.GlobPatterns...)
 		if err != nil {
 			l.WithError(err).Error("failed to glob file list")
 			return err
@@ -182,8 +263,8 @@ type ListSetsCmd struct {
 	TagSet    string `arg:"" optional:"" help:"an optional tag set to list tags for"`
 }
 
-func (lsc *ListSetsCmd) Run(ctx *Context) error {
-	err := ctx.LoadPkg(lsc.InputPath)
+func (lsts *ListSetsCmd) Run(ctx *Context) error {
+	err := ctx.LoadPkg(lsts.InputPath)
 	if err != nil {
 		return err
 	}
@@ -191,12 +272,12 @@ func (lsc *ListSetsCmd) Run(ctx *Context) error {
 	if err != nil {
 		return err
 	}
-	if lsc.TagSet == "" {
+	if lsts.TagSet == "" {
 		for _, set := range ctx.Pkg.Tags().AllSets() {
 			fmt.Fprintln(os.Stdout, set)
 		}
 	} else {
-		set := ctx.Pkg.Tags().Set(lsc.TagSet)
+		set := ctx.Pkg.Tags().Set(lsts.TagSet)
 		if set != nil {
 			for _, tag := range set.AsSlice() {
 				fmt.Fprintln(os.Stdout, tag)
@@ -204,4 +285,18 @@ func (lsc *ListSetsCmd) Run(ctx *Context) error {
 		}
 	}
 	return nil
+}
+
+type FileInfoJSON struct {
+	PackID        string                     `json:"pask_id"`
+	MD5           string                     `json:"md5_hash"`
+	ResPath       string                     `json:"resource_path_full"`
+	RelPath       string                     `json:"resource_path"`
+	Name          string                     `json:"name"`
+	Tags          []string                   `json:"tags"`
+	ThumbnailPath string                     `json:"thumbnail_path,omitempty"`
+	ThumbnailFor  string                     `json:"thumbnail_for,omitempty"`
+	MetadataPath  string                     `json:"metadata_path,omitempty"`
+	WallData      *structures.PackageWall    `json:"wall_data,omitempty"`
+	TilesetsData  *structures.PackageTileset `json:"tileset_data,omitempty"`
 }

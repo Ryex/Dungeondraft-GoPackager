@@ -45,7 +45,7 @@ func (gpc *GenPackCmd) Run(ctx *Context) error {
 		return errors.Join(pathErr, errors.New("could not get absolute path for pack folder"))
 	}
 
-	l := log.WithFields(log.Fields{
+	l := ctx.Log.WithFields(log.Fields{
 		"path": packDirPath,
 	})
 
@@ -102,33 +102,26 @@ func (gtc *GenTumbCmd) Run(ctx *Context) error {
 		"path": packDirPath,
 	})
 
-	pkg := ddpackage.NewPackage(l)
 
-	err := pkg.LoadUnpackedFromFolder(packDirPath)
+	err := ctx.LoadPkg(packDirPath)
 	if err != nil {
 		l.WithError(err).Error("could not build Package")
 		return err
 	}
+	defer ctx.Pkg.Close()
 
 	var errs []error
-	errs = pkg.BuildFileList()
-	if len(errs) != 0 {
-		for _, err := range errs {
-			l.WithField("task", "build file list").Errorf("error: %s", err.Error())
-		}
-		return errors.New("Failed to build file list")
-	}
 
 	if gtc.Progress {
-		total := int64(pkg.FileList().Filter(func(info *structures.FileInfo) bool {
+		total := int64(ctx.Pkg.FileList().Filter(func(info *structures.FileInfo) bool {
 			return info.IsTexture()
 		}).Size())
 		bar := progressbar.Default(total, "Generating Thumbnails ...")
-		errs = pkg.GenerateThumbnailsProgress(func(p float64) {
+		errs = ctx.Pkg.GenerateThumbnailsProgress(func(p float64) {
 			bar.Set(int(p * float64(total)))
 		})
 	} else {
-		errs = pkg.GenerateThumbnails()
+		errs = ctx.Pkg.GenerateThumbnails()
 	}
 	if len(errs) != 0 {
 		l.Error("error generating thumbnails")

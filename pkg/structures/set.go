@@ -49,6 +49,24 @@ func (s *Set[T]) Has(d T) bool {
 	return ok
 }
 
+func (s *Set[T]) Any(p func(T) bool) bool {
+	for d := range s.data {
+		if p(d) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *Set[T]) All(p func(T) bool) bool {
+	for d := range s.data {
+		if !p(d) {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *Set[T]) Add(d T) {
 	s.data[d] = struct{}{}
 }

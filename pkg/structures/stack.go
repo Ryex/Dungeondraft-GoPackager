@@ -29,8 +29,20 @@ func (s *Stack[T]) Pop() (T, error) {
 	return item, nil
 }
 
+func (s *Stack[T]) Peek() (*T, error) {
+	if len(s.data) == 0 {
+		return nil, ErrStackEmpty
+	}
+	item := &s.data[len(s.data)-1]
+	return item, nil
+}
+
 func (s *Stack[T]) AsSlice() []T {
 	return s.data
+}
+
+func (s *Stack[T]) Size() int {
+	return len(s.data)
 }
 
 func (s *Stack[T]) IsEmpty() bool {
