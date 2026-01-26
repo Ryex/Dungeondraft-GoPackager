@@ -35,30 +35,21 @@ func (pc *PackCmd) Run(ctx *Context) error {
 		"outPackagePath": outDirPath,
 	})
 
-	pkg := ddpackage.NewPackage(l)
-
-	err := pkg.LoadUnpackedFromFolder(packDirPath)
+	err := ctx.LoadPkg(packDirPath)
 	if err != nil {
 		l.WithError(err).Error("could not load unpacked Package")
 		return err
 	}
-
-	errs := pkg.BuildFileList()
-	if len(errs) != 0 {
-		for _, err := range errs {
-			l.WithField("task", "build file list").Errorf("err: %s", err.Error())
-		}
-		return errors.New("Failed to build file list")
-	}
+	defer ctx.Pkg.Close()
 
 	if pc.Progress {
-		total := int64(pkg.FileList().Size())
+		total := int64(ctx.Pkg.FileList().Size())
 		bar := progressbar.Default(total, "Packing ...")
-		err = pkg.PackPackageProgress(outDirPath, ddpackage.PackOptions{Overwrite: pc.Overwrite}, func(p float64) {
+		err = ctx.Pkg.PackPackageProgress(outDirPath, ddpackage.PackOptions{Overwrite: pc.Overwrite}, func(p float64) {
 			bar.Set(int(p * float64(total)))
 		})
 	} else {
-		err = pkg.PackPackage(outDirPath, ddpackage.PackOptions{Overwrite: pc.Overwrite})
+		err = ctx.Pkg.PackPackage(outDirPath, ddpackage.PackOptions{Overwrite: pc.Overwrite})
 	}
 	if err != nil {
 		l.WithError(err).Error("packing failure")

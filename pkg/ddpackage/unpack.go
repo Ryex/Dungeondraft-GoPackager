@@ -232,8 +232,8 @@ func (p *Package) readPackedFileFromPackage(r io.ReadSeeker, info *structures.Fi
 	// if the md5 isn't blank verify
 	if info.Md5.IsValid() {
 		hash := md5.Sum(fileData)
-		md5Hash := hex.EncodeToString(hash[:])
-		if info.Md5.String() != md5Hash {
+		md5Hash := strings.ToLower(hex.EncodeToString(hash[:]))
+		if info.Md5.Md5 != hash {
 			err = errors.New("md5 hash mismatch")
 			l.WithError(err).
 				WithField("packedDataMd5", md5Hash).
@@ -249,7 +249,7 @@ func (p *Package) readPackedFileFromPackage(r io.ReadSeeker, info *structures.Fi
 // loadPackedFilelist Takes an io.reader and attempts to extract a list of files stored in the package
 func (p *Package) loadPackedFilelist(
 	r io.ReadSeeker,
-	progressCallback func(p float64, curRes string),
+	progressCallback func(p float64, curRes string, max int64),
 ) (err error) {
 	valid, err := p.isValidPackage(r)
 
@@ -458,7 +458,7 @@ func (p *Package) newFileInfoPacked(resPath []byte, infoBytes structures.FileInf
 
 	if info.IsTexture() {
 		hash := md5.Sum([]byte(info.ResPath))
-		thumbnailName := hex.EncodeToString(hash[:]) + ".png"
+		thumbnailName := strings.ToLower(hex.EncodeToString(hash[:])) + ".png"
 		info.ThumbnailResPath = fmt.Sprintf("res://packs/%s/thumbnails/%s", p.id, thumbnailName)
 	}
 	return info
@@ -469,7 +469,7 @@ func (p *Package) updatePackedFileInfoAfter() {
 		fi.RelPath = strings.TrimPrefix(strings.TrimPrefix(fi.ResPath, "res://packs/"), p.id+"/")
 		if fi.IsTexture() {
 			hash := md5.Sum([]byte(fi.ResPath))
-			thumbnailName := hex.EncodeToString(hash[:]) + ".png"
+			thumbnailName := strings.ToLower(hex.EncodeToString(hash[:])) + ".png"
 			fi.ThumbnailResPath = fmt.Sprintf("res://packs/%s/thumbnails/%s", p.id, thumbnailName)
 		}
 
@@ -489,7 +489,7 @@ func (p *Package) updatePackedFileInfoAfter() {
 	}
 }
 
-func (p *Package) getFileList(r io.ReadSeeker, progressCallback func(p float64, curRes string)) (err error) {
+func (p *Package) getFileList(r io.ReadSeeker, progressCallback func(p float64, curRes string, max int64)) (err error) {
 	headers, err := p.readPackageHeaders(r)
 	if err != nil {
 		return
@@ -534,7 +534,7 @@ func (p *Package) getFileList(r io.ReadSeeker, progressCallback func(p float64, 
 		p.addResource(info)
 
 		if progressCallback != nil {
-			progressCallback(float64(fileNum)/float64(fileCount), info.ResPath)
+			progressCallback(float64(fileNum)/float64(fileCount), info.ResPath, int64(fileCount))
 		}
 	}
 

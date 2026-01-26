@@ -177,7 +177,7 @@ func (a *App) buildPackageTree(editable bool) (*widget.Tree, binding.String, bin
 			var icon, btn fyne.CanvasObject
 			if b {
 				icon = widget.NewIcon(nil)
-				btn = widget.NewButtonWithIcon("template", theme.ErrorIcon(), nil)
+				btn = container.NewPadded(widgets.NewToolTipButtonWithIcon("template", theme.ErrorIcon(), nil))
 			} else {
 				icon = widget.NewFileIcon(nil)
 				btn = nil
@@ -191,7 +191,7 @@ func (a *App) buildPackageTree(editable bool) (*widget.Tree, binding.String, bin
 			file := filepath.Base(tni)
 			if b {
 				icn := c.Objects[1].(*widget.Icon)
-				btn := c.Objects[2].(*widget.Button)
+				btn := c.Objects[2].(*fyne.Container).Objects[0].(*widgets.ToolTipButton)
 				var r fyne.Resource
 				if tree.IsBranchOpen(tni) {
 					r = theme.FolderOpenIcon()
@@ -214,13 +214,22 @@ func (a *App) buildPackageTree(editable bool) (*widget.Tree, binding.String, bin
 								},
 							),
 							func(confirmed bool) {
-								a.pkg.Tags().DeleteTag(tag)
-								a.pkg.SaveUnpackedTags()
+								if confirmed {
+									a.pkg.Tags().DeleteTag(tag)
+									a.pkg.SaveUnpackedTags()
+								}
 							},
 							a.window,
 						)
 					}
 					btn.SetText("")
+					btn.SetToolTip(lang.X(
+						"package.tag.delete.tooltip",
+						"Delete the '{{.Tag}}' tag",
+						map[string]string{
+							"Tag": tag,
+						},
+					))
 					btn.Show()
 				} else {
 					btn.Hide()
@@ -549,24 +558,31 @@ func (a *App) buildTagInfo(info *structures.FileInfo, editable bool) fyne.Canvas
 		func() fyne.CanvasObject {
 			return layouts.NewLeftExpandHBox(
 				widget.NewLabel("template"),
-				widget.NewButtonWithIcon("", theme.DeleteIcon(), nil),
+				container.NewPadded(widgets.NewToolTipButtonWithIcon("", theme.DeleteIcon(), nil)),
 			)
 		},
 		func(di binding.DataItem, co fyne.CanvasObject) {
 			c := co.(*fyne.Container)
 			l := c.Objects[0].(*widget.Label)
 			l.Bind(di.(binding.String))
-			btn := c.Objects[1].(*widget.Button)
+			btn := c.Objects[1].(*fyne.Container).Objects[0].(*widgets.ToolTipButton)
 			if editable {
-				btn.OnTapped = func() {
-					tag, err := di.(binding.String).Get()
-					if err != nil {
-						log.WithError(err).Errorf("failed to get tag in del tag btn for %s", info.RelPath)
-						return
+				tag, err := di.(binding.String).Get()
+				if err != nil {
+					log.WithError(err).Errorf("failed to get tag in del tag btn for %s", info.RelPath)
+				} else {
+					btn.OnTapped = func() {
+						a.pkg.Tags().Untag(tag, info.RelPath)
+						updateTags()
+						a.saveUnpackedTags()
 					}
-					a.pkg.Tags().Untag(tag, info.RelPath)
-					updateTags()
-					a.saveUnpackedTags()
+					btn.SetToolTip(lang.X(
+						"resource.tag.remove.tooltip",
+						"Remove the '{{.Tag}}' tag from this object",
+						map[string]string{
+							"Tag": tag,
+						},
+					))
 				}
 			} else {
 				btn.Disable()
@@ -651,17 +667,13 @@ func (a *App) buildMetadataPane(info *structures.FileInfo, editable bool) fyne.C
 
 			defaultColor := color.NRGBA{255, 255, 255, 255}
 			wallData := a.pkg.Walls()
-			if wallData != nil {
-				metaData, ok := (*wallData)[metaPath]
-				if ok {
-					defaultColor = metaData.Color.ToColor()
-				} else {
-					log.WithField("res", info.ResPath).
-						WithField("metaRes", metaPath).
-						Warn("Missing wall metadata")
-				}
+			metaData, ok := wallData[metaPath]
+			if ok {
+				defaultColor = metaData.Color.ToColor()
 			} else {
-				log.Warn("Wall Metadata not loaded?")
+				log.WithField("res", info.ResPath).
+					WithField("metaRes", metaPath).
+					Warn("Missing wall metadata")
 			}
 
 			colorLbl := widget.NewLabel(lang.X("metadata.color.label", "Color"))
@@ -675,15 +687,15 @@ func (a *App) buildMetadataPane(info *structures.FileInfo, editable bool) fyne.C
 						func(c color.Color) {
 							colorRect.SetColor(c)
 							if wallData != nil {
-								data, ok := (*wallData)[metaPath]
+								data, ok := wallData[metaPath]
 								if !ok {
-									(*wallData)[metaPath] = structures.PackageWall{
+									wallData[metaPath] = structures.PackageWall{
 										Path:  info.RelPath,
 										Color: ddcolor.FromColor(c),
 									}
 								} else {
 									data.Color = ddcolor.FromColor(c)
-									(*wallData)[metaPath] = data
+									wallData[metaPath] = data
 								}
 								a.saveWallMetadata(metaPath)
 							}
@@ -709,19 +721,15 @@ func (a *App) buildMetadataPane(info *structures.FileInfo, editable bool) fyne.C
 			tilesetType := structures.TilesetNormal
 
 			tilesetData := a.pkg.Tilesets()
-			if tilesetData != nil {
-				metaData, ok := (*tilesetData)[metaPath]
-				if ok {
-					defaultColor = metaData.Color.ToColor()
-					tilesetName = metaData.Name
-					tilesetType = metaData.Type
-				} else {
-					log.WithField("res", info.ResPath).
-						WithField("metaRes", metaPath).
-						Warn("Missing tileset metadata")
-				}
+			metaData, ok := tilesetData[metaPath]
+			if ok {
+				defaultColor = metaData.Color.ToColor()
+				tilesetName = metaData.Name
+				tilesetType = metaData.Type
 			} else {
-				log.Warn("Wall Metadata not loaded?")
+				log.WithField("res", info.ResPath).
+					WithField("metaRes", metaPath).
+					Warn("Missing tileset metadata")
 			}
 
 			colorLbl := widget.NewLabel(lang.X("metadata.color.label", "Color"))
@@ -735,9 +743,9 @@ func (a *App) buildMetadataPane(info *structures.FileInfo, editable bool) fyne.C
 						func(c color.Color) {
 							colorRect.SetColor(c)
 							if tilesetData != nil {
-								data, ok := (*tilesetData)[metaPath]
+								data, ok := tilesetData[metaPath]
 								if !ok {
-									(*tilesetData)[metaPath] = structures.PackageTileset{
+									tilesetData[metaPath] = structures.PackageTileset{
 										Path:  info.RelPath,
 										Name:  "",
 										Color: ddcolor.FromColor(c),
@@ -745,7 +753,7 @@ func (a *App) buildMetadataPane(info *structures.FileInfo, editable bool) fyne.C
 									}
 								} else {
 									data.Color = ddcolor.FromColor(c)
-									(*tilesetData)[metaPath] = data
+									tilesetData[metaPath] = data
 								}
 								a.saveTilesetMetadata(metaPath)
 							}
@@ -762,9 +770,9 @@ func (a *App) buildMetadataPane(info *structures.FileInfo, editable bool) fyne.C
 			nameEntry := widget.NewEntry()
 			nameEntry.SetText(tilesetName)
 			nameEntry.OnChanged = func(s string) {
-				data, ok := (*tilesetData)[metaPath]
+				data, ok := tilesetData[metaPath]
 				if !ok {
-					(*tilesetData)[metaPath] = structures.PackageTileset{
+					tilesetData[metaPath] = structures.PackageTileset{
 						Path:  info.RelPath,
 						Name:  s,
 						Color: ddcolor.FromColor(defaultColor),
@@ -772,7 +780,7 @@ func (a *App) buildMetadataPane(info *structures.FileInfo, editable bool) fyne.C
 					}
 				} else {
 					data.Name = s
-					(*tilesetData)[metaPath] = data
+					tilesetData[metaPath] = data
 				}
 				a.saveTilesetMetadata(metaPath)
 			}
@@ -794,9 +802,9 @@ func (a *App) buildMetadataPane(info *structures.FileInfo, editable bool) fyne.C
 				case string(structures.TilesetCustomColor):
 					typ = structures.TilesetCustomColor
 				}
-				data, ok := (*tilesetData)[metaPath]
+				data, ok := tilesetData[metaPath]
 				if !ok {
-					(*tilesetData)[metaPath] = structures.PackageTileset{
+					tilesetData[metaPath] = structures.PackageTileset{
 						Path:  info.RelPath,
 						Name:  "",
 						Color: ddcolor.FromColor(defaultColor),
@@ -804,7 +812,7 @@ func (a *App) buildMetadataPane(info *structures.FileInfo, editable bool) fyne.C
 					}
 				} else {
 					data.Type = typ
-					(*tilesetData)[metaPath] = data
+					tilesetData[metaPath] = data
 				}
 				a.saveTilesetMetadata(metaPath)
 			}
@@ -919,12 +927,12 @@ func buildInfoMaps(fil *structures.FileInfoList) map[string][]string {
 		}
 	}
 
-	rootId := packageTreeRootID()
+	rootID := packageTreeRootID()
 
-	if len(nodeTree[rootId]) == 0 {
+	if len(nodeTree[rootID]) == 0 {
 		nodeTree[binding.DataTreeRootID] = append(nodeTree[binding.DataTreeRootID], "empty://")
 	} else {
-		nodeTree[binding.DataTreeRootID] = append(nodeTree[binding.DataTreeRootID], rootId)
+		nodeTree[binding.DataTreeRootID] = append(nodeTree[binding.DataTreeRootID], rootID)
 	}
 
 	return nodeTree
@@ -950,7 +958,7 @@ func buildTagMaps(fil *structures.FileInfoList, pt *structures.PackageTags, filt
 	slices.Sort(allTags)
 	tagFilter := ParseTagFilter(filter)
 
-	rootId := packageTreeRootID()
+	rootID := packageTreeRootID()
 
 	for _, tag := range allTags {
 		if filter != "" && !tagFilter.ApplyToTag(tag) {
@@ -959,17 +967,17 @@ func buildTagMaps(fil *structures.FileInfoList, pt *structures.PackageTags, filt
 		if len(nodeTree["tag://"+tag]) == 0 {
 			nodeTree["tag://"+tag] = append(nodeTree["tag://"+tag], "empty://"+tag)
 		}
-		nodeTree[rootId] = append(nodeTree[rootId], "tag://"+tag)
+		nodeTree[rootID] = append(nodeTree[rootID], "tag://"+tag)
 	}
 
 	if len(nodeTree[untaggedPath]) > 0 {
-		nodeTree[rootId] = append(nodeTree[rootId], untaggedPath)
+		nodeTree[rootID] = append(nodeTree[rootID], untaggedPath)
 	}
 
-	if len(nodeTree[rootId]) == 0 {
+	if len(nodeTree[rootID]) == 0 {
 		nodeTree[binding.DataTreeRootID] = append(nodeTree[binding.DataTreeRootID], "empty://")
 	} else {
-		nodeTree[binding.DataTreeRootID] = append(nodeTree[binding.DataTreeRootID], rootId)
+		nodeTree[binding.DataTreeRootID] = append(nodeTree[binding.DataTreeRootID], rootID)
 	}
 
 	return nodeTree

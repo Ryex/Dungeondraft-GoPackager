@@ -50,7 +50,7 @@ func (a *App) loadPack(path string) {
 
 		pkg := ddpackage.NewPackage(l)
 
-		err := pkg.LoadFromPackedPath(path, func(p float64, curRes string) {
+		err := pkg.LoadFromPackedPath(path, func(p float64, curRes string, _ int64) {
 			activityProgress.Set(p)
 			activityStr.Set(
 				"res://" + utils.TruncatePathHumanFriendly(

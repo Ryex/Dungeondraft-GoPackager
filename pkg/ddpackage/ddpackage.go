@@ -136,16 +136,16 @@ func (p *Package) Info() *structures.PackageInfo {
 	return p.info
 }
 
-func (p *Package) Walls() *map[string]structures.PackageWall {
-	return &p.walls
+func (p *Package) Walls() map[string]structures.PackageWall {
+	return p.walls
 }
 
 func (p *Package) Tags() *structures.PackageTags {
 	return p.tags
 }
 
-func (p *Package) Tilesets() *map[string]structures.PackageTileset {
-	return &p.tilesets
+func (p *Package) Tilesets() map[string]structures.PackageTileset {
+	return p.tilesets
 }
 
 func NewPackage(log logrus.FieldLogger) *Package {
@@ -192,7 +192,7 @@ func DefaultValidExt() []string {
 
 func (p *Package) LoadFromPackedPath(
 	path string,
-	progressCallback func(p float64, curRes string),
+	progressCallback func(p float64, curRes string, max int64),
 ) error {
 	packFilePath, pathErr := filepath.Abs(path)
 	if pathErr != nil {
@@ -412,7 +412,7 @@ func (p *Package) NewFileInfo(options NewFileInfoOptions) (*structures.FileInfo,
 
 			thumbnailDir := filepath.Join(p.unpackedPath, "thumbnails")
 			hash := md5.Sum([]byte(info.ResPath))
-			thumbnailName := hex.EncodeToString(hash[:]) + ".png"
+			thumbnailName := strings.ToLower(hex.EncodeToString(hash[:])) + ".png"
 			thumbnailPath := filepath.Join(thumbnailDir, thumbnailName)
 			info.ThumbnailPath = thumbnailPath
 			info.ThumbnailResPath = fmt.Sprintf("res://packs/%s/thumbnails/%s", p.id, thumbnailName)
@@ -515,26 +515,79 @@ func (p *Package) GetOrUpdateResourceMd5(fi *structures.FileInfo, callback func(
 	}
 }
 
-// calc file Md5
-// err := func() error {
-// 	file, err := os.Open(options.Path)
-// 	if err != nil {
-// 		l.WithError(err).Error("can not open path to compute md5")
-// 		err = dderrors.CausedBy(fmt.Errorf("failed to open %s for hashing", options.Path), err)
-// 		return err
-// 	}
-// 	defer file.Close()
-//
-// 	hash := md5.New()
-// 	if _, err := io.Copy(hash, file); err != nil {
-// 		return dderrors.CausedBy(fmt.Errorf("failed to read file: %s", options.Path, err))
-// 	}
-//
-// 	hashBytes := hash.Sum(nil)
-// 	info.Md5 = hex.EncodeToString(hashBytes[:])
-// 	return nil
-// }()
-//
-// if err != nil {
-// 	return info, err
-// }
+type UpdateResourcesOptions struct {
+	Md5  bool
+	Size bool
+}
+
+func (p *Package) UpdateResources(options UpdateResourcesOptions, progressCallback func(p float64, max int64)) []error {
+	numCpus := runtime.NumCPU()
+	sem := structures.NewSemaphore(numCpus)
+	wg := sync.WaitGroup{}
+
+	p.flLock.Lock()
+	defer p.flLock.Unlock()
+
+	fileList := p.fileList.AsSlice()
+	total := len(fileList)
+
+	type result struct {
+		md5Err  error
+		sizeErr error
+	}
+
+	chResults := make(chan result, numCpus*8)
+
+	resourceErrors := []error{}
+	resultsWg := sync.WaitGroup{}
+
+	resultsWg.Go(func() {
+		var i = 0
+		for {
+			r, ok := <-chResults
+			if !ok {
+				return
+			}
+			if r.md5Err != nil {
+				resourceErrors = append(resourceErrors, r.md5Err)
+			}
+			if r.sizeErr != nil {
+				resourceErrors = append(resourceErrors, r.sizeErr)
+			}
+			i++
+			progressCallback(float64(i) / float64(total), int64(total))
+		}
+	})
+
+	for _, fi := range fileList {
+		sem.Acquire()
+		wg.Go(func() {
+			defer sem.Release()
+			innerWg := sync.WaitGroup{}
+			var md5Err, sizeErr error
+			if options.Md5 {
+				innerWg.Add(1)
+				p.GetOrUpdateResourceMd5(fi, func(_ string, err error) {
+					defer innerWg.Done()
+					md5Err = err
+				})
+			}
+			if options.Size && p.mode == PackageModeUnpacked {
+				innerWg.Add(1)
+				fi.UpdateFilesystemSize(func(_ int64, err error) {
+					defer innerWg.Done()
+					sizeErr = err
+				})
+			}
+			innerWg.Wait()
+			chResults <- result{
+				md5Err, sizeErr,
+			}
+		})
+	}
+
+	wg.Wait()
+	close(chResults)
+	resultsWg.Wait()
+	return resourceErrors
+}

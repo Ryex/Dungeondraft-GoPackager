@@ -43,6 +43,7 @@ func (uc *UnpackCmd) Run(ctx *Context) error {
 		err = ctx.Pkg.ExtractPackageProgress(outDirPath, options, func(p float64) {
 			bar.Set(int(p * float64(total)))
 		})
+		bar.Finish()
 	} else {
 		err = ctx.Pkg.ExtractPackage(outDirPath, options)
 	}

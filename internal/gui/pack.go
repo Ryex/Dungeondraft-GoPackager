@@ -75,7 +75,7 @@ func (a *App) loadUnpackedPath(path string) {
 			return
 		}
 
-		errs := pkg.BuildFileListProgress(func(p float64, path string) {
+		errs := pkg.BuildFileListProgress(func(p float64, path string, _ int64) {
 			activityProgress.Set(p)
 			activityStr.Set(lang.X(
 				"pack.buildList.activity",
@@ -157,7 +157,7 @@ func (a *App) updateFromPaths(paths []string) {
 		a.window)
 	progressDlg.Show()
 
-	a.pkg.UpdateFromPathsProgress(paths, func(p float64, path string) {
+	a.pkg.UpdateFromPathsProgress(paths, func(p float64, path string, _ int64) {
 		activityStr.Set(lang.X(
 			"pack.buildList.activity",
 			"Loading {{.Path}} ...",
@@ -218,7 +218,7 @@ func (a *App) setupPackageWatcher() {
 		}
 		if a.pkg != nil {
 			log.Debugf("updating resource paths... %s", toUpdate)
-			a.updateFromPaths(toUpdate)
+			fyne.DoAndWait(func(){a.updateFromPaths(toUpdate)})
 		}
 	}
 
@@ -501,9 +501,6 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 			split,
 		),
 		func(disable bool) {
-			if disable {
-			} else {
-			}
 		},
 	)
 

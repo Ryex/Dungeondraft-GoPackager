@@ -173,7 +173,7 @@ func (p *Package) packPackage(
 	return
 }
 
-func (p *Package) BuildFileListProgress(progressCallback func(p float64, curPath string)) (errs []error) {
+func (p *Package) BuildFileListProgress(progressCallback func(p float64, curPath string, max int64)) (errs []error) {
 	return p.buildFileList(progressCallback)
 }
 
@@ -181,7 +181,7 @@ func (p *Package) BuildFileList() (errs []error) {
 	return p.buildFileList(nil)
 }
 
-func (p *Package) UpdateFromPathsProgress(paths []string, progressCallback func(p float64, curPath string)) (errs []error) {
+func (p *Package) UpdateFromPathsProgress(paths []string, progressCallback func(p float64, curPath string, max int64)) (errs []error) {
 	return p.updateFromPaths(paths, progressCallback)
 }
 
@@ -190,7 +190,7 @@ func (p *Package) UpdateFromPaths(paths []string) (errs []error) {
 }
 
 // Rebuilds the list of files at the target directory for inclusion in a .dungeondraft_pack file
-func (p *Package) buildFileList(progressCallback func(p float64, curPath string)) (errs []error) {
+func (p *Package) buildFileList(progressCallback func(p float64, curPath string, max int64)) (errs []error) {
 	if p.unpackedPath == "" {
 		return []error{ErrUnsetUnpackedPath}
 	}
@@ -203,7 +203,7 @@ func (p *Package) buildFileList(progressCallback func(p float64, curPath string)
 
 // updates the current list of files at the target directory for inclusion in a .dungeondraft_pack file
 // on duplicate entries updates the current info
-func (p *Package) updateFromPaths(paths []string, progressCallback func(p float64, curPath string)) (errs []error) {
+func (p *Package) updateFromPaths(paths []string, progressCallback func(p float64, curPath string, max int64)) (errs []error) {
 	if p.unpackedPath == "" {
 		return []error{ErrUnsetUnpackedPath}
 	}
@@ -258,7 +258,7 @@ func (p *Package) updateFromPaths(paths []string, progressCallback func(p float6
 		}
 	}
 
-	p.fileList.SetCapacity( max(files.Size(), p.fileList.Size()) )
+	p.fileList.SetCapacity(max(files.Size(), p.fileList.Size()))
 
 	cbPoint := max(files.Size()/200, 1)
 
@@ -294,7 +294,7 @@ func (p *Package) updateFromPaths(paths []string, progressCallback func(p float6
 		}
 		if i%cbPoint == 0 {
 			if progressCallback != nil {
-				progressCallback(float64(i)/float64(files.Size()), file)
+				progressCallback(float64(i)/float64(files.Size()), file, int64(files.Size()))
 			}
 		}
 	}
@@ -305,7 +305,6 @@ func (p *Package) updateFromPaths(paths []string, progressCallback func(p float6
 	}
 
 	// inject <GUID>.json
-
 	packJSONPath := filepath.Join(p.unpackedPath, `pack.json`)
 	packJSONName := fmt.Sprintf(`%s.json`, p.id)
 	packJSONResPath := "res://packs/" + packJSONName
@@ -332,11 +331,46 @@ func (p *Package) updateFromPaths(paths []string, progressCallback func(p float6
 	p.fileList.DeduplicateBy(func(a, b *structures.FileInfo) bool {
 		return a.ResPath == b.ResPath
 	})
+	p.fileList.UpdateThumbnailRefrences(false)
 
 	// sort list and assure pack json is first
 	p.fileList.Sort()
 	p.fileList.Insert(0, packJSONInfo)
 	return
+}
+
+func (p *Package) SortFileList(removeOrphanThumbnails ...bool) []*structures.FileInfo {
+	rmOrphThumbnail := false
+	if len(removeOrphanThumbnails) >  0 {
+		rmOrphThumbnail = removeOrphanThumbnails[0]
+	}
+
+	p.flLock.Lock()
+	defer p.flLock.Unlock()
+
+	packJSONName := fmt.Sprintf(`%s.json`, p.id)
+	packJSONResPath := "res://packs/" + packJSONName
+
+	packJSONindex := p.fileList.IndexOfRes(packJSONResPath)
+	var packJSONInfo *structures.FileInfo
+	if packJSONindex != -1 {
+		packJSONInfo = p.fileList.Remove(packJSONindex)
+	}
+	// remove duplicates
+	p.fileList.DeduplicateBy(func(a, b *structures.FileInfo) bool {
+		return a.ResPath == b.ResPath
+	})
+
+  
+	removedThumbnails := p.fileList.UpdateThumbnailRefrences(rmOrphThumbnail)
+
+	// sort list and assure pack json is first
+	p.fileList.Sort()
+	if packJSONInfo != nil {
+		p.fileList.Insert(0, packJSONInfo)
+	}
+
+	return removedThumbnails
 }
 
 func (p *Package) makeResPath(l logrus.FieldLogger, path string) (string, error) {

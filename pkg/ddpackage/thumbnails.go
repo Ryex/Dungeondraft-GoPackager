@@ -100,6 +100,7 @@ func (p *Package) generateThumbnails(progressCallback func(p float64)) []error {
 			ch <- result{err, fi.ResPath}
 			return
 		}
+		defer file.Close()
 
 		err = png.Encode(file, thumbnail)
 		if err != nil {
@@ -122,7 +123,8 @@ func (p *Package) generateThumbnails(progressCallback func(p float64)) []error {
 
 	chResult := make(chan result, numCpus*8)
 	chInput := make(chan int, 256)
-	var wg sync.WaitGroup
+	wg := sync.WaitGroup{}
+	resultsWg := sync.WaitGroup{}
 
 	p.flLock.RLock()
 	defer p.flLock.RUnlock()
@@ -159,9 +161,12 @@ func (p *Package) generateThumbnails(progressCallback func(p float64)) []error {
 	var errs []error
 
 	// process results
-	wg.Go(func() {
-		for i := 0; i < int(texCount); i++ {
-			r := <-chResult
+	resultsWg.Go(func() {
+		for {
+			r, ok := <-chResult
+			if !ok {
+				return
+			}
 			if r.Err != nil {
 				errs = append(errs, r.Err)
 			}
@@ -170,11 +175,17 @@ func (p *Package) generateThumbnails(progressCallback func(p float64)) []error {
 				progressCallback(thumbCount / texCount)
 			}
 			p.log.WithField("res", r.Resource).Trace("thumbnail generated")
+			if int(thumbCount)%16 == 0 {
+				runtime.GC()
+			}
 		}
 	})
+	runtime.GC()
 
 	// wait for all threads to finish
 	wg.Wait()
+	close(chResult)
+	resultsWg.Wait()
 
 	return errs
 }

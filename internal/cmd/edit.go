@@ -24,8 +24,8 @@ type EditPackCmd struct {
 
 	AllowThirdParty *bool `short:"M" help:" set the 'allow_3rd_party_mapping_software_to_read' key. package will be incompatible with Dungeondraft v1.0.3.2" default:"true"`
 
-	AddKeywords    []string `short:"AK" help:"comma separated keywords to add"`
-	RemoveKeywords []string `short:"RK" help:"comma separated keywords to remove"`
+	AddKeywords    []string `short:"a" help:"comma separated keywords to add"`
+	RemoveKeywords []string `short:"r" help:"comma separated keywords to remove"`
 
 	MinRedness    *float64 `short:"R" help:"enable custom colors and set the minimum redness value" default:"0.1"`
 	MinSaturation *float64 `short:"S" help:"enable custom colors and set the minimum saturation value" default:"0"`
@@ -37,6 +37,7 @@ func (epc *EditPackCmd) Run(ctx *Context) error {
 	if err != nil {
 		return err
 	}
+	defer ctx.Pkg.Close()
 
 	if epc.ID != "" {
 		ctx.Pkg.SetID(epc.ID)

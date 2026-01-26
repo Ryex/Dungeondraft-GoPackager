@@ -401,7 +401,7 @@ func (a *App) buildMainUI() {
 			),
 		),
 	)
-	// a.window.SetContent(content)
+
 	a.window.SetContent(fynetooltip.AddWindowToolTipLayer(content, a.window.Canvas()))
 
 	refreshTheme := func() {
