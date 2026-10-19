@@ -14,9 +14,9 @@ import (
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/bindings"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/lang"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/widgets"
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
-	"github.com/ryex/dungeondraft-gopackager/internal/gui/lang"
 
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddpackage"
 	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
@@ -72,7 +72,7 @@ func NewPackJSONDialogPkg(
 		}
 		overrides := pkg.Info().ColorOverrides
 
-		dlg.ColorOverrides = &overrides
+		dlg.ColorOverrides = overrides
 	}
 	if dlg.ColorOverrides == nil {
 		dlg.ColorOverrides = structures.DefaultCustomColorOverrides()
@@ -123,7 +123,7 @@ func (dlg *PackJSONDialog) buildUI() {
 	versionEntry.Bind(binding.BindString(&dlg.Version))
 
 	keywordsLbl := widget.NewLabel(lang.X("packJson.keywords.label", "Keywords"))
-	keywordsEntry := widget.NewEntryWithData(bindings.NewReversableMapping(
+	keywordsEntry := widget.NewEntryWithData(bindings.NewReversibleMapping(
 		binding.BindStringList(&dlg.Keywords),
 		func(list []string) (string, error) {
 			return strings.Join(list, ","), nil
@@ -245,13 +245,13 @@ func (dlg *PackJSONDialog) buildUI() {
 func (dlg *PackJSONDialog) onSave() {
 	dlg.dialog.Hide()
 	options := ddpackage.SavePackageJSONOptions{
-		Path:          dlg.Path,
-		Name:          dlg.Name,
-		ID:            dlg.ID,
-		Author:        dlg.Author,
-		Version:       dlg.Version,
-		Keywords:      dlg.Keywords,
-		ColorOverides: *dlg.ColorOverrides,
+		Path:           dlg.Path,
+		Name:           dlg.Name,
+		ID:             dlg.ID,
+		Author:         dlg.Author,
+		Version:        dlg.Version,
+		Keywords:       dlg.Keywords,
+		ColorOverrides: dlg.ColorOverrides,
 	}
 	if dlg.Allow3rdParty || dlg.sourceHas3rdParty {
 		allow := dlg.Allow3rdParty

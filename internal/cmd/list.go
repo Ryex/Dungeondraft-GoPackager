@@ -208,7 +208,7 @@ func (lsf *ListFilesCmd) printJSON(
 			Name:          strings.TrimSuffix(filepath.Base(fi.ResPath), filepath.Ext(fi.ResPath)),
 			Tags:          tags.TagsFor(fi.ResPath).AsSlice(),
 			ThumbnailPath: fi.ThumbnailPath,
-			ThumbnailFor:  fi.ThubnailFor,
+			ThumbnailFor:  fi.ThumbnailFor,
 			MetadataPath:  fi.MetadataPath,
 			WallData:      wallData,
 			TilesetsData:  tilesetData,
@@ -263,8 +263,8 @@ type ListSetsCmd struct {
 	TagSet    string `arg:"" optional:"" help:"an optional tag set to list tags for"`
 }
 
-func (lsts *ListSetsCmd) Run(ctx *Context) error {
-	err := ctx.LoadPkg(lsts.InputPath)
+func (lists *ListSetsCmd) Run(ctx *Context) error {
+	err := ctx.LoadPkg(lists.InputPath)
 	if err != nil {
 		return err
 	}
@@ -272,12 +272,12 @@ func (lsts *ListSetsCmd) Run(ctx *Context) error {
 	if err != nil {
 		return err
 	}
-	if lsts.TagSet == "" {
+	if lists.TagSet == "" {
 		for _, set := range ctx.Pkg.Tags().AllSets() {
 			fmt.Fprintln(os.Stdout, set)
 		}
 	} else {
-		set := ctx.Pkg.Tags().Set(lsts.TagSet)
+		set := ctx.Pkg.Tags().Set(lists.TagSet)
 		if set != nil {
 			for _, tag := range set.AsSlice() {
 				fmt.Fprintln(os.Stdout, tag)
@@ -288,7 +288,7 @@ func (lsts *ListSetsCmd) Run(ctx *Context) error {
 }
 
 type FileInfoJSON struct {
-	PackID        string                     `json:"pask_id"`
+	PackID        string                     `json:"pack_id"`
 	MD5           string                     `json:"md5_hash"`
 	ResPath       string                     `json:"resource_path_full"`
 	RelPath       string                     `json:"resource_path"`

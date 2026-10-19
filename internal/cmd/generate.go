@@ -11,8 +11,8 @@ import (
 )
 
 type GenCmd struct {
-	Pack       GenPackCmd `cmd:"" help:"Create a pack.json and populate it"`
-	Thumbnails GenTumbCmd `cmd:"" aliases:"thumb" help:"Generate or regenerate thumbnails for the eventual packed resources"`
+	Pack       GenPackCmd  `cmd:"" help:"Create a pack.json and populate it"`
+	Thumbnails GenThumbCmd `cmd:"" aliases:"thumb" help:"Generate or regenerate thumbnails for the eventual packed resources"`
 }
 
 type GenPackCmd struct {
@@ -33,7 +33,7 @@ type GenPackCmd struct {
 	RedTolerance  *float64 `short:"T" help:"enable custom colors and set the red tolerance value" default:"0.04"`
 }
 
-type GenTumbCmd struct {
+type GenThumbCmd struct {
 	InputPath string `arg:"" type:"path" help:"the package folder path"`
 
 	Progress bool `default:"true" negatable:"" help:"show progressbar"`
@@ -49,7 +49,7 @@ func (gpc *GenPackCmd) Run(ctx *Context) error {
 		"path": packDirPath,
 	})
 
-	l.Trace("Generateing pack.json")
+	l.Trace("Generating pack.json")
 
 	err := ddpackage.SavePackageJSON(l, ddpackage.SavePackageJSONOptions{
 		Path:          packDirPath,
@@ -59,7 +59,7 @@ func (gpc *GenPackCmd) Run(ctx *Context) error {
 		Version:       gpc.Version,
 		Allow3rdParty: gpc.AllowThirdParty,
 		Keywords:      gpc.Keywords,
-		ColorOverides: structures.CustomColorOverrides{
+		ColorOverrides: &structures.CustomColorOverrides{
 			Enabled: gpc.MinRedness != nil || gpc.MinSaturation != nil || gpc.RedTolerance != nil,
 			MinRedness: func() float64 {
 				if gpc.MinRedness != nil {
@@ -90,7 +90,7 @@ func (gpc *GenPackCmd) Run(ctx *Context) error {
 	return nil
 }
 
-func (gtc *GenTumbCmd) Run(ctx *Context) error {
+func (gtc *GenThumbCmd) Run(ctx *Context) error {
 	log.Trace("Generating thumbnails")
 
 	packDirPath, pathErr := filepath.Abs(gtc.InputPath)
@@ -101,7 +101,6 @@ func (gtc *GenTumbCmd) Run(ctx *Context) error {
 	l := log.WithFields(log.Fields{
 		"path": packDirPath,
 	})
-
 
 	err := ctx.LoadPkg(packDirPath)
 	if err != nil {

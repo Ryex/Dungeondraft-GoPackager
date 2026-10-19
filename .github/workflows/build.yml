@@ -72,12 +72,12 @@ jobs:
           # export GOROOT=/ucrt64/lib/go
           # export GOPATH=/ucrt64
           cp FyneApp.toml ./cmd/dungeondraft-packager
-          fyne package -os windows -src ./cmd/dungeondraft-packager --release -app-id io.github.ryex.dungondraft-gopackager
+          fyne package -os windows -src ./cmd/dungeondraft-packager --release -app-id io.github.ryex.dungeondraft-gopackager
       - name: Build Gui (Linux)
         if: ${{ runner.os == 'Linux' }}
         run: |
           cp FyneApp.toml ./cmd/dungeondraft-packager
-          fyne package -os linux -src ./cmd/dungeondraft-packager --release -app-id io.github.ryex.dungondraft-gopackager
+          fyne package -os linux -src ./cmd/dungeondraft-packager --release -app-id io.github.ryex.dungeondraft-gopackager
       - name: Build Gui (MacOS)
         if: ${{ runner.os == 'macOS' }}
         run: |
@@ -87,7 +87,7 @@ jobs:
           lipo -create -output dungeondraft-packager ./bin/dungeondraft-packager-amd64 ./bin/dungeondraft-packager-arm64
           file dungeondraft-packager
           rm -r ./bin
-          fyne package -os darwin -exe ./dungeondraft-packager --release --icon ./cmd/dungeondraft-packager/Icon.png -app-id io.github.ryex.dungondraft-gopackager
+          fyne package -os darwin -exe ./dungeondraft-packager --release --icon ./cmd/dungeondraft-packager/Icon.png -app-id io.github.ryex.dungeondraft-gopackager
       - name: Build Cli (Windows)
         if: ${{ runner.os == 'Windows' }}
         # shell: msys2 {0}

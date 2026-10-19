@@ -331,7 +331,7 @@ func (p *Package) updateFromPaths(paths []string, progressCallback func(p float6
 	p.fileList.DeduplicateBy(func(a, b *structures.FileInfo) bool {
 		return a.ResPath == b.ResPath
 	})
-	p.fileList.UpdateThumbnailRefrences(false)
+	p.fileList.UpdateThumbnailReferences(false)
 
 	// sort list and assure pack json is first
 	p.fileList.Sort()
@@ -341,7 +341,7 @@ func (p *Package) updateFromPaths(paths []string, progressCallback func(p float6
 
 func (p *Package) SortFileList(removeOrphanThumbnails ...bool) []*structures.FileInfo {
 	rmOrphThumbnail := false
-	if len(removeOrphanThumbnails) >  0 {
+	if len(removeOrphanThumbnails) > 0 {
 		rmOrphThumbnail = removeOrphanThumbnails[0]
 	}
 
@@ -361,8 +361,7 @@ func (p *Package) SortFileList(removeOrphanThumbnails ...bool) []*structures.Fil
 		return a.ResPath == b.ResPath
 	})
 
-  
-	removedThumbnails := p.fileList.UpdateThumbnailRefrences(rmOrphThumbnail)
+	removedThumbnails := p.fileList.UpdateThumbnailReferences(rmOrphThumbnail)
 
 	// sort list and assure pack json is first
 	p.fileList.Sort()

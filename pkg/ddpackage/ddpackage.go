@@ -70,7 +70,9 @@ type Package struct {
 
 func (p *Package) Close() {
 	if p.pkgFile != nil {
-		p.pkgFile.Close()
+		if p.pkgFile.Close() != nil {
+		}
+		p.pkgFile = nil
 	}
 }
 
@@ -113,7 +115,7 @@ func (p *Package) SetAllow3rdParty(allow *bool) {
 	p.info.Allow3rdParty = val
 }
 
-func (p *Package) SetColorOverrides(overrides structures.CustomColorOverrides) {
+func (p *Package) SetColorOverrides(overrides *structures.CustomColorOverrides) {
 	p.info.ColorOverrides = overrides
 }
 
@@ -157,6 +159,7 @@ func NewPackage(log logrus.FieldLogger) *Package {
 		tilesets:    make(map[string]structures.PackageTileset),
 		resourceMap: make(map[string]*structures.FileInfo),
 		tags:        structures.NewPackageTags(),
+		fileList:    structures.NewFileInfoList(),
 	}
 }
 
@@ -207,7 +210,7 @@ func (p *Package) LoadFromPackedPath(
 
 	p.SetUnpackOptions(UnpackOptions{})
 
-	err := p.loadPackedFilelist(file, progressCallback)
+	err := p.loadPackedFileList(file, progressCallback)
 	if err != nil {
 		p.log.WithError(err).Error("failed to read file list")
 		file.Close()
@@ -284,7 +287,7 @@ func (p *Package) addResource(fInfo *structures.FileInfo) {
 func (p *Package) resetData() {
 	p.flLock.Lock()
 	defer p.flLock.Unlock()
-	p.fileList = &structures.FileInfoList{}
+	p.fileList = structures.NewFileInfoList()
 	p.resourceMap = make(map[string]*structures.FileInfo)
 	p.walls = make(map[string]structures.PackageWall)
 	p.tilesets = make(map[string]structures.PackageTileset)
@@ -521,8 +524,8 @@ type UpdateResourcesOptions struct {
 }
 
 func (p *Package) UpdateResources(options UpdateResourcesOptions, progressCallback func(p float64, max int64)) []error {
-	numCpus := runtime.NumCPU()
-	sem := structures.NewSemaphore(numCpus)
+	numCPUs := runtime.NumCPU()
+	sem := structures.NewSemaphore(numCPUs)
 	wg := sync.WaitGroup{}
 
 	p.flLock.Lock()
@@ -536,13 +539,13 @@ func (p *Package) UpdateResources(options UpdateResourcesOptions, progressCallba
 		sizeErr error
 	}
 
-	chResults := make(chan result, numCpus*8)
+	chResults := make(chan result, numCPUs*8)
 
 	resourceErrors := []error{}
 	resultsWg := sync.WaitGroup{}
 
 	resultsWg.Go(func() {
-		var i = 0
+		i := 0
 		for {
 			r, ok := <-chResults
 			if !ok {
@@ -555,7 +558,7 @@ func (p *Package) UpdateResources(options UpdateResourcesOptions, progressCallba
 				resourceErrors = append(resourceErrors, r.sizeErr)
 			}
 			i++
-			progressCallback(float64(i) / float64(total), int64(total))
+			progressCallback(float64(i)/float64(total), int64(total))
 		}
 	})
 
@@ -574,7 +577,7 @@ func (p *Package) UpdateResources(options UpdateResourcesOptions, progressCallba
 			}
 			if options.Size && p.mode == PackageModeUnpacked {
 				innerWg.Add(1)
-				fi.UpdateFilesystemSize(func(_ int64, err error) {
+				fi.GetOrUpdateFilesystemSize(func(_ int64, err error) {
 					defer innerWg.Done()
 					sizeErr = err
 				})

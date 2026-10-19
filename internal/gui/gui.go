@@ -86,7 +86,7 @@ func NewApp() *App {
 }
 
 func (a *App) Main() {
-	a.app = app.NewWithID("io.github.ryex.dungondraft-gopackager")
+	a.app = app.NewWithID("io.github.ryex.dungeondraft-gopackager")
 	locale := lang.SystemLocale()
 
 	log.Infof("system local %s : %s", locale.LanguageString(), locale.String())
@@ -105,7 +105,7 @@ func (a *App) Main() {
 	a.prefLocale = prefLocaleBinding
 	lang.SetupLang(prefLocale)
 
-	a.app.Settings().SetTheme(&betterDisabledContrast{Theme: theme.DefaultTheme()})
+	a.app.Settings().SetTheme(BetterDefaultTheme())
 	a.window = a.app.NewWindow(lang.X("window.title", "Dungeondraft-GoPackager"))
 	a.window.SetIcon(assets.Icon)
 	a.window.Resize(fyne.NewSize(1200, 800))
@@ -114,7 +114,7 @@ func (a *App) Main() {
 
 	a.prefLocale.AddListener(binding.NewDataListener(func() {
 		newLocale, err := prefLocaleBinding.Get()
-		// ignore fetch error and if the local hansn't actualy changed (first run)
+		// ignore fetch error and if the local hasn't actually changed (first run)
 		if err != nil || newLocale == prefLocale {
 			return
 		}
@@ -200,15 +200,16 @@ func (a *App) buildMainUI() {
 
 	darkThemeToggleLbl := widget.NewLabel(lang.X("app.darkTheme.toggle.label", "Dark Mode"))
 
-	langChoices,  choiceLangMap, langChoiceMap := languageChoices()
-	langChoiceBinding := bindings.NewReversableMapping(
+	langChoices, choiceLangMap, langChoiceMap := languageChoices()
+	langChoiceBinding := bindings.NewReversibleMapping(
 		a.prefLocale,
 		func(lang string) (string, error) {
 			return langChoiceMap[lang], nil
 		},
-		func(choice string) (string, error){
+		func(choice string) (string, error) {
 			return choiceLangMap[choice], nil
-		})
+		},
+	)
 	langSelect := widget.NewSelectWithData(langChoices, langChoiceBinding)
 
 	forceDarkMode := binding.BindPreferenceBool("forceDarkMode", a.app.Preferences())
@@ -264,7 +265,8 @@ func (a *App) buildMainUI() {
 								lang.X("website.link", "Website"),
 								siteURL,
 							),
-						}, a.app, a.window)
+						}, a.app, a.window,
+					)
 					aboutDlg.Resize(
 						fyne.NewSize(
 							fyne.Min(a.window.Canvas().Size().Width, 640),
@@ -289,14 +291,16 @@ func (a *App) buildMainUI() {
 		}
 		inputTimer = time.AfterFunc(500*time.Millisecond, func() {
 			inputTimer = nil
+			path = strings.TrimSpace(path)
 			_, err := os.Stat(path)
 			if err == nil {
+				a.app.Preferences().SetString("lastPack.path", path)
 				a.operatingPath.Set(path)
 			}
 		})
 	}
 	pathInput.Validator = func(path string) error {
-		_, err := os.Stat(path)
+		_, err := os.Stat(strings.TrimSpace(path))
 		return err
 	}
 
@@ -309,19 +313,19 @@ func (a *App) buildMainUI() {
 			}
 		}, a.window)
 		dlg.SetFilter(storage.NewExtensionFileFilter([]string{".dungeondraft_pack"}))
+		lastOpen := a.app.Preferences().String("lastPack.path")
+		lastOpenURI := storage.NewFileURI(filepath.Dir(lastOpen))
+		listableLastOpen, err := storage.ListerForURI(lastOpenURI)
+		if err == nil {
+			dlg.SetLocation(listableLastOpen)
+		}
+		dlg.Show()
 		dlg.Resize(
 			fyne.NewSize(
 				fyne.Min(a.window.Canvas().Size().Width, 740),
 				fyne.Min(a.window.Canvas().Size().Height, 580),
 			),
 		)
-		lastOpen := a.app.Preferences().String("lastPack.path")
-		lastOpenURI := storage.NewFileURI(filepath.Dir(lastOpen))
-		lisableLastOpen, err := storage.ListerForURI(lastOpenURI)
-		if err == nil {
-			dlg.SetLocation(lisableLastOpen)
-		}
-		dlg.Show()
 	})
 
 	folderBtn := widget.NewButtonWithIcon(lang.X("folderBtn.text", "Open folder"), theme.FolderOpenIcon(), func() {
@@ -332,19 +336,19 @@ func (a *App) buildMainUI() {
 				a.operatingPath.Set(lu.Path())
 			}
 		}, a.window)
+		lastOpen := a.app.Preferences().String("lastFolder.path")
+		lastOpenURI := storage.NewFileURI(lastOpen)
+		listableLastOpen, err := storage.ListerForURI(lastOpenURI)
+		if err == nil {
+			dlg.SetLocation(listableLastOpen)
+		}
+		dlg.Show()
 		dlg.Resize(
 			fyne.NewSize(
 				fyne.Min(a.window.Canvas().Size().Width, 740),
 				fyne.Min(a.window.Canvas().Size().Height, 580),
 			),
 		)
-		lastOpen := a.app.Preferences().String("lastFolder.path")
-		lastOpenURI := storage.NewFileURI(lastOpen)
-		lisableLastOpen, err := storage.ListerForURI(lastOpenURI)
-		if err == nil {
-			dlg.SetLocation(lisableLastOpen)
-		}
-		dlg.Show()
 	})
 
 	a.mainDisableListener = bindings.Listen(a.disableButtons, func(disable bool) {
@@ -425,11 +429,11 @@ func (a *App) buildMainUI() {
 	}
 
 	bindings.Listen(forceDarkMode, func(force bool) {
-		log.Infof("darkmode toggled: %t", force)
+		log.Infof("dark mode toggled: %t", force)
 		if force {
-			a.app.Settings().SetTheme(&forcedVariantTheme{Theme: &betterDisabledContrast{Theme: theme.DefaultTheme()}, variant: theme.VariantDark})
+			a.app.Settings().SetTheme(&forcedVariantTheme{Theme: BetterDefaultTheme()})
 		} else {
-			a.app.Settings().SetTheme(&betterDisabledContrast{Theme: theme.DefaultTheme()})
+			a.app.Settings().SetTheme(BetterDefaultTheme())
 		}
 		refreshTheme()
 	})

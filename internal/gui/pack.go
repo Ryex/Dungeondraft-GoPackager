@@ -38,8 +38,8 @@ import (
 )
 
 func (a *App) loadUnpackedPath(path string) {
-	packjsonPath := filepath.Join(path, "pack.json")
-	if !utils.FileExists(packjsonPath) {
+	packJSONPath := filepath.Join(path, "pack.json")
+	if !utils.FileExists(packJSONPath) {
 		a.setNotAPackageContent(path)
 		return
 	}
@@ -68,7 +68,8 @@ func (a *App) loadUnpackedPath(path string) {
 				lang.X(
 					"err.badResources",
 					"Failed to load unpacked resources from {{.Path}}",
-					map[string]any{"Path": path}),
+					map[string]any{"Path": path},
+				),
 
 				err,
 			)
@@ -105,7 +106,8 @@ func (a *App) loadUnpackedPath(path string) {
 		err = pkg.LoadTags()
 		if err != nil {
 			a.showErrorDialog(
-				dderrors.CausedBy(fmt.Errorf(lang.X("package.tags.error", "Failed to read tags")), err))
+				dderrors.CausedBy(fmt.Errorf(lang.X("package.tags.error", "Failed to read tags")), err),
+			)
 			err = nil
 		}
 		err = pkg.LoadResourceMetadata()
@@ -152,9 +154,10 @@ func (a *App) updateFromPaths(paths []string) {
 	)
 
 	progressDlg := dialog.NewCustomWithoutButtons(
-		lang.X("task.updatePackage.text", "Updating pack recources ..."),
+		lang.X("task.updatePackage.text", "Updating pack resources ..."),
 		activityContent,
-		a.window)
+		a.window,
+	)
 	progressDlg.Show()
 
 	a.pkg.UpdateFromPathsProgress(paths, func(p float64, path string, _ int64) {
@@ -169,7 +172,8 @@ func (a *App) updateFromPaths(paths []string) {
 	err := a.pkg.LoadTags()
 	if err != nil {
 		a.showErrorDialog(
-			dderrors.CausedBy(fmt.Errorf(lang.X("package.tags.error", "Failed to read tags")), err))
+			dderrors.CausedBy(fmt.Errorf(lang.X("package.tags.error", "Failed to read tags")), err),
+		)
 		err = nil
 	}
 	err = a.pkg.LoadResourceMetadata()
@@ -202,7 +206,7 @@ func (a *App) setupPackageWatcher() {
 			statInfo, err := os.Stat(path)
 			if err != nil {
 				if slices.Contains(watcher.WatchList(), path) {
-					_ = watcher.Remove(path) // remove non existant paths
+					_ = watcher.Remove(path) // remove non existent paths
 				}
 				continue
 			}
@@ -218,7 +222,7 @@ func (a *App) setupPackageWatcher() {
 		}
 		if a.pkg != nil {
 			log.Debugf("updating resource paths... %s", toUpdate)
-			fyne.DoAndWait(func(){a.updateFromPaths(toUpdate)})
+			fyne.DoAndWait(func() { a.updateFromPaths(toUpdate) })
 		}
 	}
 
@@ -291,7 +295,8 @@ func (a *App) teardownPackageWatcher() {
 
 func (a *App) setNotAPackageContent(path string) {
 	msgText := multilineCanvasText(
-		lang.X("notAPackage.message",
+		lang.X(
+			"notAPackage.message",
 			"No pack.json at {{.Path}}:\nThis does not appear to be a resource pack.",
 			map[string]string{
 				"Path": path,
@@ -374,9 +379,9 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 		)
 		outPath := a.app.Preferences().String("pack.outPath")
 		outPathURI := storage.NewFileURI(outPath)
-		lisableOutPath, err := storage.ListerForURI(outPathURI)
+		listableOutPath, err := storage.ListerForURI(outPathURI)
 		if err == nil {
-			dlg.SetLocation(lisableOutPath)
+			dlg.SetLocation(listableOutPath)
 		}
 		dlg.Show()
 	})
@@ -447,7 +452,7 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 		lang.X("pack.option.thumbnails.text", "Generate thumbnails"),
 		theme.MediaPhotoIcon(),
 		func() {
-			a.genthumbnails()
+			a.genThumbnails()
 		},
 	)
 	tagSetsBtn := widget.NewButton(
@@ -458,12 +463,13 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 		},
 	)
 
-	generateTageBtn := widget.NewButton(
+	generateTagBtn := widget.NewButton(
 		lang.X("pack.generateTagsBtn.label", "Generate Tags"),
 		func() {
 			dlg := a.createTagGenDialog()
 			dlg.Show()
-		})
+		},
+	)
 
 	packForm := container.NewVBox(
 		layouts.NewLeftExpandHBox(
@@ -480,7 +486,7 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 					editPackBtn,
 				),
 				container.NewVBox(
-					generateTageBtn,
+					generateTagBtn,
 					tagSetsBtn,
 				),
 			),
@@ -507,7 +513,7 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 	a.disableButtons.Set(false)
 }
 
-func (a *App) genthumbnails() {
+func (a *App) genThumbnails() {
 	a.disableButtons.Set(true)
 
 	progressVal := binding.NewFloat()
@@ -599,7 +605,8 @@ func (a *App) packPackage(path string, options ddpackage.PackOptions) {
 				map[string]any{
 					"Path": a.pkg.UnpackedPath(),
 					"Pack": targetPath,
-				}),
+				},
+			),
 			a.window,
 		)
 		infoDlg.Show()

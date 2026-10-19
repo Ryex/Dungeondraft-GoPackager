@@ -50,7 +50,7 @@ func DecodeMd5HashFromString(str string) (Md5Hash, error) {
 	return h, err
 }
 
-// FileInfoBytes is a struct used for readign and writing the encoded file information bytes
+// FileInfoBytes is a struct used for reading and writing the encoded file information bytes
 type FileInfoBytes struct {
 	Offset uint64
 	Size   uint64
@@ -77,7 +77,7 @@ type FileInfo struct {
 	ResPathSize int32
 	RelPath     string
 
-	// used whenreading and writing files
+	// used when reading and writing files
 	Offset       int64
 	HeaderOffset int64
 
@@ -92,7 +92,7 @@ type FileInfo struct {
 	ThumbnailPath    string
 	ThumbnailResPath string
 	ImageFormat      string
-	ThubnailFor      string
+	ThumbnailFor     string
 
 	// used internally for conversion of non dungeondraft supported image formats
 	Image    image.Image
@@ -255,7 +255,7 @@ func (fil *FileInfoList) AsSlice() []*FileInfo {
 	return fil.data
 }
 
-func (fil *FileInfoList) GetRessource(path string) *FileInfo {
+func (fil *FileInfoList) GetResource(path string) *FileInfo {
 	for _, fi := range fil.data {
 		if fi.ResPath == path {
 			return fi
@@ -313,6 +313,9 @@ func (fil *FileInfoList) IndexOf(info *FileInfo) int {
 }
 
 func (fil *FileInfoList) IndexOfRes(res string) int {
+	if len(fil.data) == 0 {
+		return -1
+	}
 	for i, fi := range fil.data {
 		if fi.ResPath == res {
 			return i
@@ -433,7 +436,7 @@ func (fil *FileInfoList) SetCapacity(capacity int) {
 	}
 }
 
-func (fil *FileInfoList) UpdateThumbnailRefrences(removeOrphan ...bool) (removed []*FileInfo) {
+func (fil *FileInfoList) UpdateThumbnailReferences(removeOrphan ...bool) (removed []*FileInfo) {
 	remove := true
 	removed = []*FileInfo{}
 	if len(removeOrphan) > 0 {
@@ -450,7 +453,7 @@ func (fil *FileInfoList) UpdateThumbnailRefrences(removeOrphan ...bool) (removed
 		if fi.IsThumbnail() {
 			forRes, ok := thumbnailMap[fi.ResPath]
 			if ok {
-				fi.ThubnailFor = forRes
+				fi.ThumbnailFor = forRes
 			} else {
 				toRemove.Add(fi.ResPath)
 			}
@@ -486,19 +489,19 @@ func cmpResAndThumb(a, b *FileInfo) int {
 	if (aIsThumb && bIsThumb) || (!aIsThumb && !bIsThumb) {
 		return cmpResPaths(a.ResPath, b.ResPath)
 	} else if aIsThumb && !bIsThumb {
-		if a.ThubnailFor != "" {
-			if a.ThubnailFor == b.ResPath {
+		if a.ThumbnailFor != "" {
+			if a.ThumbnailFor == b.ResPath {
 				return -1
 			}
-			return cmpResPaths(a.ThubnailFor, b.ResPath)
+			return cmpResPaths(a.ThumbnailFor, b.ResPath)
 		}
 		return -1
 	} else if !aIsThumb && bIsThumb {
-		if b.ThubnailFor != "" {
-			if a.ResPath == b.ThubnailFor {
+		if b.ThumbnailFor != "" {
+			if a.ResPath == b.ThumbnailFor {
 				return 1
 			}
-			return cmpResPaths(a.ResPath, b.ThubnailFor)
+			return cmpResPaths(a.ResPath, b.ThumbnailFor)
 		}
 		return -1
 	}
@@ -597,7 +600,7 @@ func (fil *FileInfoList) WriteFiles(
 			}
 			// store the size of the data
 			fi.Size = int64(len(data))
-			// store reall offset
+			// store real offset
 			fi.Offset = offset
 			// update md5
 			{
