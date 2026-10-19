@@ -15,8 +15,14 @@ func NewStack[T any]() *Stack[T] {
 	return s
 }
 
-func (s *Stack[T]) Push(x T) {
-	s.data = append(s.data, x)
+func NewStackFromSlice[T any](data []T) *Stack[T] {
+	s := &Stack[T]{ make([]T, len(data))}
+	copy(s.data, data)
+	return s
+}
+
+func (s *Stack[T]) Push(x ...T) {
+	s.data = append(s.data, x...)
 }
 
 func (s *Stack[T]) Pop() (T, error) {

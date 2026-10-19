@@ -230,6 +230,24 @@ func All[T any](ts iter.Seq[T], P func(T) bool) bool {
 	return true
 }
 
+func IterWindow[T any](s []T, k int) iter.Seq[[]T] {
+	return func(yield func([]T) bool) {
+		if len(s) < k || k < 1 {
+			return
+		}
+
+		for i := 0; i <= len(s)-k; i++ {
+			window := make([]T, k)
+			for j := i; j < i+k; j++ {
+				window[j-i] = s[j]
+			}
+			if !yield(window) {
+				return
+			}
+		}
+	}
+}
+
 func ListDir(path string) (files []string, dirs []string, errs []error) {
 	paths := []string{path}
 
@@ -313,5 +331,13 @@ func round(val float64) int {
 
 func ToFixed(val float64, precision int) float64 {
 	out := math.Pow(10, float64(precision))
-	return float64(round(val * out)) / out
+	return float64(round(val*out)) / out
+}
+
+func PathComponents(path string) []string {
+	dir, last := filepath.Split(path)
+	if dir == "" {
+		return []string{last}
+	}
+	return append(PathComponents(filepath.Clean(dir)), last)
 }

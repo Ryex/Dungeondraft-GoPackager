@@ -48,7 +48,7 @@ func (p *Package) extractPackage(
 	p.SetUnpackOptions(options)
 	p.unpackedPath = outDir
 
-	err = p.extractFilelist(outDir, progressCallback)
+	err = p.extractFileList(outDir, progressCallback)
 
 	return
 }
@@ -59,8 +59,8 @@ func (p *Package) MapResourcePaths() {
 	}
 }
 
-// extractFilelist takes a slice of FileInfo and extracts the files from the package at the reader
-func (p *Package) extractFilelist(outDir string, progressCallback func(p float64)) (err error) {
+// extractFileList takes a slice of FileInfo and extracts the files from the package at the reader
+func (p *Package) extractFileList(outDir string, progressCallback func(p float64)) (err error) {
 	outDirPath, err := filepath.Abs(outDir)
 	if err != nil {
 		return
@@ -79,7 +79,11 @@ func (p *Package) extractFilelist(outDir string, progressCallback func(p float64
 		}
 	}
 
-	valid, err := p.isValidPackage(p.pkgFile)
+	var valid bool
+	valid, err = p.isValidPackage(p.pkgFile)
+	if err != nil {
+		return err
+	}
 
 	if !valid {
 		err = errors.New("not a valid package")
@@ -170,7 +174,6 @@ func (p *Package) ExtractFile(info *structures.FileInfo, outPath string) (string
 		var data []byte
 		ext, data, err = utils.RipTexture(fileData)
 		if err == nil {
-			fileExt = ext
 			fileData = data
 			fileNameFull = fileName + ext
 		}
@@ -246,12 +249,15 @@ func (p *Package) readPackedFileFromPackage(r io.ReadSeeker, info *structures.Fi
 	return fileData, nil
 }
 
-// loadPackedFilelist Takes an io.reader and attempts to extract a list of files stored in the package
-func (p *Package) loadPackedFilelist(
+// loadPackedFileList Takes an io.reader and attempts to extract a list of files stored in the package
+func (p *Package) loadPackedFileList(
 	r io.ReadSeeker,
 	progressCallback func(p float64, curRes string, max int64),
 ) (err error) {
 	valid, err := p.isValidPackage(r)
+	if err != nil {
+		return err
+	}
 
 	if !valid {
 		return ErrInvalidPackage

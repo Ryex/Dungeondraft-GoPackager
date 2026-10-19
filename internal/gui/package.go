@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"image/color"
-	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -15,7 +14,6 @@ import (
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
-	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
@@ -24,12 +22,13 @@ import (
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/bindings"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/lang"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/resource_tree"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/widgets"
-
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddimage"
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddpackage"
+	ddresource_filter "github.com/ryex/dungeondraft-gopackager/pkg/ddpackage/filter"
 	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
 
 	ddcolor "github.com/ryex/dungeondraft-gopackager/pkg/structures/color"
@@ -37,27 +36,20 @@ import (
 )
 
 func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
-	tree, filter, treeSelected, displayByTag, nodeTree := a.buildPackageTree(editable)
+	tree, filter, displayByTag := a.buildPackageTree(editable)
 
 	filterEntry := widgets.NewToolTipEntryWithData(filter)
 	filterEntry.SetPlaceHolder(lang.X("tree.filter.placeholder.resource", "Filter with glob (e.g. */objects/**)"))
 	filterErrorText := widgets.NewThemedText(lang.X("tree.filter.error", "Bad glob syntax"), theme.ColorNameError)
 	filterErrorText.Hide()
 	filterEntry.Validator = func(s string) error {
-		byTag, err := displayByTag.Get()
+		_, err := ddresource_filter.ParseResourceFilter(s)
 		if err != nil {
-			return err
-		}
-		if byTag {
-			filterErrorText.Hide()
+			filterErrorText.Text.Text = lang.X("tree.filter.error", "Bad filter syntax") + ": " + err.Error()
+			filterErrorText.Show()
 		} else {
-			_, err := structures.GlobToRelPathRegexp(s)
-			filterErrorText.Text.Text = lang.X("tree.filter.error", "Bad glob syntax")
-			if err != nil {
-				filterErrorText.Show()
-			} else {
-				filterErrorText.Hide()
-			}
+			filterErrorText.Text.Text = ""
+			filterErrorText.Hide()
 		}
 		return err
 	}
@@ -66,11 +58,11 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
 
 	displayByLbl := widget.NewLabel(lang.X("tree.displayBy.label", "Display By"))
 
-	byResouceOption := lang.X("tree.displayby.resource", "Resource")
+	byResourceOption := lang.X("tree.displayby.resource", "Resource")
 	byTagOption := lang.X("tree.displayby.tag", "Tag")
 
-	displayByRadio := widget.NewRadioGroup([]string{byResouceOption, byTagOption}, func(selected string) {
-		if selected == byResouceOption {
+	displayByRadio := widget.NewRadioGroup([]string{byResourceOption, byTagOption}, func(selected string) {
+		if selected == byResourceOption {
 			displayByTag.Set(false)
 			filterEntry.SetPlaceHolder(lang.X("tree.filter.placeholder.resource", "Filter with glob (e.g. */objects/**)"))
 			filterEntry.SetToolTip(lang.X("tree.filter.toolTip.glob", "Use Glob syntax to match resource paths"))
@@ -79,7 +71,7 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
 			filterEntry.SetPlaceHolder(lang.X("tree.filter.placeholder.tags", "Filter by tag name"))
 			filterEntry.SetToolTip(lang.X(
 				"tree.filter.toolTip.tag",
-				"Filter by a set of tags. Seperate tags with spaces to use multiple.\n"+
+				"Filter by a set of tags. Separate tags with spaces to use multiple.\n"+
 					"If a tag contains spaces surround it with \"\".\n"+
 					"By default filters use OR (filter includes any resource that"+
 					" has at least one of the filter tags).\n"+
@@ -90,7 +82,7 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
 	})
 	displayByRadio.Required = true
 	displayByRadio.Horizontal = true
-	displayByRadio.SetSelected(byResouceOption)
+	displayByRadio.SetSelected(byResourceOption)
 
 	displayByContainer := layouts.NewRightExpandHBox(
 		displayByLbl, displayByRadio,
@@ -116,29 +108,32 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
 
 	rightSplit := container.NewStack(defaultPreview)
 
-	bindings.Listen(treeSelected, func(tni string) {
+	tree.OnSelectionChanged = func() {
+		selected := tree.GetSelectionAndChildData()
 		content := func() fyne.CanvasObject {
-			if strings.HasPrefix(tni, "res://") {
-				info := a.pkg.FileList().Find(func(fi *structures.FileInfo) bool {
-					return fi.ResPath == tni
-				})
-				if info == nil {
-					return defaultPreview
+			if len(selected) == 0 {
+				return defaultPreview
+			} else if len(selected) == 1 {
+				switch data := selected[0].(type) {
+				case *resource_tree.ResourceFileInfoNode:
+					return a.buildInfoPane(data.Info, editable)
 				}
-				return a.buildInfoPane(info, editable)
-			} else {
-				_ = resourcesUnderTreeUID(tni, nodeTree)
-				// else if strings.HasPrefix(tni, "tag://") {
-				// tag := strings.TrimPrefix(tni, "tag://")
-				// TODO: add bulk operations pane
 			}
-			return defaultPreview
-		}()
+			selectedInfos := slices.Collect(utils.Filter(utils.Map(slices.Values(selected), func(data resource_tree.ResourceTreeNodeData) *structures.FileInfo {
+				if info, ok := data.(*resource_tree.ResourceFileInfoNode); ok {
+					return info.Info
+				}
+				return nil
+			}), func(info *structures.FileInfo) bool {
+				return info != nil
+			}))
 
+			return a.buildBulkOpsPane(selectedInfos, editable)
+		}()
 		rightSplit.RemoveAll()
 		rightSplit.Add(content)
 		rightSplit.Refresh()
-	})
+	}
 
 	split := container.NewPadded(container.NewHSplit(
 		container.NewPadded(leftSplit),
@@ -148,156 +143,50 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
 	return split
 }
 
-func (a *App) buildPackageTree(editable bool) (*widget.Tree, binding.String, binding.String, binding.Bool, map[string][]string) {
-	filterFunc := func(fi *structures.FileInfo) bool {
-		return !fi.IsThumbnail() && !strings.HasSuffix(fi.ResPath, ".json")
-	}
-	nodeTree := make(map[string][]string)
-
+func (a *App) buildPackageTree(editable bool) (*resource_tree.ResourceTree, binding.String, binding.Bool) {
 	filter := ""
 	boundFilter := binding.BindString(&filter)
-	selected := binding.NewString()
 	byTag := false
 	boundByTag := binding.BindBool(&byTag)
 
-	var tree *widget.Tree
-	tree = widget.NewTree(
-		func(tni widget.TreeNodeID) []widget.TreeNodeID {
-			nodes, ok := nodeTree[tni]
-			if ok {
-				return nodes
-			} else {
-				return []string{}
-			}
-		},
-		func(tni widget.TreeNodeID) bool {
-			return !strings.HasPrefix(tni, "res://") && !strings.HasPrefix(tni, "empty://")
-		},
-		func(b bool) fyne.CanvasObject {
-			var icon, btn fyne.CanvasObject
-			if b {
-				icon = widget.NewIcon(nil)
-				btn = container.NewPadded(widgets.NewToolTipButtonWithIcon("template", theme.ErrorIcon(), nil))
-			} else {
-				icon = widget.NewFileIcon(nil)
-				btn = nil
-			}
-			return container.NewBorder(nil, nil, icon, btn, widget.NewLabel("label template"))
-		},
-		func(tni widget.TreeNodeID, b bool, obj fyne.CanvasObject) {
-			c := obj.(*fyne.Container)
+	resourceTree := resource_tree.NewResourceTree(a.pkg, a.window)
 
-			l := c.Objects[0].(*widget.Label)
-			file := filepath.Base(tni)
-			if b {
-				icn := c.Objects[1].(*widget.Icon)
-				btn := c.Objects[2].(*fyne.Container).Objects[0].(*widgets.ToolTipButton)
-				var r fyne.Resource
-				if tree.IsBranchOpen(tni) {
-					r = theme.FolderOpenIcon()
-				} else {
-					r = theme.FolderIcon()
-				}
-				icn.SetResource(r)
-				l.SetText(file)
-				if editable && strings.HasPrefix(tni, "tag://") {
-					btn.SetIcon(theme.DeleteIcon())
-					tag := strings.TrimPrefix(tni, "tag://")
-					btn.OnTapped = func() {
-						dialog.ShowConfirm(
-							lang.X("package.tag.delete.title", "Confirm Delete Tag"),
-							lang.X(
-								"package.tag.delete.message",
-								"Do you want to delete the '{{.Tag}}' tag?",
-								map[string]string{
-									"Tag": tag,
-								},
-							),
-							func(confirmed bool) {
-								if confirmed {
-									a.pkg.Tags().DeleteTag(tag)
-									a.pkg.SaveUnpackedTags()
-								}
-							},
-							a.window,
-						)
-					}
-					btn.SetText("")
-					btn.SetToolTip(lang.X(
-						"package.tag.delete.tooltip",
-						"Delete the '{{.Tag}}' tag",
-						map[string]string{
-							"Tag": tag,
-						},
-					))
-					btn.Show()
-				} else {
-					btn.Hide()
-				}
-			} else {
-				icn := c.Objects[1].(*widget.FileIcon)
-				if strings.HasPrefix(tni, "empty://") {
-					l.TextStyle = fyne.TextStyle{Italic: true}
-					l.SetText(lang.X("tree.empty", "No resources"))
-					icn.SetURI(nil)
-				} else {
-					icn.SetURI(
-						storage.NewFileURI(
-							filepath.Join(a.pkg.UnpackedPath(), utils.NormalizeResourcePath(tni)),
-						))
-					l.TextStyle = fyne.TextStyle{}
-					l.SetText(file)
-				}
-			}
-		},
-	)
-
-	filteredList := func() (*structures.FileInfoList, error) {
-		filtered := a.pkg.FileList().Filter(filterFunc)
-		if filter == "" {
-			return filtered, nil
-		}
-		if byTag {
-			tagFilter := ParseTagFilter(filter)
-			log.Tracef("filtering tree list with %#v", tagFilter)
-			return filtered.Filter(func(fi *structures.FileInfo) bool {
-				ret := tagFilter.Apply(a.pkg.Tags().TagsFor(fi.ResPath))
-				log.Tracef("%s matches = %t", fi.ResPath, ret)
-				return ret
-			}), nil
-		}
-		log.Tracef("filtering tree list with '%s'", filter)
-		return filtered.Glob(nil, filter)
+	refreshTree := func() {
+		resourceTree.RefreshTree()
+		log.Debug("Refresh Done")
+		resourceTree.OpenBranch(resource_tree.PackageTreeRootID)
 	}
 
-	rebuildTree := func() {
-		fil, err := filteredList()
+	boundFilter.AddListener(binding.NewDataListener(func() {
+		f, err := ddresource_filter.ParseResourceFilter(filter)
 		if err != nil {
-			log.WithError(err).Error("failed to retrieve filtered file list")
 			return
 		}
-		log.Trace("rebuilding tree")
+		log.Debugf("Using filter: %s", f)
+		resourceTree.SetFilter(f)
+		resourceTree.OpenBranch(resource_tree.PackageTreeRootID)
+	}))
+
+	boundByTag.AddListener(binding.NewDataListener(func() {
+		mode := resourceTree.GetMode()
+		var wantedMode resource_tree.ResourceTreeMode
 		if byTag {
-			nodeTree = buildTagMaps(fil, a.pkg.Tags(), filter)
+			wantedMode = resource_tree.ResourceTreeTagMode
 		} else {
-			nodeTree = buildInfoMaps(fil)
+			wantedMode = resource_tree.ResourceTreePathMode
 		}
-		tree.Refresh()
-		tree.OpenBranch(packageTreeRootID())
-	}
+		if mode != wantedMode {
+			resourceTree.SetMode(wantedMode)
+			resourceTree.OpenBranch(resource_tree.PackageTreeRootID)
+		}
+	}))
 
 	bindings.AddListenerToAll(
-		rebuildTree,
-		boundFilter,
-		boundByTag,
+		refreshTree,
 		a.packageUpdated,
 	)
 
-	tree.OnSelected = func(uid widget.TreeNodeID) {
-		selected.Set(uid)
-	}
-
-	return tree, boundFilter, selected, boundByTag, nodeTree
+	return resourceTree, boundFilter, boundByTag
 }
 
 func (a *App) buildInfoPane(info *structures.FileInfo, editable bool) fyne.CanvasObject {
@@ -363,59 +252,29 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 		thumbToggle.Hide()
 	}
 
-	pathText := widget.NewEntry()
-	pathText.Disable()
-	pathText.SetText(info.ResPath)
-	path := container.NewStack(
-		widgets.NewThemedRect(theme.ColorNameHeaderBackground, 4),
-		layouts.NewRightExpandHBox(
-			container.NewCenter(
-				widget.NewLabel(lang.X(
-					"preview.path.label",
-					"Path",
-				)),
-			),
-			container.NewPadded(
-				container.NewStack(
-					widgets.NewThemedRect(theme.ColorNameInputBackground, 4),
-					container.NewPadded(
-						container.NewHScroll(
-							pathText,
-						),
-					),
-				),
-			),
-		),
-	)
+	resPathLabel := widget.NewLabel(lang.X("preview.path.label", "Resource Path"))
+	resPath := widgets.NewEntryWCopyBtn()
+	resPath.Disable()
+	resPath.SetText(info.ResPath)
 
-	resMd5Text := widget.NewEntry()
-	resMd5Text.Disable()
+	resMd5Label := widget.NewLabel(lang.X("preview.md5.label", "Md5 Hash"))
+	resMd5 := widgets.NewEntryWCopyBtn()
+	resMd5.Disable()
 
-	resMd5 := container.NewStack(
-		widgets.NewThemedRect(theme.ColorNameHeaderBackground, 4),
-		layouts.NewRightExpandHBox(
-			container.NewCenter(
-				widget.NewLabel(lang.X(
-					"preview.md5.label",
-					"Md5 Hash",
-				)),
-			),
-			container.NewPadded(
-				container.NewStack(
-					widgets.NewThemedRect(theme.ColorNameInputBackground, 4),
-					container.NewPadded(
-						resMd5Text,
-					),
-				),
-			),
-		),
-	)
+	fsPathLabel := widget.NewLabel(lang.X("preview.fspath.label", "Filesystem Path"))
+	fsPath := widgets.NewEntryWCopyBtn()
+	fsPath.Disable()
+	fsPath.SetText(info.Path)
+
+	labelCont := container.NewVBox(resPathLabel, fsPathLabel, resMd5Label)
+	entryCont := container.NewVBox(resPath, fsPath, resMd5)
+	infoCont := container.NewBorder(nil, nil, labelCont, nil, entryCont)
 
 	a.pkg.GetOrUpdateResourceMd5(info, func(md5 string, err error) {
 		if err != nil {
 			log.WithError(err).Errorf("Failed to update hash for %s", info.ResPath)
 		}
-		resMd5Text.SetText(md5)
+		resMd5.SetText(md5)
 	})
 
 	tooLarge := container.NewCenter(
@@ -427,9 +286,14 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 	if !ddimage.PathIsSupportedImage(info.RelPath) {
 		textContent := string(fileData)
 		if len(strings.Split(textContent, "\n")) > 200 {
-			return container.NewPadded(layouts.NewBottomExpandVBox(path, resMd5, container.NewStack(
-				bg, tooLarge,
-			)))
+			return container.NewPadded(
+				layouts.NewBottomExpandVBox(
+					infoCont,
+					container.NewStack(
+						bg, tooLarge,
+					),
+				),
+			)
 		}
 		widget.NewMultiLineEntry()
 		textEntry := widget.NewMultiLineEntry()
@@ -439,8 +303,7 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 		})
 		content := container.NewPadded(
 			layouts.NewBottomExpandVBox(
-				path,
-				resMd5,
+				infoCont,
 				container.NewStack(
 					bg,
 					container.NewPadded(textEntry),
@@ -527,8 +390,7 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 
 	content := container.NewPadded(layouts.NewBottomExpandVBox(
 		thumbToggle,
-		path,
-		resMd5,
+		infoCont,
 		container.NewStack(
 			canvas.NewRasterWithPixels(func(x, y, w, h int) color.Color {
 				if ((x/8)+(y/8))%2 == 0 {
@@ -624,21 +486,22 @@ func (a *App) buildTagInfo(info *structures.FileInfo, editable bool) fyne.Canvas
 	)
 
 	if editable {
-		tagSelecter := widget.NewSelectEntry(a.pkg.Tags().AllTags())
+		tagSelector := widget.NewSelectEntry(a.pkg.Tags().AllTags())
 		addBtn := widget.NewButtonWithIcon(
 			lang.X("tags.addBtn.text", "Add"),
 			theme.ContentAddIcon(),
 			func() {
-				if tagSelecter.Text == "" {
+				if tagSelector.Text == "" {
 					return
 				}
-				a.pkg.Tags().Tag(tagSelecter.Text, info.RelPath)
+				a.pkg.Tags().Tag(tagSelector.Text, info.RelPath)
 				updateTags()
 				a.saveUnpackedTags()
-				tagSelecter.SetText("")
-				tagSelecter.SetOptions(a.pkg.Tags().AllTags())
-			})
-		content.Add(layouts.NewLeftExpandHBox(tagSelecter, addBtn))
+				tagSelector.SetText("")
+				tagSelector.SetOptions(a.pkg.Tags().AllTags())
+			},
+		)
+		content.Add(layouts.NewLeftExpandHBox(tagSelector, addBtn))
 	}
 
 	return container.NewPadded(content)
@@ -871,114 +734,7 @@ func (a *App) saveTilesetMetadata(metaPath string) {
 	})
 }
 
-func nodeID(dir string) string {
-	id := "dir://" + dir
-	if dir == "" {
-		id = packageTreeRootID()
-	}
-	return id
-}
-
-func packageTreeRootID() string {
-	return "root://" + lang.X("tree.root.label", "Package")
-}
-
-func resourcesUnderTreeUID(tni string, tree map[string][]string) []string {
-	res := []string{}
-	stack := structures.NewStack[string]()
-	stack.Push(tni)
-	for !stack.IsEmpty() {
-		uid, _ := stack.Pop()
-		leaves, exists := tree[uid]
-		if exists {
-			for _, leaf := range leaves {
-				if strings.HasPrefix(leaf, "res://") {
-					res = append(res, uid)
-				} else {
-					stack.Push(uid)
-				}
-			}
-		}
-	}
-	return res
-}
-
-func buildInfoMaps(fil *structures.FileInfoList) map[string][]string {
-	nodeTree := make(map[string][]string)
-
-	for _, fi := range fil.AsSlice() {
-		dir, _ := filepath.Split(fi.RelPath)
-		next := dir[:max(len(dir)-1, 0)]
-		node := nodeID(next)
-		path := fi.RelPath
-		var nodeLeaf string
-		if !slices.Contains(nodeTree[node], fi.ResPath) {
-			nodeTree[node] = append(nodeTree[node], fi.ResPath)
-		}
-		for next != "" {
-			path = next
-			dir, _ = filepath.Split(next)
-			next = dir[:max(len(dir)-1, 0)]
-			node = nodeID(next)
-			nodeLeaf = "dir://" + path
-			if !slices.Contains(nodeTree[node], nodeLeaf) {
-				nodeTree[node] = append(nodeTree[node], nodeLeaf)
-			}
-		}
-	}
-
-	rootID := packageTreeRootID()
-
-	if len(nodeTree[rootID]) == 0 {
-		nodeTree[binding.DataTreeRootID] = append(nodeTree[binding.DataTreeRootID], "empty://")
-	} else {
-		nodeTree[binding.DataTreeRootID] = append(nodeTree[binding.DataTreeRootID], rootID)
-	}
-
-	return nodeTree
-}
-
-func buildTagMaps(fil *structures.FileInfoList, pt *structures.PackageTags, filter string) map[string][]string {
-	nodeTree := make(map[string][]string)
-	untaggedPath := "notag://" + lang.X("tree.untagged.label", "Untagged")
-	for _, fi := range fil.AsSlice() {
-		if fi.IsTaggable() {
-			tags := pt.TagsFor(fi.ResPath)
-			if tags.Size() == 0 {
-				nodeTree[untaggedPath] = append(nodeTree[untaggedPath], fi.ResPath)
-			} else {
-				for _, tag := range tags.AsSlice() {
-					nodeTree["tag://"+tag] = append(nodeTree["tag://"+tag], fi.ResPath)
-				}
-			}
-		}
-	}
-
-	allTags := pt.AllTags()
-	slices.Sort(allTags)
-	tagFilter := ParseTagFilter(filter)
-
-	rootID := packageTreeRootID()
-
-	for _, tag := range allTags {
-		if filter != "" && !tagFilter.ApplyToTag(tag) {
-			continue
-		}
-		if len(nodeTree["tag://"+tag]) == 0 {
-			nodeTree["tag://"+tag] = append(nodeTree["tag://"+tag], "empty://"+tag)
-		}
-		nodeTree[rootID] = append(nodeTree[rootID], "tag://"+tag)
-	}
-
-	if len(nodeTree[untaggedPath]) > 0 {
-		nodeTree[rootID] = append(nodeTree[rootID], untaggedPath)
-	}
-
-	if len(nodeTree[rootID]) == 0 {
-		nodeTree[binding.DataTreeRootID] = append(nodeTree[binding.DataTreeRootID], "empty://")
-	} else {
-		nodeTree[binding.DataTreeRootID] = append(nodeTree[binding.DataTreeRootID], rootID)
-	}
-
-	return nodeTree
+func (a *App) buildBulkOpsPane(infos []*structures.FileInfo, editable bool) fyne.CanvasObject {
+	// TODO: BUILD
+	return container.NewBorder(nil, nil, nil, nil)
 }

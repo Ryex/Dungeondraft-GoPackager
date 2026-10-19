@@ -124,7 +124,7 @@ func NewMapping[F any, T any](
 	}
 }
 
-func NewReversableMapping[F any, T any](
+func NewReversibleMapping[F any, T any](
 	from Bound[F],
 	get func(F) (T, error),
 	set func(T) (F, error),
@@ -201,8 +201,7 @@ func (m *mappedBinding[T]) Reload() error {
 		return err
 	}
 	m.v = val
-	m.self.Set(m.counter + 1)
-	return nil
+	return m.self.Set(m.counter + 1)
 }
 
 func (m *mappedBinding[T]) Get() (T, error) {
@@ -221,8 +220,7 @@ func (m *mappedBinding[T]) Set(val T) error {
 		return err
 	}
 	m.v = val
-	m.self.Set(m.counter + 1)
-	return nil
+	return m.self.Set(m.counter + 1)
 }
 
 type ExternalBoundList[T any] interface {
@@ -256,7 +254,7 @@ func (ml *mappedListBinding[T]) GetItem(index int) (binding.DataItem, error) {
 	if index < 0 || index >= len(ml.v) {
 		return nil, errOutOfBounds
 	}
-	return NewReversableMapping(
+	return NewReversibleMapping(
 		ml,
 		func(l []T) (T, error) {
 			if index < 0 || index >= len(l) {

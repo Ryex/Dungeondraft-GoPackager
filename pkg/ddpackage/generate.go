@@ -20,7 +20,8 @@ import (
 
 func GenPackID() string {
 	seededRand := rand.New(
-		rand.NewSource(time.Now().UnixNano()))
+		rand.NewSource(time.Now().UnixNano()),
+	)
 
 	charset := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
@@ -33,30 +34,30 @@ func GenPackID() string {
 }
 
 type SavePackageJSONOptions struct {
-	Path          string
-	Name          string
-	ID            string
-	Author        string
-	Version       string
-	Keywords      []string
-	Allow3rdParty *bool
-	ColorOverides structures.CustomColorOverrides
+	Path           string
+	Name           string
+	ID             string
+	Author         string
+	Version        string
+	Keywords       []string
+	Allow3rdParty  *bool
+	ColorOverrides *structures.CustomColorOverrides
 }
 
 func SavePackageJSONOptionsFromPkg(pkg *Package) SavePackageJSONOptions {
 	id := pkg.id
-	allowthirdParty := *pkg.info.Allow3rdParty
+	allowThirdParty := *pkg.info.Allow3rdParty
 	keywords := make([]string, len(pkg.info.Keywords))
 	copy(keywords, pkg.info.Keywords)
 	options := SavePackageJSONOptions{
-		Path:          pkg.unpackedPath,
-		Name:          pkg.name,
-		ID:            id,
-		Author:        pkg.info.Author,
-		Version:       pkg.info.Version,
-		Keywords:      keywords,
-		Allow3rdParty: &allowthirdParty,
-		ColorOverides: pkg.info.ColorOverrides,
+		Path:           pkg.unpackedPath,
+		Name:           pkg.name,
+		ID:             id,
+		Author:         pkg.info.Author,
+		Version:        pkg.info.Version,
+		Keywords:       keywords,
+		Allow3rdParty:  &allowThirdParty,
+		ColorOverrides: pkg.info.ColorOverrides,
 	}
 	return options
 }
@@ -112,7 +113,7 @@ func SavePackageJSON(log logrus.FieldLogger, options SavePackageJSONOptions, ove
 		Keywords:       options.Keywords,
 		KeywordsRaw:    strings.Join(options.Keywords, ","),
 		Allow3rdParty:  options.Allow3rdParty,
-		ColorOverrides: options.ColorOverides,
+		ColorOverrides: options.ColorOverrides,
 	}
 
 	packJSONBytes, err := json.MarshalIndent(&pack, "", "  ")

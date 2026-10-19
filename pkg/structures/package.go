@@ -11,30 +11,30 @@ import (
 
 // PackageInfo stores package information for the pack.json
 type PackageInfo struct {
-	Name           string               `json:"name"`
-	ID             string               `json:"id"`
-	Version        string               `json:"version"`
-	Author         string               `json:"author"`
-	KeywordsRaw    string               `json:"keywords"`
-	Keywords       []string             `json:"-"`
-	Allow3rdParty  *bool                `json:"allow_3rd_party_mapping_software_to_read,omitempty"`
-	ColorOverrides CustomColorOverrides `json:"custom_color_overrides,omitempty"`
+	Name           string                `json:"name"`
+	ID             string                `json:"id"`
+	Version        string                `json:"version"`
+	Author         string                `json:"author"`
+	KeywordsRaw    string                `json:"keywords"`
+	Keywords       []string              `json:"-"`
+	Allow3rdParty  *bool                 `json:"allow_3rd_party_mapping_software_to_read,omitempty"`
+	ColorOverrides *CustomColorOverrides `json:"custom_color_overrides,omitempty"`
 }
 
 func (p *PackageInfo) Copy() PackageInfo {
 	pkg := PackageInfo{
-		Name: p.Name,
-		ID: p.ID,
-		Version: p.Version,
-		Author: p.Author,
-		KeywordsRaw: p.KeywordsRaw,
+		Name:           p.Name,
+		ID:             p.ID,
+		Version:        p.Version,
+		Author:         p.Author,
+		KeywordsRaw:    p.KeywordsRaw,
 		ColorOverrides: p.ColorOverrides,
 	}
 	copy(pkg.Keywords, p.Keywords)
 	if p.Allow3rdParty != nil {
 		*pkg.Allow3rdParty = *p.Allow3rdParty
 	}
-	return  pkg
+	return pkg
 }
 
 type CustomColorOverrides struct {
@@ -59,7 +59,7 @@ func (o *CustomColorOverrides) String() string {
 
 func (o *CustomColorOverrides) Set(value string) error {
 	parts := strings.Split(value, ",")
-	defaultErr := errors.New("Color Overrides format is <redness>,<saturation>,<red_tolerance>")
+	defaultErr := errors.New("color overrides format is <redness>,<saturation>,<red_tolerance>")
 	if len(parts) != 3 {
 		return defaultErr
 	}

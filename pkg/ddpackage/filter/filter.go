@@ -14,12 +14,29 @@ import (
 
 type ResourceFilter interface {
 	Matches(fi *structures.FileInfo, tags *structures.PackageTags) bool
+	Eq(f ResourceFilter) bool
 }
+
+var (
+	_ ResourceFilter = (*ResourceFilterEmpty)(nil)
+	_ ResourceFilter = (*ResourceFilterName)(nil)
+	_ ResourceFilter = (*ResourceFilterTag)(nil)
+	_ ResourceFilter = (*ResourceFilterAnd)(nil)
+	_ ResourceFilter = (*ResourceFilterOr)(nil)
+	_ ResourceFilter = (*ResourceFilterNot)(nil)
+	_ ResourceFilter = (*ResourceFilterRelPathGlob)(nil)
+	_ ResourceFilter = (*ResourceFilterPredicate)(nil)
+)
 
 type ResourceFilterEmpty struct{}
 
 func (rf ResourceFilterEmpty) Matches(fi *structures.FileInfo, tags *structures.PackageTags) bool {
 	return true
+}
+
+func (rf ResourceFilterEmpty) Eq(f ResourceFilter) bool {
+	_, ok := f.(ResourceFilterEmpty)
+	return ok
 }
 
 type FilterMatchType int
@@ -63,6 +80,14 @@ func (rf ResourceFilterName) Matches(fi *structures.FileInfo, tags *structures.P
 	default:
 		return name == match
 	}
+}
+
+func (rf ResourceFilterName) Eq(f ResourceFilter) bool {
+	other, ok := f.(ResourceFilterName)
+	if ok {
+		return rf == other
+	}
+	return ok
 }
 
 type ResourceFilterTag struct {
@@ -109,6 +134,14 @@ func (rf ResourceFilterTag) Matches(fi *structures.FileInfo, tags *structures.Pa
 	}
 }
 
+func (rf ResourceFilterTag) Eq(f ResourceFilter) bool {
+	other, ok := f.(ResourceFilterTag)
+	if ok {
+		return rf == other
+	}
+	return ok
+}
+
 type ResourceFilterRelPathGlob struct {
 	RelPathGlobRegexp *regexp.Regexp
 }
@@ -118,6 +151,14 @@ func (rf ResourceFilterRelPathGlob) Matches(fi *structures.FileInfo, tags *struc
 		return false
 	}
 	return rf.RelPathGlobRegexp.MatchString(fi.CalcRelPath())
+}
+
+func (rf ResourceFilterRelPathGlob) Eq(f ResourceFilter) bool {
+	other, ok := f.(ResourceFilterRelPathGlob)
+	if ok {
+		return rf == other
+	}
+	return ok
 }
 
 func NewRelPathGlobFilter(pat string) (filter ResourceFilterRelPathGlob, err error) {
@@ -135,6 +176,16 @@ func (rf ResourceFilterAnd) Matches(fi *structures.FileInfo, tags *structures.Pa
 	})
 }
 
+func (rf ResourceFilterAnd) Eq(f ResourceFilter) bool {
+	other, ok := f.(ResourceFilterAnd)
+	if ok {
+		return slices.EqualFunc(rf.Filters, other.Filters, func(e1 ResourceFilter, e2 ResourceFilter) bool {
+			return e1.Eq(e2)
+		})
+	}
+	return ok
+}
+
 type ResourceFilterOr struct {
 	Filters []ResourceFilter
 }
@@ -145,12 +196,30 @@ func (rf ResourceFilterOr) Matches(fi *structures.FileInfo, tags *structures.Pac
 	})
 }
 
+func (rf ResourceFilterOr) Eq(f ResourceFilter) bool {
+	other, ok := f.(ResourceFilterOr)
+	if ok {
+		return slices.EqualFunc(rf.Filters, other.Filters, func(e1 ResourceFilter, e2 ResourceFilter) bool {
+			return e1.Eq(e2)
+		})
+	}
+	return ok
+}
+
 type ResourceFilterNot struct {
 	Filter ResourceFilter
 }
 
 func (rf ResourceFilterNot) Matches(fi *structures.FileInfo, tags *structures.PackageTags) bool {
 	return !rf.Filter.Matches(fi, tags)
+}
+
+func (rf ResourceFilterNot) Eq(f ResourceFilter) bool {
+	other, ok := f.(ResourceFilterNot)
+	if ok {
+		return rf.Filter.Eq(other)
+	}
+	return ok
 }
 
 type ResourceFilterPredicate struct {
@@ -160,6 +229,14 @@ type ResourceFilterPredicate struct {
 
 func (rf ResourceFilterPredicate) Matches(fi *structures.FileInfo, tags *structures.PackageTags) bool {
 	return rf.filter(fi, tags)
+}
+
+func (rf ResourceFilterPredicate) Eq(f ResourceFilter) bool {
+	other, ok := f.(ResourceFilterPredicate)
+	if ok {
+		return rf.Name == other.Name
+	}
+	return ok
 }
 
 var ResourceFilterIsTexture ResourceFilterPredicate = ResourceFilterPredicate{
@@ -449,7 +526,7 @@ Finish:
 		ctx.state = ctx.data().(*ParseDataExcape).prev
 		goto Finish // re-finish in new state
 	case ParseStateStart:
-		fallthrough
+		filter = &ResourceFilterEmpty{}
 	default:
 		{
 			return ctx.newParseError(BaseParseStateErr)
@@ -640,6 +717,10 @@ func ParseResourceFilter(s string) (ResourceFilter, error) {
 	s = strings.ReplaceAll(s, "\r\n", " ")
 	s = strings.ReplaceAll(s, "\n", " ")
 	s = strings.ReplaceAll(s, "\r", " ")
+
+	if s == "" {
+		return ResourceFilterEmpty{}, nil
+	}
 
 	ctx := NewParseContext()
 	ctx.pushGroup()
