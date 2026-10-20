@@ -30,7 +30,15 @@ func TestMain(m *testing.M) {
 func loadFixture(t *testing.T) (*ddpackage.Package, string) {
 	t.Helper()
 
-	dir := testutil.DefaultFixture().Write(t)
+	return loadFixtureWith(t, testutil.DefaultFixture())
+}
+
+// loadFixtureWith writes the given pack fixture to disk and loads it as a
+// package.
+func loadFixtureWith(t *testing.T, fixture *testutil.Fixture) (*ddpackage.Package, string) {
+	t.Helper()
+
+	dir := fixture.Write(t)
 
 	pkg := ddpackage.NewPackage(log.WithField("test", t.Name()))
 	require.NoError(t, pkg.LoadUnpackedFromFolder(dir))
@@ -125,7 +133,7 @@ func TestResourceTreeTagMode(t *testing.T) {
 	assert.Contains(t, rootChildren, widget.TreeNodeID("tag://rock"))
 
 	nature := tree.ChildUIDs("tag://nature")
-	assert.Contains(t, nature, widget.TreeNodeID("res://packs/testpack/textures/objects/Tree.png"))
+	assert.Contains(t, nature, tagResourceUID("tag://nature", "res://packs/testpack/textures/objects/Tree.png"))
 
 	tagData := tree.DataFor("tag://nature")
 	require.NotNil(t, tagData)
@@ -137,7 +145,7 @@ func TestResourceTreeTagMode(t *testing.T) {
 
 	// a tagged resource must still expose its file info so that the
 	// application can show the resource details
-	resData := tree.DataFor("res://packs/testpack/textures/objects/Tree.png")
+	resData := tree.DataFor(tagResourceUID("tag://nature", "res://packs/testpack/textures/objects/Tree.png"))
 	require.NotNil(t, resData)
 
 	resNode, ok := resData.(*ResourceFileInfoNode)

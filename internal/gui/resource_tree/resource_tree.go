@@ -156,9 +156,13 @@ type ResourceTree struct {
 	parent fyne.Window
 
 	selected []widget.TreeNodeID
-	nodeTree map[widget.TreeNodeID][]widget.TreeNodeID
-	nodeMap  map[widget.TreeNodeID]ResourceTreeNodeData
-	mode     ResourceTreeMode
+	// visiblySelected holds every node that is shown as selected. A
+	// resource that is shown under more than one tag is shown as selected
+	// in every one of them, so this holds more nodes than selected.
+	visiblySelected []widget.TreeNodeID
+	nodeTree        map[widget.TreeNodeID][]widget.TreeNodeID
+	nodeMap         map[widget.TreeNodeID]ResourceTreeNodeData
+	mode            ResourceTreeMode
 
 	editable bool
 	filter   filter.ResourceFilter
@@ -236,6 +240,17 @@ func nodeID(dir string) widget.TreeNodeID {
 }
 
 const PackageTreeRootID string = "root://package"
+
+// tagResourceUID returns the id of a resource that is shown under a tag
+// branch.
+//
+// A resource can carry more than one tag and is then shown under more than
+// one branch. The tree keeps a single node object per id and can therefore
+// only draw a resource in one place, so every occurrence of a resource needs
+// an id of its own.
+func tagResourceUID(tagPath string, resPath string) string {
+	return tagPath + "|" + resPath
+}
 
 func resourcesUnderTreeUID(tni string, tree map[string][]string) []string {
 	res := []string{}
@@ -349,17 +364,24 @@ func (t *ResourceTree) RebuildTree() {
 					tags := pkgTags.TagsFor(fi.ResPath)
 					if tags.Empty() {
 						ensureNode(untaggedPath)
-						if ensureLeaf(untaggedPath, fi.ResPath) {
-							t.nodeMap[fi.ResPath] = &ResourceFileInfoNode{t, fi}
+						uid := tagResourceUID(untaggedPath, fi.ResPath)
+						if ensureLeaf(untaggedPath, uid) {
+							t.nodeMap[uid] = &ResourceFileInfoNode{t, fi}
 						}
 					} else {
-						t.nodeMap[fi.ResPath] = &ResourceFileInfoNode{t, fi}
+						// every branch the resource is shown under shares
+						// the same data, so that the resource stays one
+						// resource even though it is shown more than once
+						data := &ResourceFileInfoNode{t, fi}
 						for _, tag := range tags.AsSlice() {
 							tagPath := "tag://" + tag
 							if ensureNode(tagPath) {
 								t.nodeMap[tagPath] = &ResourceTagBranch{t, tag, false}
 							}
-							ensureLeaf(tagPath, fi.ResPath)
+							uid := tagResourceUID(tagPath, fi.ResPath)
+							if ensureLeaf(tagPath, uid) {
+								t.nodeMap[uid] = data
+							}
 						}
 					}
 				}
@@ -380,8 +402,9 @@ func (t *ResourceTree) RebuildTree() {
 				ensureLeaf(PackageTreeRootID, tagPath)
 				if len(t.nodeTree[tagPath]) == 0 {
 					emptyTag := "empty://" + tag
-					if ensureLeaf(tagPath, emptyTag) {
-						t.nodeMap[emptyTag] = &ResourceFileInfoNode{t, nil}
+					uid := tagResourceUID(tagPath, emptyTag)
+					if ensureLeaf(tagPath, uid) {
+						t.nodeMap[uid] = &ResourceFileInfoNode{t, nil}
 					}
 				}
 			}
@@ -403,6 +426,10 @@ func (t *ResourceTree) RebuildTree() {
 	}
 
 	logrus.Debugf("Tree Rebuilt")
+
+	// the nodes of the tree changed, so the nodes that are shown as
+	// selected have to be looked up again
+	t.updateVisibleSelection()
 }
 
 func (t *ResourceTree) IsBranch(uid widget.TreeNodeID) bool {
@@ -427,8 +454,13 @@ func (t *ResourceTree) ParentOf(uid widget.TreeNodeID) *widget.TreeNodeID {
 func (t *ResourceTree) AllParentsOf(uid widget.TreeNodeID) []widget.TreeNodeID {
 	parents := []widget.TreeNodeID{}
 	node := uid
-	for parent := t.ParentOf(node); parent != nil; parent = t.ParentOf(node) {
+	for {
+		parent := t.ParentOf(node)
+		if parent == nil {
+			break
+		}
 		parents = append(parents, *parent)
+		node = *parent
 	}
 	return parents
 }
@@ -437,23 +469,96 @@ func (t *ResourceTree) IsSelected(uid widget.TreeNodeID) bool {
 	return slices.Contains(t.selected, uid)
 }
 
+// IsVisiblySelected reports whether the node is shown as selected. Every
+// node of a selected resource is shown as selected, so this holds for more
+// nodes than IsSelected does.
+func (t *ResourceTree) IsVisiblySelected(uid widget.TreeNodeID) bool {
+	return slices.Contains(t.visiblySelected, uid)
+}
+
 func (t *ResourceTree) IsParentSelected(uid widget.TreeNodeID) bool {
 	for _, parent := range t.AllParentsOf(uid) {
-		t.IsSelected(parent)
+		if t.IsSelected(parent) {
+			return true
+		}
 	}
 	return false
 }
 
+// selectedIndexOfData returns the index of the selected node that shows the
+// same resource as the given node, or -1 when there is none.
+//
+// A resource that is shown under more than one tag has one node per tag, and
+// only one of them is selected - the others are shown as selected as well.
+func (t *ResourceTree) selectedIndexOfData(uid widget.TreeNodeID) int {
+	data := t.DataFor(uid)
+	if data == nil {
+		return -1
+	}
+	for i, selected := range t.selected {
+		if t.DataFor(selected) == data {
+			return i
+		}
+	}
+	return -1
+}
+
+// updateVisibleSelection rebuilds the list of the nodes that are shown as
+// selected. Every node that shows a selected resource is shown as selected.
+func (t *ResourceTree) updateVisibleSelection() {
+	visible := []widget.TreeNodeID{}
+	for _, uid := range t.selected {
+		data := t.DataFor(uid)
+		if data == nil {
+			continue
+		}
+		for otherUID, otherData := range t.nodeMap {
+			if otherData == data {
+				visible = append(visible, otherUID)
+			}
+		}
+	}
+	// the map of the nodes is unordered, so the list has to be sorted to
+	// keep the order of the visible selection stable
+	slices.Sort(visible)
+	t.visiblySelected = visible
+}
+
+// syncTreeSelection keeps the selection of the Fyne tree in step with our
+// own selection, so that the tree does not keep highlighting a node that is
+// not selected any more.
+//
+// The callbacks of the Fyne tree are muted while the selection is synced:
+// they report the selection of the single node the Fyne tree can hold, while
+// this tree holds a selection of its own and reports it through
+// OnSelectionChanged.
+func (t *ResourceTree) syncTreeSelection() {
+	onSelected, onUnselected := t.Tree.OnSelected, t.Tree.OnUnselected
+	t.Tree.OnSelected, t.Tree.OnUnselected = nil, nil
+	defer func() {
+		t.Tree.OnSelected, t.Tree.OnUnselected = onSelected, onUnselected
+	}()
+
+	if len(t.selected) == 0 {
+		t.Tree.UnselectAll()
+		return
+	}
+	t.Tree.Select(t.selected[len(t.selected)-1])
+}
+
 func (t *ResourceTree) Select(uid widget.TreeNodeID) {
-	if len(t.selected) > 0 {
-		if slices.Contains(t.selected, uid) {
+	// a resource is only selected once, even when it is shown under more
+	// than one tag - the node that is selected last stays selected
+	if i := t.selectedIndexOfData(uid); i != -1 {
+		if t.selected[i] == uid {
 			return
 		}
-		t.selected = append(t.selected, uid)
-	} else {
-		t.selected = []widget.TreeNodeID{uid}
+		t.selected = slices.Delete(t.selected, i, i+1)
 	}
-	t.Tree.Select(uid)
+	t.selected = append(t.selected, uid)
+
+	t.updateVisibleSelection()
+	t.syncTreeSelection()
 	if f := t.OnSelectionChanged; f != nil {
 		f()
 	}
@@ -461,17 +566,28 @@ func (t *ResourceTree) Select(uid widget.TreeNodeID) {
 }
 
 func (t *ResourceTree) Unselect(uid widget.TreeNodeID) {
-	if len(t.selected) > 0 {
-		if i := slices.Index(t.selected, uid); i != -1 {
-			t.selected = slices.Delete(t.selected, i, i+1)
-			t.Refresh()
-			if f := t.OnUnselected; f != nil {
-				f(uid)
-			}
-			if f := t.OnSelectionChanged; f != nil {
-				f()
-			}
-		}
+	// the node that is unselected does not have to be the one that is
+	// selected: unselecting a node of a resource unselects the resource
+	// in all of the branches it is shown in
+	index := slices.Index(t.selected, uid)
+	if index == -1 {
+		index = t.selectedIndexOfData(uid)
+	}
+	if index == -1 {
+		return
+	}
+
+	unselected := t.selected[index]
+	t.selected = slices.Delete(t.selected, index, index+1)
+
+	t.updateVisibleSelection()
+	t.syncTreeSelection()
+	t.Refresh()
+	if f := t.OnUnselected; f != nil {
+		f(unselected)
+	}
+	if f := t.OnSelectionChanged; f != nil {
+		f()
 	}
 }
 
@@ -482,6 +598,8 @@ func (t *ResourceTree) UnselectAll() {
 
 	selected := t.selected
 	t.selected = nil
+	t.updateVisibleSelection()
+	t.syncTreeSelection()
 	t.Refresh()
 	if f := t.OnUnselected; f != nil {
 		for _, uid := range selected {
@@ -493,14 +611,20 @@ func (t *ResourceTree) UnselectAll() {
 	}
 }
 
+// GetSelection returns the ids of the nodes that are shown as selected. A
+// resource that is shown under more than one tag is shown as selected in
+// every one of them, so this holds more nodes than are selected.
 func (t *ResourceTree) GetSelection() []widget.TreeNodeID {
-	dest := make([]widget.TreeNodeID, len(t.selected))
-	copy(dest, t.selected)
+	dest := make([]widget.TreeNodeID, len(t.visiblySelected))
+	copy(dest, t.visiblySelected)
 	return dest
 }
 
+// GetSelectionAndChildData returns the data of the selected resources. A
+// resource that is shown under more than one tag is only reported once.
 func (t *ResourceTree) GetSelectionAndChildData() []ResourceTreeNodeData {
 	results := []ResourceTreeNodeData{}
+	seen := map[ResourceTreeNodeData]bool{}
 	stack := structures.NewStackFromSlice(t.selected)
 	for !stack.IsEmpty() {
 		uid, _ := stack.Pop()
@@ -508,7 +632,10 @@ func (t *ResourceTree) GetSelectionAndChildData() []ResourceTreeNodeData {
 			children := t.nodeTree[uid]
 			stack.Push(children...)
 		}
-		if data := t.DataFor(uid); data != nil {
+		// a resource that is shown under more than one tag shares its data
+		// between the branches, so that it is only reported once
+		if data := t.DataFor(uid); data != nil && !seen[data] {
+			seen[data] = true
 			results = append(results, data)
 		}
 	}
@@ -557,12 +684,17 @@ func NewResourceTreeNode(tree *ResourceTree, content fyne.CanvasObject) *Resourc
 }
 
 func (n *ResourceTreeNode) Update(uid widget.TreeNodeID) {
+	n.uid = uid
 	n.data = n.tree.DataFor(uid)
 	if n.data != nil {
 		n.data.Update(uid, n.content)
 	} else {
 		logrus.Warnf("data for `%v` is nil", n.uid)
 	}
+	// the node draws the highlight of the selection itself, and the tree
+	// does not refresh the objects it holds, so the node has to refresh
+	// itself when the tree updates it
+	n.Refresh()
 }
 
 func (n *ResourceTreeNode) Cursor() desktop.Cursor {
@@ -588,21 +720,24 @@ func (n *ResourceTreeNode) MouseDown(e *desktop.MouseEvent) {
 	case desktop.MouseButtonSecondary:
 		{
 			// show context menu
-			selected := slices.Contains(n.tree.selected, n.uid)
-			menuItems := []*fyne.MenuItem{}
-			if selected {
-				menuItems = append(menuItems, fyne.NewMenuItem(lang.X("tree.context.select", "Select"), func() {
-					n.tree.Select(n.uid)
-				}))
-			} else {
-				menuItems = append(menuItems, fyne.NewMenuItem(lang.X("tree.context.unselect", "Unselect"), func() {
-					n.tree.Select(n.uid)
-				}))
-			}
-			contextMenu := fyne.NewMenu("", menuItems...)
+			contextMenu := fyne.NewMenu("", n.contextMenuItems()...)
 			widget.ShowPopUpMenuAtPosition(contextMenu, fyne.CurrentApp().Driver().CanvasForObject(n), e.AbsolutePosition)
 		}
 	}
+}
+
+// contextMenuItems returns the items of the context menu of the node. A
+// node that is shown as selected offers to be unselected, an unselected one
+// offers to be selected.
+func (n *ResourceTreeNode) contextMenuItems() []*fyne.MenuItem {
+	if n.tree.IsVisiblySelected(n.uid) {
+		return []*fyne.MenuItem{fyne.NewMenuItem(lang.X("tree.context.unselect", "Unselect"), func() {
+			n.tree.Unselect(n.uid)
+		})}
+	}
+	return []*fyne.MenuItem{fyne.NewMenuItem(lang.X("tree.context.select", "Select"), func() {
+		n.tree.Select(n.uid)
+	})}
 }
 
 func (n *ResourceTreeNode) MouseUp(e *desktop.MouseEvent) {}
@@ -655,7 +790,7 @@ func (r *resourceTreeNodeRenderer) Refresh() {
 	th := r.node.Theme()
 	v := fyne.CurrentApp().Settings().ThemeVariant()
 	r.background.CornerRadius = th.Size(theme.SizeNameSelectionRadius)
-	if len(r.node.tree.selected) > 0 && slices.Contains(r.node.tree.selected, r.node.uid) {
+	if r.node.tree.IsVisiblySelected(r.node.uid) {
 		r.background.FillColor = th.Color(theme.ColorNameSelection, v)
 		r.background.Show()
 	} else {
