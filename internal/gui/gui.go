@@ -59,6 +59,17 @@ type App struct {
 	mainDisableListener     binding.DataListener
 	currentDisableListeners []binding.DataListener
 
+	// forceDarkMode is the preference that forces the dark theme.
+	forceDarkMode binding.Bool
+	// forceDarkModeListener is the listener registered on the force dark
+	// mode preference. It is replaced whenever the UI is rebuilt and
+	// detached when the app is cleaned up.
+	forceDarkModeListener binding.DataListener
+
+	// ui holds the named references to the widgets and regions of the
+	// current layout.
+	ui *uiRegions
+
 	tagSaveTimer  *time.Timer
 	resSaveTimers map[string]*time.Timer
 
@@ -69,6 +80,14 @@ type App struct {
 	// packageWatcherDisabled stops the filesystem watcher from being started.
 	// Used by tests, which drive the package loading directly.
 	packageWatcherDisabled bool
+
+	// loadUnpacked loads an unpacked package folder. It is a field so that
+	// tests can control the timing of the load.
+	loadUnpacked func(path string, progress func(p float64, curPath string)) (unpackedLoadResult, error)
+
+	// loadPacked loads a packed resource pack file. It is a field so that
+	// tests can control the timing of the load.
+	loadPacked func(path string, progress func(p float64, curRes string)) (*ddpackage.Package, error)
 
 	// prefLocaleListener is the listener registered on the locale preference.
 	// It is removed and replaced whenever the UI is rebuilt and detached
@@ -96,6 +115,8 @@ func NewApp() *App {
 		resSaveTimers:  make(map[string]*time.Timer),
 	}
 	app.packageUpdated = binding.BindInt(&app.pkgUpdateCounter)
+	app.loadUnpacked = app.loadUnpackedSync
+	app.loadPacked = app.loadPackSync
 	return app
 }
 
@@ -215,6 +236,10 @@ func (a *App) clean() {
 		a.prefLocale.RemoveListener(a.prefLocaleListener)
 		a.prefLocaleListener = nil
 	}
+	if a.forceDarkModeListener != nil && a.forceDarkMode != nil {
+		a.forceDarkMode.RemoveListener(a.forceDarkModeListener)
+		a.forceDarkModeListener = nil
+	}
 	if a.window != nil {
 		// release the resources held by the tool tip layer of the window
 		fynetooltip.DestroyWindowToolTipLayer(a.window.Canvas())
@@ -244,6 +269,10 @@ func languageChoices() ([]string, map[string]string, map[string]string) {
 func (a *App) buildMainUI() {
 	siteURL, _ := url.Parse("https://ryex.github.io/Dungeondraft-GoPackager/")
 	githubURL, _ := url.Parse("https://github.com/Ryex/Dungeondraft-GoPackager")
+
+	// the layout is rebuilt from scratch, so the named references to it
+	// have to be replaced as well
+	a.ui = &uiRegions{}
 
 	darkThemeToggleLbl := widget.NewLabel(lang.X("app.darkTheme.toggle.label", "Dark Mode"))
 
@@ -289,6 +318,27 @@ func (a *App) buildMainUI() {
 	)
 	subTitleText.Text.Alignment = fyne.TextAlignCenter
 
+	aboutBtn := widget.NewButtonWithIcon("", assets.Icon, func() {
+		aboutDlg := xdialog.NewAbout(
+			lang.X(
+				"greeting.sub-title",
+				"Package, edit, and prepare Dungeondraft resource packs",
+			), []*widget.Hyperlink{
+				widget.NewHyperlink(
+					lang.X("website.link", "Website"),
+					siteURL,
+				),
+			}, a.app, a.window,
+		)
+		aboutDlg.Resize(
+			fyne.NewSize(
+				fyne.Min(a.window.Canvas().Size().Width, 640),
+				fyne.Min(a.window.Canvas().Size().Height, 480),
+			),
+		)
+		aboutDlg.Show()
+	})
+
 	welcome := container.NewPadded(container.NewStack(
 		headerBg,
 		container.NewPadded(container.NewVBox(
@@ -302,26 +352,7 @@ func (a *App) buildMainUI() {
 				darkThemeToggle,
 				langSelect,
 				layout.NewSpacer(),
-				widget.NewButtonWithIcon("", assets.Icon, func() {
-					aboutDlg := xdialog.NewAbout(
-						lang.X(
-							"greeting.sub-title",
-							"Package, edit, and prepare Dungeondraft resource packs",
-						), []*widget.Hyperlink{
-							widget.NewHyperlink(
-								lang.X("website.link", "Website"),
-								siteURL,
-							),
-						}, a.app, a.window,
-					)
-					aboutDlg.Resize(
-						fyne.NewSize(
-							fyne.Min(a.window.Canvas().Size().Width, 640),
-							fyne.Min(a.window.Canvas().Size().Height, 480),
-						),
-					)
-					aboutDlg.Show()
-				}),
+				aboutBtn,
 				ghIcon,
 				infoIcon,
 			)),
@@ -398,6 +429,13 @@ func (a *App) buildMainUI() {
 		)
 	})
 
+	// the UI is rebuilt on every locale change, so the listener of the
+	// previous build has to be detached before a new one is registered.
+	// The binding belongs to the app, so it dies with it.
+	if a.mainDisableListener != nil {
+		a.disableButtons.RemoveListener(a.mainDisableListener)
+		a.mainDisableListener = nil
+	}
 	a.mainDisableListener = bindings.Listen(a.disableButtons, func(disable bool) {
 		if disable {
 			packBtn.Disable()
@@ -441,17 +479,32 @@ func (a *App) buildMainUI() {
 	a.mainContentContainer = container.NewStack()
 	a.setMainContent(a.defaultMainContent)
 
-	content := container.NewPadded(
-		container.New(
-			layouts.NewBottomExpandVBoxLayout(),
-			welcome,
-			inputContainer,
-			widget.NewSeparator(),
-			container.NewPadded(
-				a.mainContentContainer,
-			),
+	mainColumn := container.New(
+		layouts.NewBottomExpandVBoxLayout(),
+		welcome,
+		inputContainer,
+		widget.NewSeparator(),
+		container.NewPadded(
+			a.mainContentContainer,
 		),
 	)
+
+	content := container.NewPadded(mainColumn)
+
+	a.ui.MainColumn = mainColumn
+	a.ui.Header = welcome
+	a.ui.ThemeToggle = darkThemeToggle
+	a.ui.LanguageSelect = langSelect
+	a.ui.TitleText = titleText
+	a.ui.SubTitleText = subTitleText
+	a.ui.AboutButton = aboutBtn
+	a.ui.GithubButton = ghIcon
+	a.ui.InfoButton = infoIcon
+	a.ui.PathSection = inputContainer
+	a.ui.PathEntry = pathInput
+	a.ui.OpenPackButton = packBtn
+	a.ui.OpenFolderButton = folderBtn
+	a.ui.Content = a.mainContentContainer
 
 	a.window.SetContent(fynetooltip.AddWindowToolTipLayer(content, a.window.Canvas()))
 
@@ -475,7 +528,14 @@ func (a *App) buildMainUI() {
 		content.Refresh()
 	}
 
-	bindings.Listen(forceDarkMode, func(force bool) {
+	// the UI is rebuilt on every locale change, so the listener of the
+	// previous build has to be detached before a new one is registered
+	if a.forceDarkModeListener != nil && a.forceDarkMode != nil {
+		a.forceDarkMode.RemoveListener(a.forceDarkModeListener)
+		a.forceDarkModeListener = nil
+	}
+	a.forceDarkMode = forceDarkMode
+	a.forceDarkModeListener = bindings.Listen(forceDarkMode, func(force bool) {
 		log.Infof("dark mode toggled: %t", force)
 		if force {
 			a.app.Settings().SetTheme(&forcedVariantTheme{Theme: BetterDefaultTheme()})
