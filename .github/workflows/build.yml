@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go-version: ["1.25.x"]
+        go-version: ["1.27.x"]
         target:
           - os: linux
           - os: windows
@@ -160,6 +160,35 @@ jobs:
         with:
           name: Dungeondraft-GoPackager-${{ runner.os }}
           path: install/**
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    env:
+      GO111MODULE: on
+      CGO_ENABLED: 1
+    steps:
+      - name: Setup Go environment
+        id: setup-go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.x"
+
+      - name: Force "autocrlf"
+        run: git config --global core.autocrlf input
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Build Deps
+        # the GUI packages link against OpenGL, so the GL and X11 headers are
+        # needed to build them. No display is required, the tests use the
+        # software renderer of fyne.io/fyne/v2/test.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev
+
+      - name: Run tests
+        run: go test ./...
 
   release:
     needs: build

@@ -353,6 +353,7 @@ func (t *ResourceTree) RebuildTree() {
 							t.nodeMap[fi.ResPath] = &ResourceFileInfoNode{t, fi}
 						}
 					} else {
+						t.nodeMap[fi.ResPath] = &ResourceFileInfoNode{t, fi}
 						for _, tag := range tags.AsSlice() {
 							tagPath := "tag://" + tag
 							if ensureNode(tagPath) {
@@ -499,7 +500,7 @@ func (t *ResourceTree) GetSelection() []widget.TreeNodeID {
 }
 
 func (t *ResourceTree) GetSelectionAndChildData() []ResourceTreeNodeData {
-	results := make([]ResourceTreeNodeData, len(t.selected))
+	results := []ResourceTreeNodeData{}
 	stack := structures.NewStackFromSlice(t.selected)
 	for !stack.IsEmpty() {
 		uid, _ := stack.Pop()

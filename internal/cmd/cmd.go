@@ -92,7 +92,6 @@ func (ctx *Context) LoadTags() error {
 	return nil
 }
 
-
 func (ctx *Context) LoadMetadata() error {
 	err := ctx.Pkg.LoadResourceMetadata()
 	if err != nil {

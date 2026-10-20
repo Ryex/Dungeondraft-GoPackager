@@ -73,12 +73,11 @@ func (p *Package) loadPackedResourceMetadata(r io.ReadSeeker) error {
 			return errors.Join(err, ErrMetadataRead, fmt.Errorf("failed to read data file %s", fi.ResPath))
 		}
 
-
-	  fileData, err = hujson.Standardize(fileData)
-	  if err != nil {
-		  p.log.WithError(err).WithField("res", fi.ResPath).Error("failed to parse metadata json")
-		  return errors.Join(err, ErrJSONStandardize)
-	  }
+		fileData, err = hujson.Standardize(fileData)
+		if err != nil {
+			p.log.WithError(err).WithField("res", fi.ResPath).Error("failed to parse metadata json")
+			return errors.Join(err, ErrJSONStandardize)
+		}
 
 		if fi.IsWallData() {
 			wall := structures.NewPackageWall()
@@ -122,7 +121,6 @@ func (p *Package) loadUnpackedTags() error {
 			Error("can't read tags file")
 		return errors.Join(err, ErrTagsRead)
 	}
-
 
 	tagsBytes, err = hujson.Standardize(tagsBytes)
 	if err != nil {
@@ -238,12 +236,11 @@ func (p *Package) loadUnpackedResourceMetadata() error {
 			return errors.Join(err, ErrMetadataRead, fmt.Errorf("failed to read data file %s", fi.Path))
 		}
 
-
-	  fileData, err = hujson.Standardize(fileData)
-	  if err != nil {
-		  p.log.WithError(err).WithField("res", fi.ResPath).Error("failed to parse metadata json")
-		  return errors.Join(err, ErrJSONStandardize)
-	  }
+		fileData, err = hujson.Standardize(fileData)
+		if err != nil {
+			p.log.WithError(err).WithField("res", fi.ResPath).Error("failed to parse metadata json")
+			return errors.Join(err, ErrJSONStandardize)
+		}
 
 		if fi.IsWallData() {
 			wall := structures.NewPackageWall()

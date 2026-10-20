@@ -241,7 +241,7 @@ func (s *MajorMinorVersionSpinner) GetValue() string {
 }
 
 func (s *MajorMinorVersionSpinner) SetValue(value string) {
-	majorS, minorS := utils.SplitOne(utils.TruncateToNumericString(s.entry.Text), ".")
+	majorS, minorS := utils.SplitOne(utils.TruncateToNumericString(value), ".")
 
 	var major, minor int
 	var err error

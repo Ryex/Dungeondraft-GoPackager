@@ -11,7 +11,7 @@ import (
 
 type TappableRect struct {
 	widget.BaseWidget
-	rect   *canvas.Rectangle
+	rect     *canvas.Rectangle
 	OnTapped func(*fyne.PointEvent)
 }
 
@@ -34,7 +34,7 @@ func (r *TappableRect) SetColor(c color.Color) {
 }
 
 func (r *TappableRect) GetColor() color.Color {
-  return r.rect.FillColor
+	return r.rect.FillColor
 }
 
 func (r *TappableRect) CreateRenderer() fyne.WidgetRenderer {

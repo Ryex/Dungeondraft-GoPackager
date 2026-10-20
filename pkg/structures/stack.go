@@ -11,12 +11,12 @@ type Stack[T any] struct {
 }
 
 func NewStack[T any]() *Stack[T] {
-	s := &Stack[T]{ make([]T, 0)}
+	s := &Stack[T]{make([]T, 0)}
 	return s
 }
 
 func NewStackFromSlice[T any](data []T) *Stack[T] {
-	s := &Stack[T]{ make([]T, len(data))}
+	s := &Stack[T]{make([]T, len(data))}
 	copy(s.data, data)
 	return s
 }
@@ -52,7 +52,5 @@ func (s *Stack[T]) Size() int {
 }
 
 func (s *Stack[T]) IsEmpty() bool {
-	return len(s.data) > 0
+	return len(s.data) == 0
 }
-
-

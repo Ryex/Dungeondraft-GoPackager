@@ -2,7 +2,6 @@ package gui
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -37,6 +36,68 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+var (
+	// errUnpackedFolder is returned when the package folder itself could not be read.
+	errUnpackedFolder = errors.New("could not load unpacked package folder")
+	// errUnpackedFileList is returned when the resource index could not be built.
+	errUnpackedFileList = errors.New("could not build unpacked package file list")
+)
+
+// unpackedLoadResult is the outcome of loading an unpacked package folder.
+type unpackedLoadResult struct {
+	// Pkg is the loaded package. It is nil when the load failed.
+	Pkg *ddpackage.Package
+	// TagsErr is set when the optional tags file could not be read.
+	// The package is still usable.
+	TagsErr error
+	// MetadataErr is set when the optional resource metadata could not be read.
+	// The package is still usable.
+	MetadataErr error
+}
+
+// loadUnpackedSync loads an unpacked package folder, builds its resource index
+// and reads its tags and metadata. It performs no user interface updates so it
+// can be driven directly from tests.
+func (a *App) loadUnpackedSync(
+	path string,
+	progress func(p float64, curPath string),
+) (unpackedLoadResult, error) {
+	l := log.WithFields(log.Fields{
+		"path": path,
+	})
+
+	res := unpackedLoadResult{}
+
+	pkg := ddpackage.NewPackage(l)
+
+	err := pkg.LoadUnpackedFromFolder(path)
+	if err != nil {
+		l.WithError(err).Error("could not load directory")
+		return res, errors.Join(errUnpackedFolder, err)
+	}
+
+	errs := pkg.BuildFileListProgress(func(p float64, curPath string, _ int64) {
+		if progress != nil {
+			progress(p, curPath)
+		}
+	})
+	if len(errs) != 0 {
+		for _, err := range errs {
+			l.WithField("task", "build file list").Errorf("error: %s", err)
+		}
+		joinErrs := make([]error, 0, len(errs)+1)
+		joinErrs = append(joinErrs, errUnpackedFileList)
+		joinErrs = append(joinErrs, errs...)
+		return res, errors.Join(joinErrs...)
+	}
+
+	res.Pkg = pkg
+	res.TagsErr = pkg.LoadTags()
+	res.MetadataErr = pkg.LoadResourceMetadata()
+
+	return res, nil
+}
+
 func (a *App) loadUnpackedPath(path string) {
 	packJSONPath := filepath.Join(path, "pack.json")
 	if !utils.FileExists(packJSONPath) {
@@ -55,67 +116,52 @@ func (a *App) loadUnpackedPath(path string) {
 	a.resetPkg()
 
 	go func() {
-		l := log.WithFields(log.Fields{
-			"path": path,
-		})
-
-		pkg := ddpackage.NewPackage(l)
-
-		err := pkg.LoadUnpackedFromFolder(path)
-		if err != nil {
-			l.WithError(err).Error("could not load directory")
-			a.setErrContent(
-				lang.X(
-					"err.badResources",
-					"Failed to load unpacked resources from {{.Path}}",
-					map[string]any{"Path": path},
-				),
-
-				err,
-			)
-			return
-		}
-
-		errs := pkg.BuildFileListProgress(func(p float64, path string, _ int64) {
+		result, err := a.loadUnpackedSync(path, func(p float64, curPath string) {
 			activityProgress.Set(p)
 			activityStr.Set(lang.X(
 				"pack.buildList.activity",
 				"Loading {{.Path}} ...",
 				map[string]any{
-					"Path": utils.TruncatePathHumanFriendly(path, 80),
+					"Path": utils.TruncatePathHumanFriendly(curPath, 80),
 				},
 			))
 		})
-		if len(errs) != 0 {
-			for _, err := range errs {
-				l.WithField("task", "build file list").Errorf("error: %s", err)
+		if err != nil {
+			if errors.Is(err, errUnpackedFileList) {
+				a.setErrContent(
+					lang.X(
+						"err.fileList",
+						"Failed to build file list from {{.Path}}",
+						map[string]any{
+							"Path": path,
+						},
+					),
+					err,
+				)
+			} else {
+				a.setErrContent(
+					lang.X(
+						"err.badResources",
+						"Failed to load unpacked resources from {{.Path}}",
+						map[string]any{"Path": path},
+					),
+					err,
+				)
 			}
-			a.setErrContent(
-				lang.X(
-					"err.fileList",
-					"Failed to build file list from {{.Path}}",
-					map[string]any{
-						"Path": path,
-					},
-				),
-				err,
-			)
 			return
 		}
 
-		err = pkg.LoadTags()
-		if err != nil {
+		if result.TagsErr != nil {
 			a.showErrorDialog(
-				dderrors.CausedBy(fmt.Errorf(lang.X("package.tags.error", "Failed to read tags")), err),
+				dderrors.CausedBy(errors.New(lang.X("package.tags.error", "Failed to read tags")), result.TagsErr),
 			)
-			err = nil
 		}
-		err = pkg.LoadResourceMetadata()
-		if err != nil {
-			a.showErrorDialog(dderrors.CausedBy(fmt.Errorf(lang.X("package.metadata.error", "Failed to read metadata")), err))
-			err = nil
+		if result.MetadataErr != nil {
+			a.showErrorDialog(
+				dderrors.CausedBy(errors.New(lang.X("package.metadata.error", "Failed to read metadata")), result.MetadataErr),
+			)
 		}
-		a.setUnpackedContent(pkg)
+		a.setUnpackedContent(result.Pkg)
 		a.setupPackageWatcher()
 	}()
 }
@@ -172,13 +218,13 @@ func (a *App) updateFromPaths(paths []string) {
 	err := a.pkg.LoadTags()
 	if err != nil {
 		a.showErrorDialog(
-			dderrors.CausedBy(fmt.Errorf(lang.X("package.tags.error", "Failed to read tags")), err),
+			dderrors.CausedBy(errors.New(lang.X("package.tags.error", "Failed to read tags")), err),
 		)
 		err = nil
 	}
 	err = a.pkg.LoadResourceMetadata()
 	if err != nil {
-		a.showErrorDialog(dderrors.CausedBy(fmt.Errorf(lang.X("package.metadata.error", "Failed to read metadata")), err))
+		a.showErrorDialog(dderrors.CausedBy(errors.New(lang.X("package.metadata.error", "Failed to read metadata")), err))
 		err = nil
 	}
 	progressDlg.Hide()
@@ -186,6 +232,9 @@ func (a *App) updateFromPaths(paths []string) {
 }
 
 func (a *App) setupPackageWatcher() {
+	if a.packageWatcherDisabled {
+		return
+	}
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		log.WithError(err).Error("failed to setup filesystem watcher")

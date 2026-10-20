@@ -2,7 +2,6 @@ package gui
 
 import (
 	"errors"
-	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -14,11 +13,11 @@ import (
 	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-	
+
 	xlayout "fyne.io/x/fyne/layout"
 
-	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/lang"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 
@@ -70,12 +69,12 @@ func (a *App) loadPack(path string) {
 
 		err = pkg.LoadTags()
 		if err != nil {
-			a.showErrorDialog(dderrors.CausedBy(fmt.Errorf(lang.X("package.tags.error", "Failed to read tags")), err))
+			a.showErrorDialog(dderrors.CausedBy(errors.New(lang.X("package.tags.error", "Failed to read tags")), err))
 			err = nil
 		}
 		err = pkg.LoadResourceMetadata()
 		if err != nil {
-			a.showErrorDialog(dderrors.CausedBy(fmt.Errorf(lang.X("package.metadata.error", "Failed to read metadata")), err))
+			a.showErrorDialog(dderrors.CausedBy(errors.New(lang.X("package.metadata.error", "Failed to read metadata")), err))
 			err = nil
 		}
 		a.setPackContent(pkg)

@@ -44,7 +44,7 @@ func (e *compoundError) Error() string {
 }
 
 func (e *compoundError) Causes() []error {
-  return e.causes
+	return e.causes
 }
 
 func (e *compoundError) Is(target error) bool {
