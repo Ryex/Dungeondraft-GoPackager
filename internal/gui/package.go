@@ -35,7 +35,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
+func (a *App) buildPackageTreeAndInfoPane(editable bool) *fyne.Container {
 	tree, filter, displayByTag := a.buildPackageTree(editable)
 
 	filterEntry := widgets.NewToolTipEntryWithData(filter)
@@ -139,6 +139,9 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) fyne.CanvasObject {
 		container.NewPadded(leftSplit),
 		container.NewPadded(rightSplit),
 	))
+
+	a.regions().ResourceTree = tree
+	a.regions().ResourcePane = rightSplit
 
 	return split
 }

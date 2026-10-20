@@ -116,7 +116,11 @@ func (a *App) loadUnpackedPath(path string) {
 	a.resetPkg()
 
 	go func() {
-		result, err := a.loadUnpackedSync(path, func(p float64, curPath string) {
+		loader := a.loadUnpacked
+		if loader == nil {
+			loader = a.loadUnpackedSync
+		}
+		result, err := loader(path, func(p float64, curPath string) {
 			activityProgress.Set(p)
 			activityStr.Set(lang.X(
 				"pack.buildList.activity",
@@ -547,6 +551,11 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 			),
 		),
 	)
+
+	// the regions have to be named before the content is shown, so that
+	// they are available as soon as the new content is visible
+	a.regions().ButtonPanel = packForm
+	a.regions().SplitPane = split
 
 	a.setMainContent(
 		container.New(

@@ -43,13 +43,11 @@ func (a *App) loadPack(path string) {
 	a.resetPkg()
 
 	go func() {
-		l := log.WithFields(log.Fields{
-			"path": path,
-		})
-
-		pkg := ddpackage.NewPackage(l)
-
-		err := pkg.LoadFromPackedPath(path, func(p float64, curRes string, _ int64) {
+		loader := a.loadPacked
+		if loader == nil {
+			loader = a.loadPackSync
+		}
+		pkg, err := loader(path, func(p float64, curRes string) {
 			activityProgress.Set(p)
 			activityStr.Set(
 				"res://" + utils.TruncatePathHumanFriendly(
@@ -59,26 +57,48 @@ func (a *App) loadPack(path string) {
 			)
 		})
 		if err != nil {
-			l.WithError(err).Error("could not load path")
 			a.setErrContent(
 				lang.X("err.badPack", "Failed to load {{.Path}}", map[string]any{"Path": path}),
 				err,
 			)
 			return
 		}
-
-		err = pkg.LoadTags()
-		if err != nil {
-			a.showErrorDialog(dderrors.CausedBy(errors.New(lang.X("package.tags.error", "Failed to read tags")), err))
-			err = nil
-		}
-		err = pkg.LoadResourceMetadata()
-		if err != nil {
-			a.showErrorDialog(dderrors.CausedBy(errors.New(lang.X("package.metadata.error", "Failed to read metadata")), err))
-			err = nil
-		}
 		a.setPackContent(pkg)
 	}()
+}
+
+// loadPackSync loads a packed resource pack file and its metadata. It does
+// not change the main content, so it can be driven directly from tests.
+func (a *App) loadPackSync(
+	path string,
+	progress func(p float64, curRes string),
+) (*ddpackage.Package, error) {
+	l := log.WithFields(log.Fields{
+		"path": path,
+	})
+
+	pkg := ddpackage.NewPackage(l)
+
+	err := pkg.LoadFromPackedPath(path, func(p float64, curRes string, _ int64) {
+		progress(p, curRes)
+	})
+	if err != nil {
+		l.WithError(err).Error("could not load path")
+		return nil, err
+	}
+
+	err = pkg.LoadTags()
+	if err != nil {
+		a.showErrorDialog(dderrors.CausedBy(errors.New(lang.X("package.tags.error", "Failed to read tags")), err))
+		err = nil
+	}
+	err = pkg.LoadResourceMetadata()
+	if err != nil {
+		a.showErrorDialog(dderrors.CausedBy(errors.New(lang.X("package.metadata.error", "Failed to read metadata")), err))
+		err = nil
+	}
+
+	return pkg, nil
 }
 
 func (a *App) setPackContent(pkg *ddpackage.Package) {
@@ -187,6 +207,11 @@ func (a *App) setPackContent(pkg *ddpackage.Package) {
 			),
 		),
 	)
+
+	// the regions have to be named before the content is shown, so that
+	// they are available as soon as the new content is visible
+	a.regions().ButtonPanel = extractForm
+	a.regions().SplitPane = split
 
 	a.setMainContent(
 		container.New(

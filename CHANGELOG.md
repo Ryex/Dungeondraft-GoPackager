@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 <!-- insertion marker -->
+### Bug Fixes
+
+- don't leak the dark mode listener when the interface is rebuilt after a language change.
+
 ## [v2.0.4](https://github.com/Ryex/Dungeondraft-GoPackager/releases/tag/v2.0.3) - 2025-4-25
 <small>[Compare with v2.0.3](https://github.com/Ryex/Dungeondraft-GoPackager/compare/v2.0.4...v2.0.3)</small>
 
