@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -160,9 +161,17 @@ type ResourceTree struct {
 	// resource that is shown under more than one tag is shown as selected
 	// in every one of them, so this holds more nodes than selected.
 	visiblySelected []widget.TreeNodeID
-	nodeTree        map[widget.TreeNodeID][]widget.TreeNodeID
-	nodeMap         map[widget.TreeNodeID]ResourceTreeNodeData
-	mode            ResourceTreeMode
+	// clickSelection holds the selection as it was before the current click
+	// sequence started. A double click restores it before it toggles the
+	// node, so that the double click only toggles the node it is on.
+	clickSelection []widget.TreeNodeID
+	// lastClickUID and lastClickTime hold the node and the time of the
+	// last click, which are used to detect a double click.
+	lastClickUID  widget.TreeNodeID
+	lastClickTime time.Time
+	nodeTree      map[widget.TreeNodeID][]widget.TreeNodeID
+	nodeMap       map[widget.TreeNodeID]ResourceTreeNodeData
+	mode          ResourceTreeMode
 
 	editable bool
 	filter   filter.ResourceFilter
@@ -546,6 +555,54 @@ func (t *ResourceTree) syncTreeSelection() {
 	t.Tree.Select(t.selected[len(t.selected)-1])
 }
 
+// ToggleSelection selects a node that is not selected and unselects a node
+// that is selected.
+func (t *ResourceTree) ToggleSelection(uid widget.TreeNodeID) {
+	if t.IsVisiblySelected(uid) {
+		t.Unselect(uid)
+		return
+	}
+	t.Select(uid)
+}
+
+// selectOnly selects a node and unselects everything else.
+func (t *ResourceTree) selectOnly(uid widget.TreeNodeID) {
+	t.UnselectAll()
+	t.Select(uid)
+}
+
+// isDoubleClick reports whether a click on the given node continues the
+// click sequence of the node, which makes it a double click.
+//
+// The interval of the driver is used, so that a double click is recognised
+// as fast as the system recognises it.
+func (t *ResourceTree) isDoubleClick(uid widget.TreeNodeID) bool {
+	return uid == t.lastClickUID &&
+		time.Since(t.lastClickTime) < fyne.CurrentApp().Driver().DoubleTapDelay()
+}
+
+// startClickSequence remembers the selection as it was before a click
+// sequence starts, so that a double click can restore it.
+func (t *ResourceTree) startClickSequence(uid widget.TreeNodeID) {
+	t.clickSelection = slices.Clone(t.selected)
+	t.lastClickUID = uid
+	t.lastClickTime = time.Now()
+}
+
+// endClickSequence ends the current click sequence, so that the next click
+// starts a new one.
+func (t *ResourceTree) endClickSequence() {
+	t.lastClickTime = time.Time{}
+}
+
+// restoreClickSelection restores the selection as it was before the current
+// click sequence started.
+func (t *ResourceTree) restoreClickSelection() {
+	t.selected = slices.Clone(t.clickSelection)
+	t.updateVisibleSelection()
+	t.syncTreeSelection()
+}
+
 func (t *ResourceTree) Select(uid widget.TreeNodeID) {
 	// a resource is only selected once, even when it is shown under more
 	// than one tag - the node that is selected last stays selected
@@ -705,17 +762,35 @@ func (n *ResourceTreeNode) MouseDown(e *desktop.MouseEvent) {
 	switch e.Button {
 	case desktop.MouseButtonPrimary:
 		{
+			// the modifier keys take precedence over the double click: they
+			// add or remove the node from the selection instead of toggling
+			// it
 			if e.Modifier&fyne.KeyModifierControl != 0 {
 				// unselect
+				n.tree.endClickSequence()
 				n.tree.Unselect(n.uid)
-			} else if e.Modifier&fyne.KeyModifierShift != 0 {
-				// add select
-				n.tree.Select(n.uid)
-			} else {
-				// select single
-				n.tree.UnselectAll()
-				n.tree.Select(n.uid)
+				return
 			}
+			if e.Modifier&fyne.KeyModifierShift != 0 {
+				// add select
+				n.tree.endClickSequence()
+				n.tree.Select(n.uid)
+				return
+			}
+			if n.tree.isDoubleClick(n.uid) {
+				// a double click toggles the selection of the node. The
+				// selection of the click that started the sequence is
+				// restored first, so that the double click only toggles
+				// the node it is on and keeps the rest of the selection.
+				n.tree.restoreClickSelection()
+				n.tree.ToggleSelection(n.uid)
+				n.tree.endClickSequence()
+				return
+			}
+			n.tree.startClickSequence(n.uid)
+
+			// select single
+			n.tree.selectOnly(n.uid)
 		}
 	case desktop.MouseButtonSecondary:
 		{
@@ -741,6 +816,27 @@ func (n *ResourceTreeNode) contextMenuItems() []*fyne.MenuItem {
 }
 
 func (n *ResourceTreeNode) MouseUp(e *desktop.MouseEvent) {}
+
+// Tapped handles a tap on the node.
+//
+// The mouse is handled through the desktop driver, which knows about the
+// modifier keys and detects the double clicks. The touch drivers only
+// report taps, so they are handled here.
+func (n *ResourceTreeNode) Tapped(*fyne.PointEvent) {
+	if !fyne.CurrentDevice().IsMobile() {
+		return
+	}
+	n.tree.selectOnly(n.uid)
+}
+
+// DoubleTapped handles a double tap on the node, which toggles the
+// selection of the node.
+func (n *ResourceTreeNode) DoubleTapped(*fyne.PointEvent) {
+	if !fyne.CurrentDevice().IsMobile() {
+		return
+	}
+	n.tree.ToggleSelection(n.uid)
+}
 
 func (n *ResourceTreeNode) CreateRenderer() fyne.WidgetRenderer {
 	th := n.Theme()
