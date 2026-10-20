@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 <!-- insertion marker -->
 ### Bug Fixes
 
+- highlight the selected resources in the resource tree.
+- fix the reversed context menu of the resource tree, it now offers to select an unselected
+  resource and to unselect a selected one.
+- show a resource under every one of its tags in the tag view of the resource tree, it was only
+  shown under the last of them.
+- highlight a resource in every tag it is shown under in the tag view of the resource tree, and
+  unselect it in all of them at once.
 - don't leak the dark mode listener when the interface is rebuilt after a language change.
 
 ## [v2.0.4](https://github.com/Ryex/Dungeondraft-GoPackager/releases/tag/v2.0.3) - 2025-4-25
