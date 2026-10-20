@@ -2,10 +2,12 @@ package resource_tree
 
 import (
 	"testing"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/data/binding"
+	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
 
@@ -352,4 +354,194 @@ func TestResourceTreeTagModeSelectionReportsEveryNode(t *testing.T) {
 
 	data := tree.GetSelectionAndChildData()
 	require.Len(t, data, 1, "the resource must be reported once")
+}
+
+// click simulates a primary mouse click on the node.
+func click(node *ResourceTreeNode) {
+	clickWith(node, 0)
+}
+
+// clickWith simulates a primary mouse click with the given modifiers on the
+// node.
+func clickWith(node *ResourceTreeNode, modifier fyne.KeyModifier) {
+	node.MouseDown(&desktop.MouseEvent{Button: desktop.MouseButtonPrimary, Modifier: modifier})
+}
+
+// doubleClick simulates a double click on the node.
+func doubleClick(node *ResourceTreeNode) {
+	click(node)
+	click(node)
+}
+
+// doubleClickWith simulates a double click with the given modifiers on the
+// node.
+func doubleClickWith(node *ResourceTreeNode, modifier fyne.KeyModifier) {
+	clickWith(node, modifier)
+	clickWith(node, modifier)
+}
+
+func TestResourceTreeDoubleClickSelectsAnUnselectedResource(t *testing.T) {
+	pkg, _ := loadFixture(t)
+	tree := newTree(t, pkg)
+
+	nodes := treeNodes(t, tree, "dir://textures", "dir://textures/objects")
+	node, ok := nodes[rockResPath]
+	require.True(t, ok, "the tree must hold a node for the resource")
+	require.False(t, tree.IsVisiblySelected(rockResPath))
+
+	doubleClick(node)
+
+	assert.True(t, tree.IsVisiblySelected(rockResPath),
+		"a double click must select a resource that was not selected")
+}
+
+func TestResourceTreeDoubleClickUnselectsASelectedResource(t *testing.T) {
+	pkg, _ := loadFixture(t)
+	tree := newTree(t, pkg)
+
+	nodes := treeNodes(t, tree, "dir://textures", "dir://textures/objects")
+	node, ok := nodes[rockResPath]
+	require.True(t, ok, "the tree must hold a node for the resource")
+
+	tree.Select(rockResPath)
+	require.True(t, tree.IsVisiblySelected(rockResPath))
+
+	doubleClick(node)
+
+	assert.False(t, tree.IsVisiblySelected(rockResPath),
+		"a double click must unselect a resource that was selected")
+}
+
+func TestResourceTreeDoubleClickKeepsTheRestOfTheSelection(t *testing.T) {
+	pkg, _ := loadFixture(t)
+	tree := newTree(t, pkg)
+
+	nodes := treeNodes(t, tree, "dir://textures", "dir://textures/objects")
+	node, ok := nodes[rockResPath]
+	require.True(t, ok, "the tree must hold a node for the resource")
+	_, ok = nodes["res://packs/testpack/textures/objects/Tree.png"]
+	require.True(t, ok, "the tree must hold a node for the resource")
+
+	tree.Select("res://packs/testpack/textures/objects/Tree.png")
+
+	doubleClick(node)
+
+	assert.True(t, tree.IsVisiblySelected("res://packs/testpack/textures/objects/Tree.png"),
+		"a double click must keep the rest of the selection")
+	assert.True(t, tree.IsVisiblySelected(rockResPath),
+		"a double click must select the resource it is on")
+}
+
+func TestResourceTreeClickAfterAPauseIsNoDoubleClick(t *testing.T) {
+	pkg, _ := loadFixture(t)
+	tree := newTree(t, pkg)
+
+	nodes := treeNodes(t, tree, "dir://textures", "dir://textures/objects")
+	node, ok := nodes[rockResPath]
+	require.True(t, ok, "the tree must hold a node for the resource")
+
+	click(node)
+	time.Sleep(fyne.CurrentApp().Driver().DoubleTapDelay() + 50*time.Millisecond)
+	click(node)
+
+	assert.True(t, tree.IsVisiblySelected(rockResPath),
+		"two clicks that are too far apart must not toggle the selection")
+}
+
+func TestResourceTreeDoubleClickWithControlDoesNotToggle(t *testing.T) {
+	pkg, _ := loadFixture(t)
+	tree := newTree(t, pkg)
+
+	nodes := treeNodes(t, tree, "dir://textures", "dir://textures/objects")
+	node, ok := nodes[rockResPath]
+	require.True(t, ok, "the tree must hold a node for the resource")
+
+	// the control key removes the node from the selection, it must not
+	// toggle it
+	doubleClickWith(node, fyne.KeyModifierControl)
+
+	assert.False(t, tree.IsVisiblySelected(rockResPath),
+		"a double click with the control key must not select the node")
+}
+
+func TestResourceTreeDoubleClickWithControlUnselects(t *testing.T) {
+	pkg, _ := loadFixture(t)
+	tree := newTree(t, pkg)
+
+	nodes := treeNodes(t, tree, "dir://textures", "dir://textures/objects")
+	node, ok := nodes[rockResPath]
+	require.True(t, ok, "the tree must hold a node for the resource")
+
+	tree.Select(rockResPath)
+	require.True(t, tree.IsVisiblySelected(rockResPath))
+
+	doubleClickWith(node, fyne.KeyModifierControl)
+
+	assert.False(t, tree.IsVisiblySelected(rockResPath),
+		"a double click with the control key must unselect the node")
+}
+
+func TestResourceTreeDoubleClickWithShiftKeepsTheSelection(t *testing.T) {
+	pkg, _ := loadFixture(t)
+	tree := newTree(t, pkg)
+
+	nodes := treeNodes(t, tree, "dir://textures", "dir://textures/objects")
+	node, ok := nodes[rockResPath]
+	require.True(t, ok, "the tree must hold a node for the resource")
+	otherUID := widget.TreeNodeID("res://packs/testpack/textures/objects/Tree.png")
+	_, ok = nodes[otherUID]
+	require.True(t, ok, "the tree must hold a node for the resource")
+
+	tree.Select(otherUID)
+
+	// the shift key adds the node to the selection, it must not toggle it
+	doubleClickWith(node, fyne.KeyModifierShift)
+
+	assert.True(t, tree.IsVisiblySelected(rockResPath),
+		"a double click with the shift key must keep the node selected")
+	assert.True(t, tree.IsVisiblySelected(otherUID),
+		"a double click with the shift key must keep the rest of the selection")
+}
+
+func TestResourceTreeDoubleClickWithShiftKeepsASelectedNode(t *testing.T) {
+	pkg, _ := loadFixture(t)
+	tree := newTree(t, pkg)
+
+	nodes := treeNodes(t, tree, "dir://textures", "dir://textures/objects")
+	node, ok := nodes[rockResPath]
+	require.True(t, ok, "the tree must hold a node for the resource")
+
+	tree.Select(rockResPath)
+	require.True(t, tree.IsVisiblySelected(rockResPath))
+
+	// the shift key adds the node to the selection, so a node that is
+	// already selected stays selected
+	doubleClickWith(node, fyne.KeyModifierShift)
+
+	assert.True(t, tree.IsVisiblySelected(rockResPath),
+		"a double click with the shift key must not unselect the node")
+}
+
+func TestResourceTreeModifiedClickEndsTheClickSequence(t *testing.T) {
+	pkg, _ := loadFixture(t)
+	tree := newTree(t, pkg)
+
+	nodes := treeNodes(t, tree, "dir://textures", "dir://textures/objects")
+	node, ok := nodes[rockResPath]
+	require.True(t, ok, "the tree must hold a node for the resource")
+
+	click(node)
+	require.True(t, tree.IsVisiblySelected(rockResPath))
+
+	// the control key removes the node from the selection, it must not be
+	// swallowed by the double click of the click before it
+	clickWith(node, fyne.KeyModifierControl)
+	assert.False(t, tree.IsVisiblySelected(rockResPath),
+		"a modified click must not be swallowed by a double click")
+
+	// the modified click ended the click sequence, so this click is not the
+	// second click of a double click
+	click(node)
+	assert.True(t, tree.IsVisiblySelected(rockResPath),
+		"a modified click must end the click sequence")
 }
