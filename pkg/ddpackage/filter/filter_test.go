@@ -143,7 +143,6 @@ func TestParseFilterTagNameFuzzy(t *testing.T) {
 	)
 }
 
-
 func TestParseFilterGlobNameFuzzy(t *testing.T) {
 	str := "/**/bird*.png rock"
 	filter, err := ParseResourceFilter(str)
@@ -198,7 +197,7 @@ func TestParseFilterGroupCollapse(t *testing.T) {
 	str := `(& #bird rock)`
 	filter, err := ParseResourceFilter(str)
 	assert.Nil(t, err)
-	assert.Equal(t, filter, &ResourceFilterAnd{
+	assert.Equal(t, &ResourceFilterAnd{
 		Filters: []ResourceFilter{
 			&ResourceFilterTag{
 				Tag:       "bird",
@@ -212,6 +211,7 @@ func TestParseFilterGroupCollapse(t *testing.T) {
 			},
 		},
 	},
+		filter,
 	)
 }
 

@@ -66,6 +66,15 @@ type App struct {
 
 	packageWatcherIgnoreThumbnails bool
 
+	// packageWatcherDisabled stops the filesystem watcher from being started.
+	// Used by tests, which drive the package loading directly.
+	packageWatcherDisabled bool
+
+	// prefLocaleListener is the listener registered on the locale preference.
+	// It is removed and replaced whenever the UI is rebuilt and detached
+	// when the app is cleaned up.
+	prefLocaleListener binding.DataListener
+
 	pkgUpdateCounter int
 	packageUpdated   binding.Int
 
@@ -74,6 +83,11 @@ type App struct {
 
 //go:embed translation
 var translations embed.FS
+
+// translationsOnce guards loading the embedded translation catalog so that
+// repeated calls to setup (e.g. from tests) do not register the same
+// translations more than once in the global i18n bundle.
+var translationsOnce sync.Once
 
 func NewApp() *App {
 	app := &App{
@@ -85,15 +99,37 @@ func NewApp() *App {
 	return app
 }
 
+// NewAppWithFyneApp creates an App that uses the given Fyne application
+// instead of creating a desktop one. This is used by tests to inject a
+// software rendered application from fyne.io/fyne/v2/test.
+func NewAppWithFyneApp(fyneApp fyne.App) *App {
+	a := NewApp()
+	a.app = fyneApp
+	return a
+}
+
 func (a *App) Main() {
-	a.app = app.NewWithID("io.github.ryex.dungeondraft-gopackager")
+	a.setup()
+	a.app.Run()
+	a.clean()
+}
+
+// setup prepares the application window and user interface without entering
+// the event loop. It is separated from Main so that tests can build the UI
+// without blocking on app.Run().
+func (a *App) setup() {
+	if a.app == nil {
+		a.app = app.NewWithID("io.github.ryex.dungeondraft-gopackager")
+	}
 	locale := lang.SystemLocale()
 
 	log.Infof("system local %s : %s", locale.LanguageString(), locale.String())
-	translationErr := lang.AddTranslationsFS(translations, "translation")
-	if translationErr != nil {
-		log.WithError(translationErr).Error("Failed to load translations")
-	}
+	translationsOnce.Do(func() {
+		translationErr := lang.AddTranslationsFS(translations, "translation")
+		if translationErr != nil {
+			log.WithError(translationErr).Error("Failed to load translations")
+		}
+	})
 
 	localeString := lang.ClosestSupportedLocale([]string{locale.LanguageString()}).LanguageString()
 	prefLocaleBinding := binding.BindPreferenceString("locale", a.app.Preferences())
@@ -112,7 +148,12 @@ func (a *App) Main() {
 
 	a.setupWindow()
 
-	a.prefLocale.AddListener(binding.NewDataListener(func() {
+	// The preference binding is shared globally by key, so the previous
+	// listener has to be detached before a new one is attached.
+	if a.prefLocaleListener != nil {
+		a.prefLocale.RemoveListener(a.prefLocaleListener)
+	}
+	a.prefLocaleListener = binding.NewDataListener(func() {
 		newLocale, err := prefLocaleBinding.Get()
 		// ignore fetch error and if the local hasn't actually changed (first run)
 		if err != nil || newLocale == prefLocale {
@@ -121,10 +162,8 @@ func (a *App) Main() {
 		prefLocale = newLocale
 		lang.SetupLang(prefLocale)
 		a.setupWindow()
-	}))
-
-	a.app.Run()
-	a.clean()
+	})
+	a.prefLocale.AddListener(a.prefLocaleListener)
 }
 
 func (a *App) setupWindow() {
@@ -172,6 +211,14 @@ func (a *App) resetPkg() {
 
 func (a *App) clean() {
 	a.resetPkg()
+	if a.prefLocaleListener != nil && a.prefLocale != nil {
+		a.prefLocale.RemoveListener(a.prefLocaleListener)
+		a.prefLocaleListener = nil
+	}
+	if a.window != nil {
+		// release the resources held by the tool tip layer of the window
+		fynetooltip.DestroyWindowToolTipLayer(a.window.Canvas())
+	}
 	fmt.Println("Exited")
 }
 

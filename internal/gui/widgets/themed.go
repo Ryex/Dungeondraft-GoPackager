@@ -79,7 +79,7 @@ type ThemedText struct {
 func NewThemedText(text string, color fyne.ThemeColorName, sizeoptional ...float32) *ThemedText {
 	size := theme.TextSize()
 	if len(sizeoptional) > 0 {
-		size  = sizeoptional[0]
+		size = sizeoptional[0]
 	}
 	t := &ThemedText{
 		Color: color,

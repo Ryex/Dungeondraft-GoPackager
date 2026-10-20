@@ -13,5 +13,5 @@ func (s *Semaphore) Acquire() {
 }
 
 func (s *Semaphore) Release() {
-	<- s.Channel
+	<-s.Channel
 }

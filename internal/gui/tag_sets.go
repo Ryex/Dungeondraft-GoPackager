@@ -13,9 +13,9 @@ import (
 	cLayout "fyne.io/x/fyne/layout"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/bindings"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/lang"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/widgets"
-	"github.com/ryex/dungeondraft-gopackager/internal/gui/lang"
 
 	log "github.com/sirupsen/logrus"
 )

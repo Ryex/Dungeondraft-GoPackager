@@ -28,37 +28,37 @@ func (b *binder) Bind(data binding.DataItem) {
 	})
 	data.AddListener(listener)
 	pair := listenerPair{
-	  data: data,
-	  listener: listener,
+		data:     data,
+		listener: listener,
 	}
 	b.lock.Lock()
 	b.unbindLocked()
-	b.pair =pair
+	b.pair = pair
 	b.lock.Unlock()
 }
 
 func (b *binder) CallWithData(f func(data binding.DataItem)) {
-  b.lock.RLock()
-  data := b.pair.data
-  b.lock.RUnlock()
-  f(data)
+	b.lock.RLock()
+	data := b.pair.data
+	b.lock.RUnlock()
+	f(data)
 }
 
 func (b *binder) SetCallback(f func(data binding.DataItem)) {
-  b.callback.Store(&f)
+	b.callback.Store(&f)
 }
 
 func (b *binder) Unbind() {
-  b.lock.Lock()
-  b.unbindLocked()
-  b.lock.Unlock()
+	b.lock.Lock()
+	b.unbindLocked()
+	b.lock.Unlock()
 }
 
-func(b *binder) unbindLocked() {
-  prev := b.pair
-  b.pair = listenerPair{nil, nil}
-  if prev.listener == nil || prev.data == nil {
-    return
-  }
-  prev.data.RemoveListener(prev.listener)
+func (b *binder) unbindLocked() {
+	prev := b.pair
+	b.pair = listenerPair{nil, nil}
+	if prev.listener == nil || prev.data == nil {
+		return
+	}
+	prev.data.RemoveListener(prev.listener)
 }

@@ -1,0 +1,23 @@
+# Normalize all text files to LF in the repository and check them out with LF
+# endings on every platform, regardless of core.autocrlf.
+* text=auto eol=lf
+
+# Binary files must never be line ending converted.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.bmp binary
+*.ico binary
+*.icns binary
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.a binary
+*.lib binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.tar binary

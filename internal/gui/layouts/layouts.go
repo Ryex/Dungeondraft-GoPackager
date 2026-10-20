@@ -291,7 +291,6 @@ func (v bottomExpandVBoxLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
 	return minSize
 }
 
-
 // ** top expand VBox **
 
 type topExpandVBoxLayout struct {

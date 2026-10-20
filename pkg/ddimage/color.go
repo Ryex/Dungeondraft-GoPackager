@@ -171,7 +171,7 @@ func lignten(col color.Color, ky float64, kc float64) color.Color {
 }
 
 // Lignten (c color.Color, ammount = 0.5, chomaInversionGain = 1.0)
-// 
+//
 // Adjust the luma of a color by changing its distance from white.
 //
 // amount == 1.0 gives white
@@ -204,7 +204,7 @@ func darken(col color.Color, ky float64, kc float64) color.Color {
 }
 
 // Darken (c color.Color, ammount = 0.5, chomaInversionGain = 1.0)
-// 
+//
 // Adjust the luma of a color by changing its distance from black.
 //
 // amount == 1.0 gives black

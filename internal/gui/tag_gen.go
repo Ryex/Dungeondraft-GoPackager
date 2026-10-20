@@ -13,19 +13,19 @@ import (
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-	
+
 	xlayout "fyne.io/x/fyne/layout"
-	
+
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/bindings"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/lang"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/widgets"
-	"github.com/ryex/dungeondraft-gopackager/internal/gui/lang"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
-	
+
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddpackage"
 	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
-	
+
 	log "github.com/sirupsen/logrus"
 )
 

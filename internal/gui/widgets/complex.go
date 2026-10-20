@@ -26,8 +26,8 @@ func NewEntryWCopyBtn() *EntryWCopyBtn {
 		fyne.CurrentApp().Clipboard().SetContent(entry.Text)
 	})
 	e := &EntryWCopyBtn{
-		entry:         entry,
-		copyButton:    copyButton,
+		entry:      entry,
+		copyButton: copyButton,
 	}
 	copyButton.SetToolTip(lang.X("btn.copy.tooltip", "Copy to Clipboard"))
 

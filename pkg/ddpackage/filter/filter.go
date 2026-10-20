@@ -582,6 +582,12 @@ func (ctx *ParseContext) finish() (ResourceFilter, error) {
 	if err != nil {
 		return nil, ctx.newParseError(NoGroupToCloseErr)
 	}
+	// filter out empty filters before deciding whether the group collapses,
+	// otherwise a group holding a single filter is never collapsed
+	group.filters = slices.Collect(utils.Filter(slices.Values(group.filters), func(rf ResourceFilter) bool {
+		_, ok := rf.(*ResourceFilterEmpty)
+		return !ok
+	}))
 	if len(group.filters) == 0 {
 		return &ResourceFilterEmpty{}, nil
 	}
