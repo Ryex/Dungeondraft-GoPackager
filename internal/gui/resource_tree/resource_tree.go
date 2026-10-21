@@ -699,6 +699,55 @@ func (t *ResourceTree) GetSelectionAndChildData() []ResourceTreeNodeData {
 	return results
 }
 
+// SelectedResource is a resource that is selected in the tree.
+type SelectedResource struct {
+	// Uid is the id of the node the resource is shown as.
+	Uid widget.TreeNodeID
+	// Info is the information of the resource.
+	Info *structures.FileInfo
+	// Selected is true when the resource is selected on its own and not
+	// only because one of the branches that hold it is selected.
+	Selected bool
+}
+
+// GetSelectedResources returns the resources that are selected in the tree.
+//
+// The resources of a selected branch are part of the selection as well, they
+// are just not selected on their own. A resource that is shown under more than
+// one tag is only reported once.
+func (t *ResourceTree) GetSelectedResources() []SelectedResource {
+	resources := []SelectedResource{}
+	seen := map[ResourceTreeNodeData]bool{}
+	stack := structures.NewStackFromSlice(t.selected)
+	for !stack.IsEmpty() {
+		uid, _ := stack.Pop()
+		if t.IsBranch(uid) {
+			children := t.nodeTree[uid]
+			stack.Push(children...)
+		}
+		data := t.DataFor(uid)
+		if data == nil || seen[data] {
+			continue
+		}
+		seen[data] = true
+		node, isResource := data.(*ResourceFileInfoNode)
+		if !isResource || node.Info == nil {
+			continue
+		}
+		resources = append(resources, SelectedResource{
+			Uid:      uid,
+			Info:     node.Info,
+			Selected: t.IsSelected(uid),
+		})
+	}
+	// the map of the nodes is unordered, so the resources are sorted to
+	// keep the order of the selection stable
+	slices.SortFunc(resources, func(a, b SelectedResource) int {
+		return strings.Compare(a.Info.ResPath, b.Info.ResPath)
+	})
+	return resources
+}
+
 func (t *ResourceTree) CreateNode(branch bool) fyne.CanvasObject {
 	var content fyne.CanvasObject
 	if branch {
