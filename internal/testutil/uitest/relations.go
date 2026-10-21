@@ -192,6 +192,38 @@ func centers(subject fyne.CanvasObject, s *Scope) (float32, float32, error) {
 	return subjectCenter, scopeCenter, nil
 }
 
+// visibilityRelation asserts that a widget is shown or hidden.
+type visibilityRelation struct {
+	visible bool
+}
+
+// Visible asserts that the widget is shown.
+func Visible() Relation {
+	return visibilityRelation{visible: true}
+}
+
+// Hidden asserts that the widget is hidden.
+func Hidden() Relation {
+	return visibilityRelation{visible: false}
+}
+
+func (r visibilityRelation) Check(subject fyne.CanvasObject, s *Scope) error {
+	if subject.Visible() == r.visible {
+		return nil
+	}
+	if r.visible {
+		return fmt.Errorf("expected to be visible, but it is hidden")
+	}
+	return fmt.Errorf("expected to be hidden, but it is visible")
+}
+
+func (r visibilityRelation) String() string {
+	if r.visible {
+		return "visible"
+	}
+	return "hidden"
+}
+
 // extremeRelation asserts that no other widget of the scope is placed
 // further up or further down.
 type extremeRelation struct {

@@ -12,6 +12,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/named"
 )
 
 func TestMain(m *testing.M) {
@@ -210,6 +212,74 @@ func TestObjectSelectorOnlyMatchesInsideTheScope(t *testing.T) {
 	failures := Has("a button", Object(right)).Check(In(container.NewWithoutLayout()))
 	require.Len(t, failures, 1)
 	assert.Contains(t, failures[0].Message, "found none")
+}
+
+// wrap replaces the object at the given index of the tree with a named
+// wrapper around it.
+func wrap(root *fyne.Container, index int, name string) *named.Named {
+	inner := root.Objects[index]
+	wrapped := named.New(name, inner)
+	wrapped.Move(inner.Position())
+	wrapped.Resize(inner.Size())
+	root.Objects[index] = wrapped
+	return wrapped
+}
+
+func TestNamedSelectorFindsTheNamedPart(t *testing.T) {
+	root, _, _, _, _ := tree()
+	wrap(root, 1, "openPackButton")
+
+	assert.Empty(t, Has("the open pack button", Named("openPackButton")).Check(In(root)))
+}
+
+func TestNamedSelectorOnlyMatchesInsideTheScope(t *testing.T) {
+	root, _, _, _, _ := tree()
+	wrap(root, 1, "openPackButton")
+
+	failures := Has("the open pack button", Named("openPackButton")).
+		Check(In(container.NewWithoutLayout()))
+	require.Len(t, failures, 1)
+	assert.Contains(t, failures[0].Message, "found none")
+}
+
+func TestSelectorsSeeThroughTheNamedWrapper(t *testing.T) {
+	root, _, _, _, _ := tree()
+	wrap(root, 1, "openPackButton")
+
+	assert.Empty(t, Has("an open pack button", Button("Open pack")).Check(In(root)))
+}
+
+func TestTabSelectorFindsTheContentOfTheTab(t *testing.T) {
+	tabs := container.NewAppTabs(
+		container.NewTabItem("First", widget.NewLabel("first")),
+		container.NewTabItem("Second", widget.NewLabel("second")),
+	)
+	root := container.NewWithoutLayout(tabs)
+
+	assert.Empty(t, Has("the first tab", Tab("First")).Check(In(root)))
+	assert.Empty(t, Has("the second tab", Tab("Second")).Check(In(root)))
+
+	failures := Has("the third tab", Tab("Third")).Check(In(root))
+	require.Len(t, failures, 1)
+	assert.Contains(t, failures[0].Message, "found none")
+}
+
+func TestVisibilityRelations(t *testing.T) {
+	shown := widget.NewLabel("shown")
+	hidden := widget.NewLabel("hidden")
+	hidden.Hide()
+	root := container.NewWithoutLayout(shown, hidden)
+
+	assert.Empty(t, Has("a shown label", Object(shown)).Visible().Check(In(root)))
+	assert.Empty(t, Has("a hidden label", Object(hidden)).Hidden().Check(In(root)))
+
+	failures := Has("a shown label", Object(shown)).Hidden().Check(In(root))
+	require.Len(t, failures, 1)
+	assert.Contains(t, failures[0].Message, "hidden")
+
+	failures = Has("a hidden label", Object(hidden)).Visible().Check(In(root))
+	require.Len(t, failures, 1)
+	assert.Contains(t, failures[0].Message, "visible")
 }
 
 func TestGroupPrefixesTheFailurePath(t *testing.T) {

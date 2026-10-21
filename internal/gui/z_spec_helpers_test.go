@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
 	"github.com/stretchr/testify/require"
 
@@ -34,6 +35,20 @@ func newSpecApp(t *testing.T) *App {
 	t.Cleanup(a.clean)
 
 	return a
+}
+
+// namedPart returns the part of the user interface with the given name.
+//
+// It fails the test when the interface has no part with that name, so that a
+// renamed part does not turn into a puzzling "found none" failure.
+func namedPart(t *testing.T, a *App, name string) fyne.CanvasObject {
+	t.Helper()
+
+	obj := a.ui.Get(name)
+	if obj == nil {
+		t.Fatalf("the user interface has no part named %q", name)
+	}
+	return obj
 }
 
 // blockUnpackedLoad replaces the folder loader of the app with one that
@@ -81,6 +96,10 @@ func blockPackedLoad(a *App) (release func()) {
 // the loaded pack, so they are the signal that the load is done. The layout
 // of the new content is settled as well, because it is built while the pack
 // is loaded.
+//
+// The load itself runs in the background and updates the interface when it is
+// done, so it is waited for as well: the interface must not be touched while
+// the load is still running.
 func waitForPackLoad(t *testing.T, a *App) {
 	t.Helper()
 
@@ -89,7 +108,39 @@ func waitForPackLoad(t *testing.T, a *App) {
 		return err == nil && !disabled
 	}, 10*time.Second, 20*time.Millisecond, "the pack must be loaded")
 
+	loaded := make(chan struct{})
+	go func() {
+		a.bgWG.Wait()
+		close(loaded)
+	}()
+	select {
+	case <-loaded:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the background load must finish")
+	}
+
 	waitForStableLayout(t, a)
+}
+
+// waitForBackgroundWork waits until the background work that touches the
+// interface is done.
+//
+// The loads of a package and the computations of the md5 hashes run in the
+// background and update the interface, so the interface must not be touched
+// while they are running.
+func waitForBackgroundWork(t *testing.T, a *App) {
+	t.Helper()
+
+	done := make(chan struct{})
+	go func() {
+		a.bgWG.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the background work must finish")
+	}
 }
 
 // waitForStableLayout waits until the layout of the main content stops
@@ -102,10 +153,14 @@ func waitForPackLoad(t *testing.T, a *App) {
 func waitForStableLayout(t *testing.T, a *App) {
 	t.Helper()
 
+	// the content object itself stays the same, only its contents change,
+	// so it is resolved once, outside of the polling below
+	content := namedPart(t, a, nameContent)
+
 	var last string
 	stable := 0
 	require.Eventually(t, func() bool {
-		current := uitest.LayoutFingerprint(a.ui.Content)
+		current := uitest.LayoutFingerprint(content)
 		if current == last {
 			stable++
 			return stable >= 2
@@ -165,6 +220,13 @@ func packedFixtureFile(t *testing.T) string {
 	t.Helper()
 
 	dir := packFixtureDir(t)
+	return packFixture(t, dir)
+}
+
+// packFixture packs the fixture in the given directory up and returns the
+// path of the resulting .dungeondraft_pack file.
+func packFixture(t *testing.T, dir string) string {
+	t.Helper()
 
 	result, err := loadUnpackedFixture(t, dir)
 	require.NoError(t, err)

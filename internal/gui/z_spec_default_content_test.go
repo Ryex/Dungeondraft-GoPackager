@@ -16,7 +16,7 @@ import (
 func TestSpecDefaultContent(t *testing.T) {
 	a := newSpecApp(t)
 
-	uitest.Expect(t, uitest.In(a.ui.Content),
+	uitest.Expect(t, uitest.In(namedPart(t, a, nameContent)),
 		uitest.Group("when the app has just started and no pack has been opened yet",
 			uitest.Has("the main default text",
 				uitest.ThemedText(defaultTextLines()[0]),
@@ -26,7 +26,7 @@ func TestSpecDefaultContent(t *testing.T) {
 
 	// the whole of main.defaultText is shown, split over its lines
 	for _, line := range defaultTextLines() {
-		uitest.Expect(t, uitest.In(a.ui.Content),
+		uitest.Expect(t, uitest.In(namedPart(t, a, nameContent)),
 			uitest.Has("the line of the main default text",
 				uitest.ThemedText(line),
 			),

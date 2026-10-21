@@ -22,6 +22,7 @@ import (
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/bindings"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/lang"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/named"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/resource_tree"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/widgets"
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
@@ -35,7 +36,30 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func (a *App) buildPackageTreeAndInfoPane(editable bool) *fyne.Container {
+// The names of the parts of the package content.
+//
+// The parts of the interface are named where they are created, so that they
+// can be looked up by name later, e.g. by the specification tests.
+const (
+	nameResourceTree    = "resourceTree"
+	nameResourcePane    = "resourcePane"
+	nameSplitPane       = "splitPane"
+	nameFilterEntry     = "filterEntry"
+	nameDisplayByRadio  = "displayByRadio"
+	nameInfoTabs        = "infoTabs"
+	nameFilePreview     = "filePreview"
+	nameTagInfo         = "tagInfo"
+	nameMetadataPane    = "metadataPane"
+	nameMetadataForm    = "metadataForm"
+	nameBulkOpsPane     = "bulkOpsPane"
+	nameThumbnailToggle = "thumbnailToggle"
+	nameImagePreview    = "imagePreview"
+	nameTextPreview     = "textPreview"
+	nameTooLargeLabel   = "tooLargeLabel"
+	nameTagList         = "tagList"
+)
+
+func (a *App) buildPackageTreeAndInfoPane(editable bool) *named.Named {
 	tree, filter, displayByTag := a.buildPackageTree(editable)
 
 	filterEntry := widgets.NewToolTipEntryWithData(filter)
@@ -85,7 +109,7 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) *fyne.Container {
 	displayByRadio.SetSelected(byResourceOption)
 
 	displayByContainer := layouts.NewRightExpandHBox(
-		displayByLbl, displayByRadio,
+		displayByLbl, named.New(nameDisplayByRadio, displayByRadio),
 	)
 
 	leftSplit := layouts.NewTopExpandVBox(
@@ -93,11 +117,11 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) *fyne.Container {
 			displayByContainer,
 			layouts.NewRightExpandHBox(
 				widget.NewLabel(lang.X("tree.label", "Resources")),
-				filterEntry,
+				named.New(nameFilterEntry, filterEntry),
 			),
 			container.NewStack(
 				widgets.NewThemedRect(theme.ColorNameInputBackground, 4),
-				container.NewPadded(tree),
+				container.NewPadded(named.New(nameResourceTree, tree)),
 			),
 		),
 	)
@@ -133,17 +157,20 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) *fyne.Container {
 		rightSplit.RemoveAll()
 		rightSplit.Add(content)
 		rightSplit.Refresh()
+
+		// the parts of the information pane are new objects, so the cache
+		// of the named parts has to forget the old ones
+		if a.ui != nil {
+			a.ui.Reset()
+		}
 	}
 
 	split := container.NewPadded(container.NewHSplit(
 		container.NewPadded(leftSplit),
-		container.NewPadded(rightSplit),
+		container.NewPadded(named.New(nameResourcePane, rightSplit)),
 	))
 
-	a.regions().ResourceTree = tree
-	a.regions().ResourcePane = rightSplit
-
-	return split
+	return named.New(nameSplitPane, split)
 }
 
 func (a *App) buildPackageTree(editable bool) (*resource_tree.ResourceTree, binding.String, binding.Bool) {
@@ -197,7 +224,7 @@ func (a *App) buildInfoPane(info *structures.FileInfo, editable bool) fyne.Canva
 	tabs["Resource"] = container.NewTabItemWithIcon(
 		lang.X("preview.tab.resource", "Resource"),
 		theme.FileIcon(),
-		a.buildFilePreview(info),
+		named.New(nameFilePreview, a.buildFilePreview(info)),
 	)
 
 	tabsContainer := container.NewAppTabs(tabs["Resource"])
@@ -206,7 +233,7 @@ func (a *App) buildInfoPane(info *structures.FileInfo, editable bool) fyne.Canva
 		tabs["Tags"] = container.NewTabItemWithIcon(
 			lang.X("preview.tab.tags", "Tags"),
 			theme.ListIcon(),
-			a.buildTagInfo(info, editable),
+			named.New(nameTagInfo, a.buildTagInfo(info, editable)),
 		)
 		tabsContainer.Append(tabs["Tags"])
 	}
@@ -215,7 +242,7 @@ func (a *App) buildInfoPane(info *structures.FileInfo, editable bool) fyne.Canva
 		tabs["Settings"] = container.NewTabItemWithIcon(
 			lang.X("preview.tab.metadata", "Settings"),
 			theme.ColorPaletteIcon(),
-			a.buildMetadataPane(info, editable),
+			named.New(nameMetadataPane, a.buildMetadataPane(info, editable)),
 		)
 		tabsContainer.Append(tabs["Settings"])
 	}
@@ -236,7 +263,7 @@ func (a *App) buildInfoPane(info *structures.FileInfo, editable bool) fyne.Canva
 
 	return container.NewBorder(
 		nil, nil, nil, nil,
-		tabsContainer,
+		named.New(nameInfoTabs, tabsContainer),
 	)
 }
 
@@ -250,7 +277,7 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 	showThumbnail := binding.BindPreferenceBool("showThumbnails", a.app.Preferences())
 	thumbnailToggle := widgets.NewToggleWithData(showThumbnail)
 	thumbnailLbl := widget.NewLabel(lang.X("preview.thumbnail.toggle", "Show Thumbnail"))
-	thumbToggle := layouts.NewLeftExpandHBox(thumbnailLbl, thumbnailToggle)
+	thumbToggle := named.New(nameThumbnailToggle, layouts.NewLeftExpandHBox(thumbnailLbl, thumbnailToggle))
 	if !info.IsTexture() {
 		thumbToggle.Hide()
 	}
@@ -273,16 +300,25 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 	entryCont := container.NewVBox(resPath, fsPath, resMd5)
 	infoCont := container.NewBorder(nil, nil, labelCont, nil, entryCont)
 
+	// the md5 of the resource is computed in the background when it is not
+	// known yet, so the update of the entry is tracked as background work
+	// that touches the interface
+	a.bgWG.Add(1)
 	a.pkg.GetOrUpdateResourceMd5(info, func(md5 string, err error) {
+		defer a.bgWG.Done()
+
 		if err != nil {
 			log.WithError(err).Errorf("Failed to update hash for %s", info.ResPath)
 		}
-		resMd5.SetText(md5)
+		// the entry may only be touched on the Fyne goroutine
+		fyne.Do(func() {
+			resMd5.SetText(md5)
+		})
 	})
 
-	tooLarge := container.NewCenter(
+	tooLarge := named.New(nameTooLargeLabel, container.NewCenter(
 		widget.NewLabel(lang.X("preview.tooLarge", "This file is too large!\nOpen it in a text editor.")),
-	)
+	))
 
 	bg := widgets.NewThemedRect(theme.ColorNameInputBackground, 4)
 
@@ -298,7 +334,6 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 				),
 			)
 		}
-		widget.NewMultiLineEntry()
 		textEntry := widget.NewMultiLineEntry()
 		textEntry.Text = textContent
 		copyBtn := widget.NewButtonWithIcon("", theme.ContentCopyIcon(), func() {
@@ -309,7 +344,7 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 				infoCont,
 				container.NewStack(
 					bg,
-					container.NewPadded(textEntry),
+					container.NewPadded(named.New(nameTextPreview, textEntry)),
 					container.NewPadded(
 						container.NewVBox(
 							container.NewHBox(layout.NewSpacer(), copyBtn),
@@ -368,10 +403,10 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 	thumbnail.Hide()
 
 	log.Infof("loaded image for %s", info.ResPath)
-	imgW := canvas.NewImageFromImage(img)
-
-	imgW.FillMode = canvas.ImageFillOriginal
-	imgW.ScaleMode = canvas.ImageScaleFastest
+	previewImage := canvas.NewImageFromImage(img)
+	previewImage.FillMode = canvas.ImageFillOriginal
+	previewImage.ScaleMode = canvas.ImageScaleFastest
+	imgW := named.New(nameImagePreview, previewImage)
 
 	imgContent := container.NewScroll(
 		container.NewStack(
@@ -482,7 +517,7 @@ func (a *App) buildTagInfo(info *structures.FileInfo, editable bool) fyne.Canvas
 			container.NewStack(
 				widgets.NewThemedRect(theme.ColorNameInputBackground, 4),
 				container.NewPadded(
-					tagsList,
+					named.New(nameTagList, tagsList),
 				),
 			),
 		),
@@ -573,10 +608,10 @@ func (a *App) buildMetadataPane(info *structures.FileInfo, editable bool) fyne.C
 					dlg.Show()
 				}
 			}
-			form := container.New(
+			form := named.New(nameMetadataForm, container.New(
 				layout.NewFormLayout(),
 				colorLbl, colorRect,
-			)
+			))
 			return form
 
 		} else if info.IsTileset() {
@@ -688,12 +723,12 @@ func (a *App) buildMetadataPane(info *structures.FileInfo, editable bool) fyne.C
 				tilesetTypeSelector.Disable()
 			}
 
-			form := container.New(
+			form := named.New(nameMetadataForm, container.New(
 				layout.NewFormLayout(),
 				nameLbl, nameEntry,
 				tilesetTypeLbl, tilesetTypeSelector,
 				colorLbl, colorRect,
-			)
+			))
 			return form
 
 		}
@@ -739,5 +774,5 @@ func (a *App) saveTilesetMetadata(metaPath string) {
 
 func (a *App) buildBulkOpsPane(infos []*structures.FileInfo, editable bool) fyne.CanvasObject {
 	// TODO: BUILD
-	return container.NewBorder(nil, nil, nil, nil)
+	return named.New(nameBulkOpsPane, container.NewBorder(nil, nil, nil, nil))
 }

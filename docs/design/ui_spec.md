@@ -53,3 +53,23 @@ sub lists represent conditions that should be read as: when <parent arm> then <a
       - with a split pane below the button pane
         - with a package resource tree on the left
         - with a resource pane on the right
+
+- when a resource is selected in the resource tree
+  - the resource pane shows the information of the resource
+    - with a file preview tab
+      - an image resource shows the image
+        - and the thumbnail toggle
+      - a text resource shows the text
+        - unless the file is too big, then the text is not shown
+    - with a tag tab when the resource is taggable
+    - with a metadata tab when the resource has metadata
+
+- when more than one resource is selected
+  - the resource pane shows the bulk operations pane
+
+- when the filter of the resource tree is changed
+  - a name filter shows the resources with a matching name only
+  - a tag filter shows the resources with a matching tag only
+  - a path filter shows the resources with a matching path only
+  - a kind filter shows the resources of that kind only
+  - an empty filter shows all the resources again

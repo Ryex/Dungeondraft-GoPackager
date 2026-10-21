@@ -5,12 +5,15 @@
 // expectations, each of them naming a part of the interface together with the
 // constraints it has to satisfy.
 //
+// The parts of the interface are addressed by the name they were given where
+// they were created (see internal/gui/named):
+//
 //	uitest.Expect(t, uitest.In(mainColumn),
 //	    uitest.Group("when the main window is shown",
-//	        uitest.Has("a welcome header", uitest.Object(a.ui.Header)).Topmost(),
-//	        uitest.Has("a theme toggle", uitest.Object(a.ui.ThemeToggle),
-//	            uitest.Has("a language select dropdown", uitest.Object(a.ui.LanguageSelect)).
-//	                RightOf(uitest.Object(a.ui.ThemeToggle)),
+//	        uitest.Has("a welcome header", uitest.Named("header")).Topmost(),
+//	        uitest.Has("a theme toggle", uitest.Named("themeToggle"),
+//	            uitest.Has("a language select dropdown", uitest.Named("languageSelect")).
+//	                RightOf(uitest.Named("themeToggle")),
 //	        ),
 //	    ),
 //	)
@@ -38,6 +41,8 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
+
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/named"
 )
 
 // Scope is the part of the interface an expectation is evaluated against.
@@ -103,23 +108,7 @@ type Node interface {
 // Widgets that render their children virtually (lists and trees) do not
 // expose them here; they are located by their own type instead.
 func children(o fyne.CanvasObject) []fyne.CanvasObject {
-	switch c := o.(type) {
-	case *fyne.Container:
-		return c.Objects
-	case *container.Split:
-		return []fyne.CanvasObject{c.Leading, c.Trailing}
-	case *container.Scroll:
-		return []fyne.CanvasObject{c.Content}
-	case *container.AppTabs:
-		items := make([]fyne.CanvasObject, 0, len(c.Items))
-		for _, item := range c.Items {
-			items = append(items, item.Content)
-		}
-		return items
-	case *widget.PopUp:
-		return []fyne.CanvasObject{c.Content}
-	}
-	return nil
+	return named.Children(o)
 }
 
 // objects returns o and all of its descendants.
@@ -187,6 +176,8 @@ func describeObject(o fyne.CanvasObject) string {
 		return "<nil>"
 	}
 	switch c := o.(type) {
+	case *named.Named:
+		return fmt.Sprintf("%q", c.Name())
 	case *widget.Button:
 		return fmt.Sprintf("*widget.Button %q", c.Text)
 	case *widget.Entry:

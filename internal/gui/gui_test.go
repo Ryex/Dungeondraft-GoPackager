@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
 
@@ -18,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/lang"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/named"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/resource_tree"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/widgets"
 	"github.com/ryex/dungeondraft-gopackager/internal/testutil"
@@ -60,15 +60,7 @@ func loadFixturePackage(t *testing.T, a *App) (string, *ddpackage.Package) {
 
 // childObjects returns the direct children of an object, if it has any.
 func childObjects(obj fyne.CanvasObject) []fyne.CanvasObject {
-	switch o := obj.(type) {
-	case *fyne.Container:
-		return o.Objects
-	case *container.Split:
-		return []fyne.CanvasObject{o.Leading, o.Trailing}
-	case *container.Scroll:
-		return []fyne.CanvasObject{o.Content}
-	}
-	return nil
+	return named.Children(obj)
 }
 
 // collectObjects walks an object tree and returns every object of type T.

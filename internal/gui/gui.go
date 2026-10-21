@@ -31,6 +31,7 @@ import (
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/credits"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/lang"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/named"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/widgets"
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 
@@ -38,6 +39,27 @@ import (
 	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
 
 	log "github.com/sirupsen/logrus"
+)
+
+// The names of the parts of the main window.
+//
+// The parts of the interface are named where they are created, so that they
+// can be looked up by name later, e.g. by the specification tests.
+const (
+	nameMainColumn       = "mainColumn"
+	nameHeader           = "header"
+	nameThemeToggle      = "themeToggle"
+	nameLanguageSelect   = "languageSelect"
+	nameTitleText        = "titleText"
+	nameSubTitleText     = "subTitleText"
+	nameAboutButton      = "aboutButton"
+	nameGithubButton     = "githubButton"
+	nameInfoButton       = "infoButton"
+	namePathSection      = "pathSection"
+	namePathEntry        = "pathEntry"
+	nameOpenPackButton   = "openPackButton"
+	nameOpenFolderButton = "openFolderButton"
+	nameContent          = "content"
 )
 
 type App struct {
@@ -66,9 +88,9 @@ type App struct {
 	// detached when the app is cleaned up.
 	forceDarkModeListener binding.DataListener
 
-	// ui holds the named references to the widgets and regions of the
-	// current layout.
-	ui *uiRegions
+	// ui resolves the names of the parts of the user interface to the
+	// objects they belong to.
+	ui *named.Cache
 
 	tagSaveTimer  *time.Timer
 	resSaveTimers map[string]*time.Timer
@@ -88,6 +110,13 @@ type App struct {
 	// loadPacked loads a packed resource pack file. It is a field so that
 	// tests can control the timing of the load.
 	loadPacked func(path string, progress func(p float64, curRes string)) (*ddpackage.Package, error)
+
+	// bgWG tracks the background work that touches the interface: the
+	// loads of a package and the computations of the md5 hashes.
+	//
+	// The interface must not be touched while the background work is
+	// running, so the tests wait for it.
+	bgWG sync.WaitGroup
 
 	// prefLocaleListener is the listener registered on the locale preference.
 	// It is removed and replaced whenever the UI is rebuilt and detached
@@ -270,9 +299,11 @@ func (a *App) buildMainUI() {
 	siteURL, _ := url.Parse("https://ryex.github.io/Dungeondraft-GoPackager/")
 	githubURL, _ := url.Parse("https://github.com/Ryex/Dungeondraft-GoPackager")
 
-	// the layout is rebuilt from scratch, so the named references to it
-	// have to be replaced as well
-	a.ui = &uiRegions{}
+	// the layout is rebuilt from scratch, so the cache of the named parts
+	// has to be replaced as well
+	a.ui = named.NewCache(func() fyne.CanvasObject {
+		return a.window.Content()
+	})
 
 	darkThemeToggleLbl := widget.NewLabel(lang.X("app.darkTheme.toggle.label", "Dark Mode"))
 
@@ -342,19 +373,19 @@ func (a *App) buildMainUI() {
 	welcome := container.NewPadded(container.NewStack(
 		headerBg,
 		container.NewPadded(container.NewVBox(
-			titleText,
-			subTitleText,
+			named.New(nameTitleText, titleText),
+			named.New(nameSubTitleText, subTitleText),
 		)),
 		container.NewVBox(
 			layout.NewSpacer(),
 			container.NewPadded(container.NewHBox(
 				darkThemeToggleLbl,
-				darkThemeToggle,
-				langSelect,
+				named.New(nameThemeToggle, darkThemeToggle),
+				named.New(nameLanguageSelect, langSelect),
 				layout.NewSpacer(),
-				aboutBtn,
-				ghIcon,
-				infoIcon,
+				named.New(nameAboutButton, aboutBtn),
+				named.New(nameGithubButton, ghIcon),
+				named.New(nameInfoButton, infoIcon),
 			)),
 			layout.NewSpacer(),
 		),
@@ -452,11 +483,11 @@ func (a *App) buildMainUI() {
 
 	inputContainer := container.New(
 		layouts.NewLeftExpandHBoxLayout(),
-		pathInput,
+		named.New(namePathEntry, pathInput),
 		layout.NewSpacer(),
-		packBtn,
+		named.New(nameOpenPackButton, packBtn),
 		layout.NewSpacer(),
-		folderBtn,
+		named.New(nameOpenFolderButton, folderBtn),
 	)
 
 	defaultMainText := multilineCanvasText(
@@ -481,30 +512,15 @@ func (a *App) buildMainUI() {
 
 	mainColumn := container.New(
 		layouts.NewBottomExpandVBoxLayout(),
-		welcome,
-		inputContainer,
+		named.New(nameHeader, welcome),
+		named.New(namePathSection, inputContainer),
 		widget.NewSeparator(),
 		container.NewPadded(
-			a.mainContentContainer,
+			named.New(nameContent, a.mainContentContainer),
 		),
 	)
 
-	content := container.NewPadded(mainColumn)
-
-	a.ui.MainColumn = mainColumn
-	a.ui.Header = welcome
-	a.ui.ThemeToggle = darkThemeToggle
-	a.ui.LanguageSelect = langSelect
-	a.ui.TitleText = titleText
-	a.ui.SubTitleText = subTitleText
-	a.ui.AboutButton = aboutBtn
-	a.ui.GithubButton = ghIcon
-	a.ui.InfoButton = infoIcon
-	a.ui.PathSection = inputContainer
-	a.ui.PathEntry = pathInput
-	a.ui.OpenPackButton = packBtn
-	a.ui.OpenFolderButton = folderBtn
-	a.ui.Content = a.mainContentContainer
+	content := container.NewPadded(named.New(nameMainColumn, mainColumn))
 
 	a.window.SetContent(fynetooltip.AddWindowToolTipLayer(content, a.window.Canvas()))
 
@@ -577,6 +593,12 @@ func (a *App) setMainContent(o fyne.CanvasObject, disableButtonsListeners ...fun
 		// winSize := a.window.Canvas().Size()
 		// a.mainContentContainer.Refresh()
 		// a.window.Resize(winSize)
+
+		// the parts of the interface that are shown now are new objects, so
+		// the cache of the named parts has to forget the old ones
+		if a.ui != nil {
+			a.ui.Reset()
+		}
 	})
 }
 
