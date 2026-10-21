@@ -550,11 +550,18 @@ func (a *App) saveUnpackedTags() {
 		a.tagSaveTimer.Stop()
 		a.tagSaveTimer = nil
 	}
+	// the package is captured, because it may be closed before the timer
+	// fires
+	pkg := a.pkg
 	a.tagSaveTimer = time.AfterFunc(500*time.Millisecond, func() {
-		a.tagSaveTimer = nil
-		err := a.pkg.SaveUnpackedTags()
+		if pkg == nil {
+			return
+		}
+		err := pkg.SaveUnpackedTags()
 		if err != nil {
-			a.showErrorDialog(err)
+			fyne.Do(func() {
+				a.showErrorDialog(err)
+			})
 		}
 	})
 }
@@ -747,12 +754,19 @@ func (a *App) saveWallMetadata(metaPath string) {
 	if timer != nil {
 		timer.Stop()
 	}
+	// the package is captured, because it may be closed before the timer
+	// fires
+	pkg := a.pkg
 	a.resSaveTimers[metaPath] = time.AfterFunc(500*time.Millisecond, func() {
-		a.resSaveTimers[metaPath] = nil
+		if pkg == nil {
+			return
+		}
 		log.Infof("save timer called for %s", metaPath)
-		err := a.pkg.SaveUnpackedWall(metaPath)
+		err := pkg.SaveUnpackedWall(metaPath)
 		if err != nil {
-			a.showErrorDialog(err)
+			fyne.Do(func() {
+				a.showErrorDialog(err)
+			})
 		}
 	})
 }
@@ -762,12 +776,19 @@ func (a *App) saveTilesetMetadata(metaPath string) {
 	if timer != nil {
 		timer.Stop()
 	}
+	// the package is captured, because it may be closed before the timer
+	// fires
+	pkg := a.pkg
 	a.resSaveTimers[metaPath] = time.AfterFunc(500*time.Millisecond, func() {
-		a.resSaveTimers[metaPath] = nil
+		if pkg == nil {
+			return
+		}
 		log.Infof("save timer called for %s", metaPath)
-		err := a.pkg.SaveUnpackedTileset(metaPath)
+		err := pkg.SaveUnpackedTileset(metaPath)
 		if err != nil {
-			a.showErrorDialog(err)
+			fyne.Do(func() {
+				a.showErrorDialog(err)
+			})
 		}
 	})
 }
