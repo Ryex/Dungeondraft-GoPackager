@@ -261,6 +261,14 @@ func (a *App) resetPkg() {
 
 func (a *App) clean() {
 	a.resetPkg()
+	if a.tagSaveTimer != nil {
+		a.tagSaveTimer.Stop()
+		a.tagSaveTimer = nil
+	}
+	for _, timer := range a.resSaveTimers {
+		timer.Stop()
+	}
+	a.resSaveTimers = map[string]*time.Timer{}
 	if a.prefLocaleListener != nil && a.prefLocale != nil {
 		a.prefLocale.RemoveListener(a.prefLocaleListener)
 		a.prefLocaleListener = nil
