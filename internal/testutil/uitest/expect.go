@@ -127,6 +127,16 @@ func (e *Expectation) Bottommost() *Expectation {
 	return e.withRelation(Bottommost())
 }
 
+// Visible requires the widget to be shown.
+func (e *Expectation) Visible() *Expectation {
+	return e.withRelation(Visible())
+}
+
+// Hidden requires the widget to be hidden.
+func (e *Expectation) Hidden() *Expectation {
+	return e.withRelation(Hidden())
+}
+
 func (e *Expectation) withRelation(rel Relation) *Expectation {
 	c := e.copy()
 	c.relations = append(c.relations, rel)

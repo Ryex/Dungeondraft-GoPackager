@@ -25,6 +25,7 @@ import (
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/bindings"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/lang"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/named"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/widgets"
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 
@@ -34,6 +35,14 @@ import (
 	dderrors "github.com/ryex/dungeondraft-gopackager/internal/errors"
 
 	log "github.com/sirupsen/logrus"
+)
+
+// The names of the parts of the pack content.
+//
+// The parts of the interface are named where they are created, so that they
+// can be looked up by name later, e.g. by the specification tests.
+const (
+	namePackPanel = "packPanel"
 )
 
 var (
@@ -115,7 +124,10 @@ func (a *App) loadUnpackedPath(path string) {
 
 	a.resetPkg()
 
+	a.bgWG.Add(1)
 	go func() {
+		defer a.bgWG.Done()
+
 		loader := a.loadUnpacked
 		if loader == nil {
 			loader = a.loadUnpackedSync
@@ -552,15 +564,12 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 		),
 	)
 
-	// the regions have to be named before the content is shown, so that
-	// they are available as soon as the new content is visible
-	a.regions().ButtonPanel = packForm
-	a.regions().SplitPane = split
-
+	// the parts of the interface have to be named before the content is
+	// shown, so that they are available as soon as the new content is visible
 	a.setMainContent(
 		container.New(
 			layouts.NewBottomExpandVBoxLayout(),
-			packForm,
+			named.New(namePackPanel, packForm),
 			widget.NewSeparator(),
 			split,
 		),

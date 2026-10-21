@@ -40,7 +40,7 @@ func TestSpecPackFile(t *testing.T) {
 	release := blockPackedLoad(a)
 	a.loadPack(packFile)
 
-	uitest.Expect(t, uitest.In(a.ui.Content),
+	uitest.Expect(t, uitest.In(namedPart(t, a, nameContent)),
 		uitest.Group("when a packed pack file is opened",
 			uitest.Has("activity content", uitest.Activity()),
 			uitest.Has("a progress bar", uitest.ProgressBar()),
@@ -50,23 +50,23 @@ func TestSpecPackFile(t *testing.T) {
 	release()
 	waitForPackLoad(t, a)
 
-	uitest.Expect(t, uitest.In(a.ui.Content),
+	uitest.Expect(t, uitest.In(namedPart(t, a, nameContent)),
 		uitest.Group("when the pack is loaded",
-			uitest.Has("a button panel on top", uitest.Object(a.ui.ButtonPanel)).
+			uitest.Has("a button panel on top", uitest.Named(nameExtractPanel)).
 				Topmost(),
 			uitest.Has("a split pane below the button panel",
-				uitest.Object(a.ui.SplitPane)).
-				Below(uitest.Object(a.ui.ButtonPanel)),
+				uitest.Named(nameSplitPane)).
+				Below(uitest.Named(nameExtractPanel)),
 			uitest.Has("a package resource tree on the left",
-				uitest.Object(a.ui.ResourceTree)).
-				LeftOf(uitest.Object(a.ui.ResourcePane)),
+				uitest.Named(nameResourceTree)).
+				LeftOf(uitest.Named(nameResourcePane)),
 			uitest.Has("a resource pane on the right",
-				uitest.Object(a.ui.ResourcePane)).
-				RightOf(uitest.Object(a.ui.ResourceTree)),
+				uitest.Named(nameResourcePane)).
+				RightOf(uitest.Named(nameResourceTree)),
 		),
 	)
 
-	uitest.Expect(t, uitest.In(a.ui.ButtonPanel),
+	uitest.Expect(t, uitest.In(namedPart(t, a, nameExtractPanel)),
 		uitest.Group("when a packed pack file is opened",
 			uitest.Has("an output path entry",
 				uitest.Entry(texts["unpackOutPath"]),

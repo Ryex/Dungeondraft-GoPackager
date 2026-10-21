@@ -28,56 +28,56 @@ func TestSpecMainWindow(t *testing.T) {
 	a := newSpecApp(t)
 	texts := specTexts()
 
-	uitest.Expect(t, uitest.In(a.ui.MainColumn),
+	uitest.Expect(t, uitest.In(namedPart(t, a, nameMainColumn)),
 		uitest.Group("when the main window is shown",
-			uitest.Has("a welcome header at the top", uitest.Object(a.ui.Header)).
+			uitest.Has("a welcome header at the top", uitest.Named(nameHeader)).
 				Topmost(),
 			uitest.Has("a path input section below the welcome header",
-				uitest.Object(a.ui.PathSection)).
-				Below(uitest.Object(a.ui.Header)),
-			uitest.Has("a content section on the bottom", uitest.Object(a.ui.Content)).
+				uitest.Named(namePathSection)).
+				Below(uitest.Named(nameHeader)),
+			uitest.Has("a content section on the bottom", uitest.Named(nameContent)).
 				Bottommost(),
 		),
 	)
 
-	uitest.Expect(t, uitest.In(a.ui.Header),
+	uitest.Expect(t, uitest.In(namedPart(t, a, nameHeader)),
 		uitest.Group("when the main window is shown",
-			uitest.Has("a theme toggle on the left", uitest.Object(a.ui.ThemeToggle)).
+			uitest.Has("a theme toggle on the left", uitest.Named(nameThemeToggle)).
 				LeftOfCenter(),
 			uitest.Has("a language select dropdown to the right of the theme toggle",
-				uitest.Object(a.ui.LanguageSelect)).
-				RightOf(uitest.Object(a.ui.ThemeToggle)),
-			uitest.Has("a title in the center", uitest.Object(a.ui.TitleText)).
+				uitest.Named(nameLanguageSelect)).
+				RightOf(uitest.Named(nameThemeToggle)),
+			uitest.Has("a title in the center", uitest.Named(nameTitleText)).
 				Centered(),
-			uitest.Has("a subtitle in the center", uitest.Object(a.ui.SubTitleText)).
+			uitest.Has("a subtitle in the center", uitest.Named(nameSubTitleText)).
 				Centered(),
-			uitest.Has("an about icon button to the right", uitest.Object(a.ui.AboutButton)).
+			uitest.Has("an about icon button to the right", uitest.Named(nameAboutButton)).
 				RightOfCenter(),
 			uitest.Has("a github icon button to the right of the about button",
-				uitest.Object(a.ui.GithubButton)).
-				RightOf(uitest.Object(a.ui.AboutButton)),
+				uitest.Named(nameGithubButton)).
+				RightOf(uitest.Named(nameAboutButton)),
 			uitest.Has("an info icon button to the right of the github button",
-				uitest.Object(a.ui.InfoButton)).
-				RightOf(uitest.Object(a.ui.GithubButton)),
+				uitest.Named(nameInfoButton)).
+				RightOf(uitest.Named(nameGithubButton)),
 		),
 	)
 
-	uitest.Expect(t, uitest.In(a.ui.PathSection),
+	uitest.Expect(t, uitest.In(namedPart(t, a, namePathSection)),
 		uitest.Group("when the main window is shown",
-			uitest.Has("a path input entry to the left", uitest.Object(a.ui.PathEntry)).
-				LeftOf(uitest.Object(a.ui.OpenPackButton)),
+			uitest.Has("a path input entry to the left", uitest.Named(namePathEntry)).
+				LeftOf(uitest.Named(nameOpenPackButton)),
 			uitest.Has("an Open Pack button to the right of the path entry",
-				uitest.Object(a.ui.OpenPackButton)).
-				RightOf(uitest.Object(a.ui.PathEntry)),
+				uitest.Named(nameOpenPackButton)).
+				RightOf(uitest.Named(namePathEntry)),
 			uitest.Has("an Open Folder button to the right of the Open Pack button",
-				uitest.Object(a.ui.OpenFolderButton)).
-				RightOf(uitest.Object(a.ui.OpenPackButton)),
+				uitest.Named(nameOpenFolderButton)).
+				RightOf(uitest.Named(nameOpenPackButton)),
 		),
 	)
 
 	// the widgets of the header and of the path section have to be the ones
 	// the specification names
-	uitest.Expect(t, uitest.In(a.ui.PathSection),
+	uitest.Expect(t, uitest.In(namedPart(t, a, namePathSection)),
 		uitest.Has("the path input entry", uitest.Entry(texts["pathPlaceholder"])),
 		uitest.Has("the Open Pack button", uitest.Button(texts["openPack"])),
 		uitest.Has("the Open Folder button", uitest.Button(texts["openFolder"])),

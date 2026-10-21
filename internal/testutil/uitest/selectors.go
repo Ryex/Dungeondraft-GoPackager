@@ -8,6 +8,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
 
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/named"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/resource_tree"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/widgets"
 )
@@ -34,6 +35,62 @@ func (s objectSelector) Select(scope *Scope) []fyne.CanvasObject {
 
 func (s objectSelector) String() string {
 	return describeObject(s.obj)
+}
+
+// Named selects the part of the interface that was given the given name.
+//
+// The name is resolved in the scope, so that the expectation only holds when
+// the named part of the interface is part of the scope.
+func Named(name string) Selector {
+	return namedSelector{name: name}
+}
+
+type namedSelector struct {
+	name string
+}
+
+func (s namedSelector) Select(scope *Scope) []fyne.CanvasObject {
+	for _, o := range objects(scope.Root) {
+		if n, ok := o.(*named.Named); ok && n.Name() == s.name {
+			return []fyne.CanvasObject{n.Object()}
+		}
+	}
+	return nil
+}
+
+func (s namedSelector) String() string {
+	return fmt.Sprintf("the part named %q", s.name)
+}
+
+// Tab selects the content of the tab with the given label.
+//
+// The label is matched exactly, so that a specification names the tab the
+// way the interface shows it.
+func Tab(label string) Selector {
+	return tabSelector{label: label}
+}
+
+type tabSelector struct {
+	label string
+}
+
+func (s tabSelector) Select(scope *Scope) []fyne.CanvasObject {
+	for _, o := range objects(scope.Root) {
+		tabs, ok := o.(*container.AppTabs)
+		if !ok {
+			continue
+		}
+		for _, item := range tabs.Items {
+			if item.Text == s.label {
+				return []fyne.CanvasObject{item.Content}
+			}
+		}
+	}
+	return nil
+}
+
+func (s tabSelector) String() string {
+	return fmt.Sprintf("the tab %q", s.label)
 }
 
 // Widget selects every object of type T in the scope.

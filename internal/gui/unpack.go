@@ -18,6 +18,7 @@ import (
 
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/lang"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/layouts"
+	"github.com/ryex/dungeondraft-gopackager/internal/gui/named"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 
@@ -26,6 +27,14 @@ import (
 	dderrors "github.com/ryex/dungeondraft-gopackager/internal/errors"
 
 	log "github.com/sirupsen/logrus"
+)
+
+// The names of the parts of the extract content.
+//
+// The parts of the interface are named where they are created, so that they
+// can be looked up by name later, e.g. by the specification tests.
+const (
+	nameExtractPanel = "extractPanel"
 )
 
 func (a *App) loadPack(path string) {
@@ -42,7 +51,10 @@ func (a *App) loadPack(path string) {
 
 	a.resetPkg()
 
+	a.bgWG.Add(1)
 	go func() {
+		defer a.bgWG.Done()
+
 		loader := a.loadPacked
 		if loader == nil {
 			loader = a.loadPackSync
@@ -208,15 +220,12 @@ func (a *App) setPackContent(pkg *ddpackage.Package) {
 		),
 	)
 
-	// the regions have to be named before the content is shown, so that
-	// they are available as soon as the new content is visible
-	a.regions().ButtonPanel = extractForm
-	a.regions().SplitPane = split
-
+	// the parts of the interface have to be named before the content is
+	// shown, so that they are available as soon as the new content is visible
 	a.setMainContent(
 		container.New(
 			layouts.NewBottomExpandVBoxLayout(),
-			extractForm,
+			named.New(nameExtractPanel, extractForm),
 			split,
 		),
 		func(disable bool) {
