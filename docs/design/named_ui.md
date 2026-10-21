@@ -228,6 +228,13 @@ old `uiRegions` struct did.
 | `metadataPane`   | `nameMetadataPane`    | `package.go`        |
 | `metadataForm`   | `nameMetadataForm`    | `package.go`        |
 | `bulkOpsPane`    | `nameBulkOpsPane`     | `package.go`        |
+| `bulkOpsTabs`    | `nameBulkOpsTabs`     | `package.go`        |
+| `bulkTagHeader`  | `nameBulkTagHeader`   | `package.go`        |
+| `bulkResourceList` | `nameBulkResourceList` | `package.go`      |
+| `bulkTagList`    | `nameBulkTagList`     | `package.go`        |
+| `bulkTagSelector` | `nameBulkTagSelector` | `package.go`        |
+| `bulkTagAddButton` | `nameBulkTagAddButton` | `package.go`      |
+| `bulkOpsPane`    | `nameBulkOpsPane`     | `package.go`        |
 | `thumbnailToggle` | `nameThumbnailToggle` | `package.go`        |
 | `imagePreview`   | `nameImagePreview`    | `package.go`        |
 | `textPreview`    | `nameTextPreview`     | `package.go`        |
