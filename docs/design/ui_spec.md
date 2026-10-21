@@ -66,6 +66,14 @@ sub lists represent conditions that should be read as: when <parent arm> then <a
 
 - when more than one resource is selected
   - the resource pane shows the bulk operations pane
+    - with a tags tab
+      - with a "Bulk Tag Operations" header
+      - with a list of the selected resources
+        - with the icon, the file name and the path of every resource
+        - with a button to deselect the resource
+      - with a list of the tags that all the resources have in common
+        - with a button to remove the tag from all the resources
+      - with an entry to add a tag to all the resources
 
 - when the filter of the resource tree is changed
   - a name filter shows the resources with a matching name only
