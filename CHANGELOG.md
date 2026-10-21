@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 <!-- insertion marker -->
+### Features
+
+- dark mode toggle in the welcome header, the choice is remembered between runs.
+- language select in the welcome header, the interface is rebuilt in the selected
+  language while the app is running, the choice is remembered between runs.
+- new resource filter syntax for the resource tree: filter by name (`%name` for a
+  case sensitive match, `=name` for an exact match, `^name` for a prefix match and
+  `$name` for a suffix match), by tag (`#tag`), by path glob (`/glob`) and by
+  resource kind (`@IsTexture`), filters are combined with `&` (and), with `!`
+  (not) and with `()` groups.
+- the resource tree is a widget of its own with a multi selection: ctrl and shift
+  add a resource to the selection or remove it from it, a double click toggles
+  the selection of a resource.
+- the resource preview shows the resource path, the filesystem path and the md5
+  hash of the resource, every one of them with a copy to clipboard button.
+- md5 hashes are computed while packaging and written into the pack header, and
+  are read back when a packed pack is loaded.
+- the resource index update that runs when files change on disk is shown in a
+  progress dialog.
+- untagged resources are listed under their own "Untagged" branch in the tag view.
+- the cli can print the resource list as json with `list files --type json`, the
+  output holds the tags and the wall and tileset metadata of the resources.
+- the cli shows a progress bar while a pack is loaded and while the information
+  of the resources is collected.
+- new widgets that follow the theme: themed text, themed rectangle and an entry
+  with a copy to clipboard button.
+
 ### Bug Fixes
 
 - highlight the selected resources in the resource tree.
@@ -17,6 +44,59 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   unselect it in all of them at once.
 - toggle the selection of a resource in the resource tree with a double click.
 - don't leak the dark mode listener when the interface is rebuilt after a language change.
+- the parents of a node of the resource tree never ended their endless loop, and the check
+  for a selected parent always reported false.
+- the file watcher did not watch the root of the unpacked pack, did not pick up newly
+  created folders and kept watching folders that were deleted.
+- resources that were deleted from the unpacked folder stayed in the resource index.
+- the resource index was reset to the capacity of the last update, which dropped the
+  entries it already had.
+- the file count in the header of a pack was the length of the file list instead of
+  its size.
+- the copy button of the file preview copied to the clipboard of the window instead
+  of the one of the app.
+- the theme toggle did not refresh the widgets that had a hardcoded color, parts of
+  the interface kept the colors of the old theme.
+- errors showed the cause before the message, the message now comes first and the
+  causes are listed below it.
+- the cli used the global logger instead of the logger of the command context.
+- the progress bar of the cli unpack command was never finished.
+- the cli `edit` command used the short flags `-AK` and `-RK` for adding and removing
+  keywords, they are now `-a` and `-r`.
+- the thumbnail generation could leave threads behind, it now uses `wg.Go`.
+- the cli `list files` logged a warning when it was called without globs.
+
+### Code Refactoring
+
+- the resource tree moved into its own package (`internal/gui/resource_tree`).
+- the resource filter parser is a reusable package (`pkg/ddpackage/filter`) instead
+  of a tag filter that only the gui could use.
+- the `lang` package is a fork of the lang package of fyne that can switch the locale
+  at runtime, it holds its own catalog for the strings of the built in fyne widgets.
+- `FileInfoList` is a struct with an encapsulated slice instead of a bare slice type,
+  the accessors of the package now return pointers to it.
+- the cli commands share one context that loads the package, the tags and the metadata
+  and that owns the progress bars.
+- new `internal/errors` helper `CausedBy` for errors that have one or more causes.
+- the pack json holds its color overrides behind a pointer, so that they are omitted
+  when they are not set.
+
+### Testing
+
+- gui tests with the software renderer of fyne, they need no display.
+- a declarative ui dsl (`internal/testutil/uitest`) to assert on the layout of the
+  interface.
+- the ui specification (`docs/design/ui_spec.md`) is translated into tests.
+- test fixtures that synthesize a resource pack on the fly.
+- tests for the bindings, the widgets, the theme, the resource tree and the filter
+  parser.
+
+### Build
+
+- the build uses go 1.27 and fyne 2.8.
+- a ci job runs `go test ./...`.
+- the ci matrix builds on the latest macos runner.
+- `.gitattributes` enforces line feeds for all text files.
 
 ## [v2.0.4](https://github.com/Ryex/Dungeondraft-GoPackager/releases/tag/v2.0.3) - 2025-4-25
 <small>[Compare with v2.0.3](https://github.com/Ryex/Dungeondraft-GoPackager/compare/v2.0.4...v2.0.3)</small>
