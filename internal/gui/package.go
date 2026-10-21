@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"image/color"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
+	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
@@ -41,22 +43,28 @@ import (
 // The parts of the interface are named where they are created, so that they
 // can be looked up by name later, e.g. by the specification tests.
 const (
-	nameResourceTree    = "resourceTree"
-	nameResourcePane    = "resourcePane"
-	nameSplitPane       = "splitPane"
-	nameFilterEntry     = "filterEntry"
-	nameDisplayByRadio  = "displayByRadio"
-	nameInfoTabs        = "infoTabs"
-	nameFilePreview     = "filePreview"
-	nameTagInfo         = "tagInfo"
-	nameMetadataPane    = "metadataPane"
-	nameMetadataForm    = "metadataForm"
-	nameBulkOpsPane     = "bulkOpsPane"
-	nameThumbnailToggle = "thumbnailToggle"
-	nameImagePreview    = "imagePreview"
-	nameTextPreview     = "textPreview"
-	nameTooLargeLabel   = "tooLargeLabel"
-	nameTagList         = "tagList"
+	nameResourceTree     = "resourceTree"
+	nameResourcePane     = "resourcePane"
+	nameSplitPane        = "splitPane"
+	nameFilterEntry      = "filterEntry"
+	nameDisplayByRadio   = "displayByRadio"
+	nameInfoTabs         = "infoTabs"
+	nameFilePreview      = "filePreview"
+	nameTagInfo          = "tagInfo"
+	nameMetadataPane     = "metadataPane"
+	nameMetadataForm     = "metadataForm"
+	nameBulkOpsPane      = "bulkOpsPane"
+	nameBulkOpsTabs      = "bulkOpsTabs"
+	nameBulkTagHeader    = "bulkTagHeader"
+	nameBulkResourceList = "bulkResourceList"
+	nameBulkTagList      = "bulkTagList"
+	nameBulkTagSelector  = "bulkTagSelector"
+	nameBulkTagAddButton = "bulkTagAddButton"
+	nameThumbnailToggle  = "thumbnailToggle"
+	nameImagePreview     = "imagePreview"
+	nameTextPreview      = "textPreview"
+	nameTooLargeLabel    = "tooLargeLabel"
+	nameTagList          = "tagList"
 )
 
 func (a *App) buildPackageTreeAndInfoPane(editable bool) *named.Named {
@@ -143,16 +151,7 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) *named.Named {
 					return a.buildInfoPane(data.Info, editable)
 				}
 			}
-			selectedInfos := slices.Collect(utils.Filter(utils.Map(slices.Values(selected), func(data resource_tree.ResourceTreeNodeData) *structures.FileInfo {
-				if info, ok := data.(*resource_tree.ResourceFileInfoNode); ok {
-					return info.Info
-				}
-				return nil
-			}), func(info *structures.FileInfo) bool {
-				return info != nil
-			}))
-
-			return a.buildBulkOpsPane(selectedInfos, editable)
+			return a.buildBulkOpsPane(tree, tree.GetSelectedResources(), editable)
 		}()
 		rightSplit.RemoveAll()
 		rightSplit.Add(content)
@@ -793,7 +792,271 @@ func (a *App) saveTilesetMetadata(metaPath string) {
 	})
 }
 
-func (a *App) buildBulkOpsPane(infos []*structures.FileInfo, editable bool) fyne.CanvasObject {
-	// TODO: BUILD
-	return named.New(nameBulkOpsPane, container.NewBorder(nil, nil, nil, nil))
+// buildBulkOpsPane builds the pane that holds the operations that can be
+// applied to all the selected resources at once.
+func (a *App) buildBulkOpsPane(
+	tree *resource_tree.ResourceTree,
+	resources []resource_tree.SelectedResource,
+	editable bool,
+) fyne.CanvasObject {
+	tagsPane := a.buildBulkTagsPane(tree, resources, editable)
+
+	tabs := container.NewAppTabs(
+		container.NewTabItemWithIcon(
+			lang.X("preview.tab.tags", "Tags"),
+			theme.ListIcon(),
+			tagsPane,
+		),
+	)
+
+	return named.New(nameBulkOpsPane, container.NewBorder(
+		nil, nil, nil, nil,
+		named.New(nameBulkOpsTabs, tabs),
+	))
+}
+
+// buildBulkTagsPane builds the tab that shows the tag operations that can be
+// applied to all the selected resources at once.
+func (a *App) buildBulkTagsPane(
+	tree *resource_tree.ResourceTree,
+	resources []resource_tree.SelectedResource,
+	editable bool,
+) fyne.CanvasObject {
+	header := named.New(nameBulkTagHeader, container.NewStack(
+		widgets.NewThemedRect(theme.ColorNameHeaderBackground, 4),
+		container.NewCenter(
+			widget.NewLabel(lang.X("bulk.tagOps.header", "Bulk Tag Operations")),
+		),
+	))
+
+	// the tags that are common to all the selected resources
+	var tags []string
+	boundTags := binding.BindStringList(&tags)
+	updateTags := func() {
+		tags = a.commonTags(resources).AsSlice()
+		slices.Sort(tags)
+		boundTags.Reload()
+	}
+	updateTags()
+
+	tagList := widget.NewListWithData(
+		boundTags,
+		func() fyne.CanvasObject {
+			return layouts.NewLeftExpandHBox(
+				widget.NewLabel("template"),
+				container.NewPadded(widgets.NewToolTipButtonWithIcon("", theme.DeleteIcon(), nil)),
+			)
+		},
+		func(di binding.DataItem, co fyne.CanvasObject) {
+			c := co.(*fyne.Container)
+			lbl := c.Objects[0].(*widget.Label)
+			lbl.Bind(di.(binding.String))
+			btn := c.Objects[1].(*fyne.Container).Objects[0].(*widgets.ToolTipButton)
+			if !editable {
+				btn.Disable()
+				btn.Hide()
+				return
+			}
+			tag, err := di.(binding.String).Get()
+			if err != nil {
+				log.WithError(err).Error("failed to get tag in del tag btn")
+				return
+			}
+			btn.OnTapped = func() {
+				for _, res := range resources {
+					a.pkg.Tags().Untag(tag, res.Info.RelPath)
+				}
+				updateTags()
+				a.saveUnpackedTags()
+			}
+			btn.SetToolTip(lang.X(
+				"bulk.tagOps.removeTag.tooltip",
+				"Remove the '{{.Tag}}' tag from the selected resources",
+				map[string]any{
+					"Tag": tag,
+				},
+			))
+		},
+	)
+
+	rightSection := container.NewBorder(
+		nil,
+		a.buildBulkTagAddRow(resources, updateTags, editable),
+		nil, nil,
+		container.NewStack(
+			widgets.NewThemedRect(theme.ColorNameInputBackground, 4),
+			container.NewPadded(named.New(nameBulkTagList, tagList)),
+		),
+	)
+
+	leftSection := container.NewStack(
+		widgets.NewThemedRect(theme.ColorNameInputBackground, 4),
+		container.NewPadded(named.New(nameBulkResourceList, a.buildBulkResourceList(tree, resources))),
+	)
+
+	return container.NewPadded(container.NewBorder(
+		header,
+		nil,
+		nil, nil,
+		container.NewHSplit(leftSection, rightSection),
+	))
+}
+
+// buildBulkResourceList builds the list of the resources that are selected in
+// the resource tree.
+func (a *App) buildBulkResourceList(
+	tree *resource_tree.ResourceTree,
+	resources []resource_tree.SelectedResource,
+) fyne.CanvasObject {
+	return widget.NewList(
+		func() int {
+			return len(resources)
+		},
+		func() fyne.CanvasObject {
+			return createBulkResourceNode()
+		},
+		func(id widget.ListItemID, obj fyne.CanvasObject) {
+			a.updateBulkResourceNode(tree, resources, id, obj)
+		},
+	)
+}
+
+// createBulkResourceNode creates the node of the list of the selected
+// resources.
+//
+// The node shows the icon of the resource and its file name on the first
+// line, together with a button to deselect the resource, and the path the
+// resource is shown under below it.
+func createBulkResourceNode() fyne.CanvasObject {
+	icon := widget.NewFileIcon(nil)
+	nameLbl := widget.NewLabel("template")
+	pathLbl := widgets.NewThemedText("", theme.ColorNamePlaceHolder, bulkPathTextSize)
+	deselectBtn := widgets.NewToolTipButtonWithIcon("", theme.CancelIcon(), nil)
+
+	// the icon and the button are shown on the same line as the name of the
+	// resource
+	nameRow := container.NewBorder(nil, nil, icon, deselectBtn, nameLbl)
+
+	// the path is indented, so that it is shown below the name
+	indent := canvas.NewRectangle(color.Transparent)
+	indent.SetMinSize(fyne.NewSize(theme.IconInlineSize()+theme.Padding(), 1))
+	pathRow := container.NewBorder(nil, nil, indent, nil, pathLbl)
+
+	return container.NewVBox(nameRow, pathRow)
+}
+
+// updateBulkResourceNode fills the node of the list of the selected resources
+// with the information of the resource.
+func (a *App) updateBulkResourceNode(
+	tree *resource_tree.ResourceTree,
+	resources []resource_tree.SelectedResource,
+	id widget.ListItemID,
+	obj fyne.CanvasObject,
+) {
+	if id < 0 || id >= len(resources) {
+		return
+	}
+	res := resources[id]
+
+	c := obj.(*fyne.Container)
+	nameRow := c.Objects[0].(*fyne.Container)
+	pathRow := c.Objects[1].(*fyne.Container)
+
+	nameLbl := nameRow.Objects[0].(*widget.Label)
+	icon := nameRow.Objects[1].(*widget.FileIcon)
+	deselectBtn := nameRow.Objects[2].(*widgets.ToolTipButton)
+	pathLbl := pathRow.Objects[0].(*widgets.ThemedText)
+
+	relPath := res.Info.CalcRelPath()
+	nameLbl.SetText(resourceFileStem(relPath))
+	pathLbl.Text.Text = resourceDirPath(relPath)
+	pathLbl.Refresh()
+	icon.SetURI(storage.NewFileURI(
+		filepath.Join(a.pkg.UnpackedPath(), utils.NormalizeResourcePath(res.Info.ResPath)),
+	))
+	deselectBtn.OnTapped = func() {
+		deselectResource(tree, res)
+	}
+	deselectBtn.SetToolTip(lang.X(
+		"bulk.tagOps.deselect.tooltip",
+		"Deselect this resource from the tree",
+	))
+}
+
+// deselectResource unselects the given resource in the tree.
+//
+// A resource that is only selected because one of the branches that hold it
+// is selected can not be unselected on its own, so the branch is unselected
+// instead.
+func deselectResource(tree *resource_tree.ResourceTree, res resource_tree.SelectedResource) {
+	if res.Selected {
+		tree.Unselect(res.Uid)
+		return
+	}
+	for _, parent := range tree.AllParentsOf(res.Uid) {
+		if tree.IsSelected(parent) {
+			tree.Unselect(parent)
+			return
+		}
+	}
+}
+
+// buildBulkTagAddRow builds the row that adds a tag to all the selected
+// resources.
+func (a *App) buildBulkTagAddRow(
+	resources []resource_tree.SelectedResource,
+	updateTags func(),
+	editable bool,
+) fyne.CanvasObject {
+	if !editable {
+		return nil
+	}
+
+	tagSelector := widget.NewSelectEntry(a.pkg.Tags().AllTags())
+	addBtn := widget.NewButtonWithIcon(
+		lang.X("tags.addBtn.text", "Add"),
+		theme.ContentAddIcon(),
+		func() {
+			if tagSelector.Text == "" {
+				return
+			}
+			for _, res := range resources {
+				a.pkg.Tags().Tag(tagSelector.Text, res.Info.RelPath)
+			}
+			updateTags()
+			a.saveUnpackedTags()
+			tagSelector.SetText("")
+			tagSelector.SetOptions(a.pkg.Tags().AllTags())
+		},
+	)
+
+	return layouts.NewLeftExpandHBox(
+		named.New(nameBulkTagSelector, tagSelector),
+		named.New(nameBulkTagAddButton, addBtn),
+	)
+}
+
+// commonTags returns the tags that all the given resources have in common.
+func (a *App) commonTags(resources []resource_tree.SelectedResource) *structures.Set[string] {
+	relPaths := slices.Collect(utils.Map(slices.Values(resources), func(res resource_tree.SelectedResource) string {
+		return res.Info.RelPath
+	}))
+	return a.pkg.Tags().TagsFor(relPaths...)
+}
+
+// bulkPathTextSize is the size of the path that is shown below the file name
+// of a selected resource.
+const bulkPathTextSize = 11
+
+// resourceFileStem returns the name of the resource without its extension.
+func resourceFileStem(relPath string) string {
+	base := filepath.Base(relPath)
+	return strings.TrimSuffix(base, filepath.Ext(base))
+}
+
+// resourceDirPath returns the path the resource is shown under, without the
+// name of the resource itself.
+func resourceDirPath(relPath string) string {
+	base := filepath.Base(relPath)
+	return strings.TrimSuffix(relPath, base)
 }
