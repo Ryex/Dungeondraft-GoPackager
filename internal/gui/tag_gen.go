@@ -471,9 +471,12 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 				a.window,
 			)
 			progressDlg.Show()
-			a.generateTags(generator, func(p float64) {
+			// the progress is reported for every file of the package, so it
+			// is throttled, to not flood the queue of the Fyne goroutine
+			progress := newProgressReporter(func(p float64) {
 				progressVal.Set(p)
 			})
+			a.generateTags(generator, progress.Report)
 			progressDlg.Hide()
 			doneDlg := dialog.NewInformation(
 				lang.X("pathGen.doneDialog.title", "Tags Generated"),
