@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -169,6 +170,17 @@ type ResourceTree struct {
 	// last click, which are used to detect a double click.
 	lastClickUID  widget.TreeNodeID
 	lastClickTime time.Time
+	// clickTimer fires the debounced single click, so that a click is only
+	// applied after the short double click window has passed without a
+	// second click.
+	clickTimer *time.Timer
+	// clickMu guards the click bookkeeping (clickTimer, lastClickUID,
+	// lastClickTime, clickSelection) which is touched from the timer
+	// goroutine as well as the Fyne goroutine.
+	clickMu sync.Mutex
+	// suppressSelectionChanged silences OnSelectionChanged while a compound
+	// operation (such as selectOnly) performs several steps.
+	suppressSelectionChanged bool
 	nodeTree      map[widget.TreeNodeID][]widget.TreeNodeID
 	nodeMap       map[widget.TreeNodeID]ResourceTreeNodeData
 	mode          ResourceTreeMode
@@ -567,23 +579,34 @@ func (t *ResourceTree) ToggleSelection(uid widget.TreeNodeID) {
 
 // selectOnly selects a node and unselects everything else.
 func (t *ResourceTree) selectOnly(uid widget.TreeNodeID) {
+	t.suppressSelectionChanged = true
 	t.UnselectAll()
+	t.suppressSelectionChanged = false
 	t.Select(uid)
 }
 
-// isDoubleClick reports whether a click on the given node continues the
-// click sequence of the node, which makes it a double click.
-//
-// The interval of the driver is used, so that a double click is recognised
-// as fast as the system recognises it.
-func (t *ResourceTree) isDoubleClick(uid widget.TreeNodeID) bool {
-	return uid == t.lastClickUID &&
-		time.Since(t.lastClickTime) < fyne.CurrentApp().Driver().DoubleTapDelay()
+// cancelPendingClickLocked stops a debounced single click without locking.
+func (t *ResourceTree) cancelPendingClickLocked() {
+	if t.clickTimer != nil {
+		t.clickTimer.Stop()
+		t.clickTimer = nil
+	}
+}
+
+// cancelPendingClick stops a debounced single click that has not been
+// applied yet.
+func (t *ResourceTree) cancelPendingClick() {
+	t.clickMu.Lock()
+	defer t.clickMu.Unlock()
+	t.cancelPendingClickLocked()
 }
 
 // startClickSequence remembers the selection as it was before a click
 // sequence starts, so that a double click can restore it.
 func (t *ResourceTree) startClickSequence(uid widget.TreeNodeID) {
+	t.clickMu.Lock()
+	defer t.clickMu.Unlock()
+	t.cancelPendingClickLocked()
 	t.clickSelection = slices.Clone(t.selected)
 	t.lastClickUID = uid
 	t.lastClickTime = time.Now()
@@ -592,15 +615,48 @@ func (t *ResourceTree) startClickSequence(uid widget.TreeNodeID) {
 // endClickSequence ends the current click sequence, so that the next click
 // starts a new one.
 func (t *ResourceTree) endClickSequence() {
+	t.clickMu.Lock()
+	defer t.clickMu.Unlock()
+	t.cancelPendingClickLocked()
+	t.lastClickUID = ""
 	t.lastClickTime = time.Time{}
 }
 
 // restoreClickSelection restores the selection as it was before the current
 // click sequence started.
 func (t *ResourceTree) restoreClickSelection() {
-	t.selected = slices.Clone(t.clickSelection)
+	t.clickMu.Lock()
+	selection := slices.Clone(t.clickSelection)
+	t.clickMu.Unlock()
+	t.selected = selection
 	t.updateVisibleSelection()
 	t.syncTreeSelection()
+}
+
+// applyPendingClick applies a debounced single click: it selects only the
+// given node and ends the click sequence.
+func (t *ResourceTree) applyPendingClick(uid widget.TreeNodeID) {
+	t.clickMu.Lock()
+	if t.lastClickUID != uid {
+		t.clickMu.Unlock()
+		return
+	}
+	t.clickMu.Unlock()
+	t.selectOnly(uid)
+	t.endClickSequence()
+}
+
+// isDoubleClick reports whether a click on the given node continues the
+// click sequence of the node, which makes it a double click.
+//
+// The interval of the driver is used, so that a double click is recognised
+// as fast as the system recognises it.
+func (t *ResourceTree) isDoubleClick(uid widget.TreeNodeID) bool {
+	delay := fyne.CurrentApp().Driver().DoubleTapDelay()
+	t.clickMu.Lock()
+	defer t.clickMu.Unlock()
+	return uid == t.lastClickUID &&
+		time.Since(t.lastClickTime) < delay
 }
 
 func (t *ResourceTree) Select(uid widget.TreeNodeID) {
@@ -663,8 +719,10 @@ func (t *ResourceTree) UnselectAll() {
 			f(uid)
 		}
 	}
-	if f := t.OnSelectionChanged; f != nil {
-		f()
+	if !t.suppressSelectionChanged {
+		if f := t.OnSelectionChanged; f != nil {
+			f()
+		}
 	}
 }
 
@@ -831,15 +889,29 @@ func (n *ResourceTreeNode) MouseDown(e *desktop.MouseEvent) {
 				// selection of the click that started the sequence is
 				// restored first, so that the double click only toggles
 				// the node it is on and keeps the rest of the selection.
+				n.tree.cancelPendingClick()
 				n.tree.restoreClickSelection()
 				n.tree.ToggleSelection(n.uid)
 				n.tree.endClickSequence()
 				return
 			}
-			n.tree.startClickSequence(n.uid)
 
-			// select single
-			n.tree.selectOnly(n.uid)
+			// start a new click sequence and schedule the debounced single
+			// click, so that a possible double click does not make the
+			// selection flicker
+			clickUID := n.uid
+			n.tree.clickMu.Lock()
+			n.tree.cancelPendingClickLocked()
+			n.tree.clickSelection = slices.Clone(n.tree.selected)
+			n.tree.lastClickUID = clickUID
+			n.tree.lastClickTime = time.Now()
+			delay := fyne.CurrentApp().Driver().DoubleTapDelay()
+			n.tree.clickTimer = time.AfterFunc(delay, func() {
+				fyne.Do(func() {
+					n.tree.applyPendingClick(clickUID)
+				})
+			})
+			n.tree.clickMu.Unlock()
 		}
 	case desktop.MouseButtonSecondary:
 		{
