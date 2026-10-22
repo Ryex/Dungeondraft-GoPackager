@@ -106,12 +106,18 @@ jobs:
         if: ${{ runner.os == 'Linux' }}
         run: |
           mkdir install
+          # fyne >= 1.7.1 nests the package content (Makefile and usr/) under a
+          # single top level directory instead of extracting a tarbomb into the
+          # current directory ("Don't make tarbombs", fyne-io/tools#105). Keep
+          # that layout and put our extra files there too, so the release
+          # archive also extracts into one directory.
           tar -xJf "./Dungeondraft GoPackager.tar.xz" -C ./install
-          cp ./dungeondraft-packager* ./install/usr/local/bin
-          sed -i "/install:/install:\n\tinstall -Dm00644 usr/local/bin/$$(Exec)-cli $$(DESTDIR)$$(PREFIX)/bin/$$(Exec)-cli" ./install/Makefile
-          cp *.md ./install
+          cp ./dungeondraft-packager-cli ./install/dungeondraft-packager/usr/local/bin
+          # add the CLI to the install target of the generated Makefile
+          sed -i '/^install:/a\\tinstall -Dm00755 usr/local/bin/$(Exec)-cli $(DESTDIR)$(PREFIX)/bin/$(Exec)-cli' ./install/dungeondraft-packager/Makefile
+          cp *.md ./install/dungeondraft-packager
           ls -r ./install
-          ldd ./install/usr/local/bin/dungeondraft-packager
+          ldd ./install/dungeondraft-packager/usr/local/bin/dungeondraft-packager
 
       - name: Prep artifacts (MacOS)
         if: ${{ runner.os == 'macOS' }}
@@ -181,7 +187,7 @@ jobs:
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
-          body_path: Dungeondraft-GoPackager-Linux/CHANGELOG.md
+          body_path: Dungeondraft-GoPackager-Linux/dungeondraft-packager/CHANGELOG.md
           draft: true
           files: |
             Dungeondraft-GoPackager-Linux.tar.gz
