@@ -69,8 +69,12 @@ sub lists represent conditions that should be read as: when <parent arm> then <a
     - with a tags tab
       - with a "Bulk Tag Operations" header
       - with a list of the selected resources
-        - with the icon, the file name and the path of every resource
-        - with a button to deselect the resource
+        - every node shows the icon on the left, in the middle of the node
+        - and the file name of the resource to the right of the icon
+          - with the path of the resource below the file name
+            - the path starts at the same place as the file name
+          - the path is shown in a smaller and dimmer text
+        - with a button to deselect the resource in the top right corner
       - with a list of the tags that all the resources have in common
         - with a button to remove the tag from all the resources
       - with an entry to add a tag to all the resources

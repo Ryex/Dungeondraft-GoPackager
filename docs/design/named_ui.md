@@ -234,7 +234,6 @@ old `uiRegions` struct did.
 | `bulkTagList`    | `nameBulkTagList`     | `package.go`        |
 | `bulkTagSelector` | `nameBulkTagSelector` | `package.go`        |
 | `bulkTagAddButton` | `nameBulkTagAddButton` | `package.go`      |
-| `bulkOpsPane`    | `nameBulkOpsPane`     | `package.go`        |
 | `thumbnailToggle` | `nameThumbnailToggle` | `package.go`        |
 | `imagePreview`   | `nameImagePreview`    | `package.go`        |
 | `textPreview`    | `nameTextPreview`     | `package.go`        |
