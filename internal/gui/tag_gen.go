@@ -29,6 +29,22 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// generateTags generates the tags of the package and saves them.
+//
+// The watcher is paused while the tags are generated, because the generation
+// writes the tags file, which would be reported as an external change.
+func (a *App) generateTags(generator *ddpackage.GenerateTags, progressCallback func(p float64)) {
+	pkg := a.currentPackage()
+	if pkg == nil {
+		return
+	}
+
+	a.pausePackageWatcher()
+	defer a.resumePackageWatcher()
+
+	pkg.GenerateTagsProgress(generator, progressCallback)
+}
+
 func (a *App) createTagGenDialog() dialog.Dialog {
 	examplePathParts := []string{"textures", "objects", "{Set A} Tag A", "{Set B} {Set C} Long Tag B", "Tag C", "object.png"}
 
@@ -455,7 +471,7 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 				a.window,
 			)
 			progressDlg.Show()
-			a.pkg.GenerateTagsProgress(generator, func(p float64) {
+			a.generateTags(generator, func(p float64) {
 				progressVal.Set(p)
 			})
 			progressDlg.Hide()

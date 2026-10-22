@@ -2,12 +2,9 @@ package gui
 
 import (
 	"errors"
-	"os"
 	"path/filepath"
-	"slices"
+	"runtime"
 	"strings"
-	"sync"
-	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
@@ -20,7 +17,6 @@ import (
 	xlayout "fyne.io/x/fyne/layout"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/fsnotify/fsnotify"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/bindings"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/lang"
@@ -30,7 +26,6 @@ import (
 	"github.com/ryex/dungeondraft-gopackager/internal/utils"
 
 	"github.com/ryex/dungeondraft-gopackager/pkg/ddpackage"
-	"github.com/ryex/dungeondraft-gopackager/pkg/structures"
 
 	dderrors "github.com/ryex/dungeondraft-gopackager/internal/errors"
 
@@ -182,14 +177,21 @@ func (a *App) loadUnpackedPath(path string) {
 	}()
 }
 
-func (a *App) updateFromPaths(paths []string) {
+// updateFromPaths updates the package with the resources that changed on
+// disk.
+//
+// If full is set, the package is scanned completely, instead of updating
+// only the given paths. It is used when the events of the watcher were lost
+// (e.g. because the buffer of the operating system overflowed), so that all
+// the changes are found.
+func (a *App) updateFromPaths(pkg *ddpackage.Package, paths []string, full bool) {
 	activity := widget.NewActivity()
 	activity.Start()
 	msgText := widgets.NewThemedText(lang.X(
 		"pack.filesystemUpdate",
 		"Updating resources from {{.Path}} (updating index) ...",
 		map[string]any{
-			"Path": utils.TruncatePathHumanFriendly(a.pkg.UnpackedPath(), 80),
+			"Path": utils.TruncatePathHumanFriendly(pkg.UnpackedPath(), 80),
 		},
 	), theme.ColorNameForeground)
 	msgText.Text.TextSize = 16
@@ -222,7 +224,7 @@ func (a *App) updateFromPaths(paths []string) {
 	)
 	progressDlg.Show()
 
-	a.pkg.UpdateFromPathsProgress(paths, func(p float64, path string, _ int64) {
+	progress := func(p float64, path string, _ int64) {
 		activityStr.Set(lang.X(
 			"pack.buildList.activity",
 			"Loading {{.Path}} ...",
@@ -230,131 +232,166 @@ func (a *App) updateFromPaths(paths []string) {
 				"Path": utils.TruncatePathHumanFriendly(path, 80),
 			},
 		))
-	})
-	err := a.pkg.LoadTags()
+	}
+
+	// the info of the package is not part of the file list, so it has to be
+	// loaded separately, when the pack.json changed
+	rebuild := a.reloadPackInfo(pkg, paths)
+
+	var errs []error
+	if full || rebuild {
+		log.Debugf("rescanning the package folder %s", pkg.UnpackedPath())
+		errs = pkg.BuildFileListProgress(progress)
+	} else {
+		errs = pkg.UpdateFromPathsProgress(paths, progress)
+	}
+	for _, err := range errs {
+		log.WithError(err).Error("could not update the package from the changed paths")
+	}
+
+	err := pkg.LoadTags()
 	if err != nil {
 		a.showErrorDialog(
 			dderrors.CausedBy(errors.New(lang.X("package.tags.error", "Failed to read tags")), err),
 		)
-		err = nil
 	}
-	err = a.pkg.LoadResourceMetadata()
+	err = pkg.LoadResourceMetadata()
 	if err != nil {
 		a.showErrorDialog(dderrors.CausedBy(errors.New(lang.X("package.metadata.error", "Failed to read metadata")), err))
-		err = nil
 	}
 	progressDlg.Hide()
 	a.packageUpdated.Set(a.pkgUpdateCounter + 1)
 }
 
+// reloadPackInfo reloads the info of the package from its pack.json, when
+// the pack.json changed.
+//
+// It reports whether the package has to be scanned completely, because the
+// id of the pack is part of the resource paths.
+func (a *App) reloadPackInfo(pkg *ddpackage.Package, paths []string) bool {
+	packJSONPath := filepath.Join(pkg.UnpackedPath(), "pack.json")
+
+	changed := false
+	for _, path := range paths {
+		if samePath(path, packJSONPath) {
+			changed = true
+			break
+		}
+	}
+	if !changed {
+		return false
+	}
+
+	oldID := pkg.ID()
+	if err := pkg.LoadUnpackedPackJSON(pkg.UnpackedPath()); err != nil {
+		log.WithError(err).Error("could not reload the pack.json")
+		return false
+	}
+
+	return oldID != pkg.ID()
+}
+
+// samePath reports whether the two paths point to the same file.
+func samePath(a string, b string) bool {
+	a = filepath.Clean(a)
+	b = filepath.Clean(b)
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
+}
+
+// onPackageChanged updates the package with the paths that changed on disk.
+//
+// It is called by the filesystem watcher, when the debounce time passed
+// without further events.
+func (a *App) onPackageChanged(paths []string, full bool) {
+	pkg := a.currentPackage()
+	if pkg == nil {
+		return
+	}
+
+	// the updates are serialized, so that the package is not updated while
+	// it is read
+	a.packageUpdateLock.Lock()
+	defer a.packageUpdateLock.Unlock()
+
+	log.Debugf("updating resource paths... %s", paths)
+
+	// the update touches the interface, so it has to run on the Fyne
+	// goroutine
+	fyne.DoAndWait(func() {
+		a.updateFromPaths(pkg, paths, full)
+	})
+
+	a.packageUpdateCount++
+}
+
+// setupPackageWatcher starts the watcher that notices the changes of the
+// files of the unpacked package.
 func (a *App) setupPackageWatcher() {
 	if a.packageWatcherDisabled {
 		return
 	}
-	watcher, err := fsnotify.NewWatcher()
+	watcher, err := newPackageWatcher(
+		a.packageWatcherDebounce,
+		a.onPackageChanged,
+		func(err error) {
+			log.WithError(err).Warn("filesystem watcher error")
+		},
+	)
 	if err != nil {
 		log.WithError(err).Error("failed to setup filesystem watcher")
 		return
 	}
 	a.packageWatcher = watcher
-	paths := structures.NewSet[string]()
-	var eventTimer *time.Timer
-	timerLock := &sync.RWMutex{}
-
-	updatePackage := func() {
-		timerLock.Lock()
-		defer timerLock.Unlock()
-		eventTimer = nil
-		toUpdate := paths.AsSlice()
-		paths = structures.NewSet[string]()
-		for _, path := range toUpdate {
-			statInfo, err := os.Stat(path)
-			if err != nil {
-				if slices.Contains(watcher.WatchList(), path) {
-					_ = watcher.Remove(path) // remove non existent paths
-				}
-				continue
-			}
-			if statInfo.IsDir() {
-				watcher.Add(path) // watch new paths
-			}
-		}
-		if a.packageWatcherIgnoreThumbnails {
-			thumbnailPrefix := filepath.Join(a.pkg.UnpackedPath(), "thumbnails")
-			toUpdate = slices.Collect(utils.Filter(slices.Values(toUpdate), func(path string) bool {
-				return !strings.HasPrefix(path, thumbnailPrefix)
-			}))
-		}
-		if a.pkg != nil {
-			log.Debugf("updating resource paths... %s", toUpdate)
-			fyne.DoAndWait(func() { a.updateFromPaths(toUpdate) })
-		}
-	}
-
-	go func() {
-		for {
-			select {
-			case event, ok := <-watcher.Events:
-				if !ok {
-					return
-				}
-				if !event.Has(fsnotify.Chmod) {
-					path := event.Name
-					func() {
-						timerLock.Lock()
-						defer timerLock.Unlock()
-						if eventTimer != nil {
-							eventTimer.Stop()
-						}
-						paths.Add(path)
-						eventTimer = time.AfterFunc(
-							2*time.Second,
-							updatePackage,
-						)
-					}()
-				}
-			case err, ok := <-watcher.Errors:
-				if !ok {
-					return
-				}
-				if errors.Is(err, fsnotify.ErrEventOverflow) {
-					log.WithError(err).Warn("fsnotify overflow, force updating package")
-					timerLock.Lock()
-					defer timerLock.Unlock()
-					if eventTimer != nil {
-						eventTimer.Stop()
-					}
-					paths.Add(a.pkg.UnpackedPath())
-					eventTimer = time.AfterFunc(
-						2*time.Second,
-						updatePackage,
-					)
-				}
-				log.WithError(err).Warn("filesystem watcher error")
-			}
-		}
-	}()
 
 	toWatchPath := a.pkg.UnpackedPath()
-	if toWatchPath != "" {
-		err := watcher.Add(toWatchPath)
-		if err != nil {
-			log.WithError(err).WithField("package", toWatchPath).Warnf("failed to watch %s", toWatchPath)
-		}
-		_, dirs, _ := utils.ListDir(toWatchPath)
-		for _, dir := range dirs {
-			log.WithField("package", toWatchPath).Infof("watching %s", dir)
-			err := watcher.Add(dir)
-			if err != nil {
-				log.WithError(err).WithField("package", toWatchPath).Warnf("failed to watch %s", dir)
-			}
-		}
+	if toWatchPath == "" {
+		return
 	}
+	if err := watcher.Watch(toWatchPath); err != nil {
+		log.WithError(err).WithField("package", toWatchPath).Warnf("failed to watch %s", toWatchPath)
+	}
+}
+
+// pausePackageWatcher stops the watcher from reporting the changes of the
+// files of the package.
+//
+// The changes that happen while the watcher is paused are still queued, so
+// that they are reported when it is resumed.
+func (a *App) pausePackageWatcher() {
+	if a.packageWatcher == nil {
+		return
+	}
+	a.packageWatcher.Pause()
+}
+
+// resumePackageWatcher lets the watcher report the changes that happened
+// while it was paused.
+func (a *App) resumePackageWatcher() {
+	if a.packageWatcher == nil {
+		return
+	}
+	a.packageWatcher.Resume()
+}
+
+// discardPackageWatcherChanges forgets the queued changes of the files under
+// the given folder.
+//
+// It is used by the tasks that change the files of the package themselves
+// and update the affected parts of the package themselves.
+func (a *App) discardPackageWatcherChanges(dir string) {
+	if a.packageWatcher == nil {
+		return
+	}
+	a.packageWatcher.DiscardUnder(dir)
 }
 
 func (a *App) teardownPackageWatcher() {
 	if a.packageWatcher != nil {
 		a.packageWatcher.Close()
+		a.packageWatcher = nil
 	}
 }
 
@@ -419,7 +456,7 @@ func (a *App) setNotAPackageContent(path string) {
 }
 
 func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
-	a.pkg = pkg
+	a.setCurrentPackage(pkg)
 
 	split := a.buildPackageTreeAndInfoPane(true)
 
@@ -592,28 +629,49 @@ func (a *App) genThumbnails() {
 	)
 	progressDlg.Show()
 	go func() {
-		a.packageWatcherIgnoreThumbnails = true
-		errs := a.pkg.GenerateThumbnailsProgress(func(p float64) {
-			progressVal.Set(p)
-		})
-		progressDlg.Hide()
-		if len(errs) != 0 {
-			progressDlg.Hide()
-			errDlg := dialog.NewError(
-				dderrors.CausedBy(errors.New(lang.X(
-					"pack.thumbnails.error.text",
-					"Error generating thumbnails for {{.Path}}",
-					map[string]any{
-						"Path": a.pkg.UnpackedPath(),
-					},
-				)), errs...),
-				a.window,
-			)
-			errDlg.Show()
+		// the generation writes a lot of files, so the watcher is paused,
+		// to not be flooded with the events of the generated thumbnails
+		a.pausePackageWatcher()
+		defer a.resumePackageWatcher()
+
+		pkg := a.currentPackage()
+		if pkg == nil {
+			a.disableButtons.Set(false)
 			return
 		}
-		a.pkg.UpdateFromPaths([]string{filepath.Join(a.pkg.UnpackedPath(), "thumbnails")})
-		a.packageWatcherIgnoreThumbnails = false
+
+		errs := pkg.GenerateThumbnailsProgress(func(p float64) {
+			progressVal.Set(p)
+		})
+		fyne.Do(func() {
+			progressDlg.Hide()
+		})
+		if len(errs) != 0 {
+			fyne.Do(func() {
+				errDlg := dialog.NewError(
+					dderrors.CausedBy(errors.New(lang.X(
+						"pack.thumbnails.error.text",
+						"Error generating thumbnails for {{.Path}}",
+						map[string]any{
+							"Path": pkg.UnpackedPath(),
+						},
+					)), errs...),
+					a.window,
+				)
+				errDlg.Show()
+			})
+			a.disableButtons.Set(false)
+			return
+		}
+		thumbnailDir := filepath.Join(pkg.UnpackedPath(), "thumbnails")
+		if errs := pkg.UpdateFromPaths([]string{thumbnailDir}); len(errs) > 0 {
+			for _, err := range errs {
+				log.WithError(err).Error("could not update the package with the generated thumbnails")
+			}
+		}
+		// the changes of the generation are already applied, so they are
+		// not reported by the watcher again
+		a.discardPackageWatcherChanges(thumbnailDir)
 		a.disableButtons.Set(false)
 	}()
 }

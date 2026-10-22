@@ -24,7 +24,6 @@ import (
 
 	xdialog "fyne.io/x/fyne/dialog"
 	fynetooltip "github.com/dweymouth/fyne-tooltip"
-	"github.com/fsnotify/fsnotify"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/assets"
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/bindings"
@@ -77,6 +76,10 @@ type App struct {
 
 	pkg *ddpackage.Package
 
+	// pkgLock guards the package of the app, so that it can be accessed
+	// from the goroutine of the filesystem watcher, too.
+	pkgLock sync.RWMutex
+
 	disableButtons          binding.Bool
 	mainDisableListener     binding.DataListener
 	currentDisableListeners []binding.DataListener
@@ -95,13 +98,25 @@ type App struct {
 	tagSaveTimer  *time.Timer
 	resSaveTimers map[string]*time.Timer
 
-	packageWatcher *fsnotify.Watcher
+	// packageWatcher watches the unpacked folder of the package for changes.
+	packageWatcher *packageWatcher
 
-	packageWatcherIgnoreThumbnails bool
+	// packageWatcherDebounce is the time the watcher waits for further
+	// events, before it reports the changed paths. It is zero in the app,
+	// which makes the watcher use its default debounce time. The tests
+	// lower it, to keep them fast.
+	packageWatcherDebounce time.Duration
 
 	// packageWatcherDisabled stops the filesystem watcher from being started.
 	// Used by tests, which drive the package loading directly.
 	packageWatcherDisabled bool
+
+	// packageUpdateLock serializes the updates of the package that the
+	// filesystem watcher triggers. It guards packageUpdateCount.
+	packageUpdateLock sync.Mutex
+	// packageUpdateCount counts the updates of the package that the
+	// filesystem watcher triggered.
+	packageUpdateCount int
 
 	// loadUnpacked loads an unpacked package folder. It is a field so that
 	// tests can control the timing of the load.
@@ -253,10 +268,28 @@ func (a *App) setupWindow() {
 
 func (a *App) resetPkg() {
 	a.teardownPackageWatcher()
-	if a.pkg != nil {
-		a.pkg.Close()
+	pkg := a.currentPackage()
+	a.setCurrentPackage(nil)
+	if pkg != nil {
+		pkg.Close()
 	}
-	a.pkg = nil
+}
+
+// currentPackage returns the package of the app.
+//
+// It is safe to call it from the goroutine of the filesystem watcher, which
+// may run while another package is loaded.
+func (a *App) currentPackage() *ddpackage.Package {
+	a.pkgLock.RLock()
+	defer a.pkgLock.RUnlock()
+	return a.pkg
+}
+
+// setCurrentPackage sets the package of the app.
+func (a *App) setCurrentPackage(pkg *ddpackage.Package) {
+	a.pkgLock.Lock()
+	defer a.pkgLock.Unlock()
+	a.pkg = pkg
 }
 
 func (a *App) clean() {

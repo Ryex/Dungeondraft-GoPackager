@@ -91,8 +91,21 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - the tags and the metadata of the package were merged with the old ones when they
   were reloaded from disk, the tags that were removed from the tags file stayed in
   the package.
+- the info of the package was not reloaded when its pack.json changed on disk.
+- the file watcher ignored the thumbnails of the package forever, when the
+  generation of the thumbnails failed.
+- the file watcher and the thumbnail generation shared a flag without
+  synchronisation, it was a data race.
 
 ### Code Refactoring
+
+- the file watcher of the unpacked package is a type of its own
+  (`internal/gui/package_watcher.go`), that queues the changed paths and reports
+  them after a debounce time. It can be paused, while the app changes the files
+  of the package itself (the thumbnail and the tag generation), so that these
+  changes are not reported as external changes. When the watcher loses its
+  events (the buffer of the operating system overflows), the package is scanned
+  completely, so that all the changes are found.
 
 - the parts of the interface are named where they are created and looked up by
   name afterwards, instead of being kept in a struct with a field per part.
