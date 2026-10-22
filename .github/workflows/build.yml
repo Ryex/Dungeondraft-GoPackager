@@ -40,26 +40,12 @@ jobs:
             ~/.cache/go-build
             ~/.cache/fyne-cross
           key: ${{ runner.os }}-build-cache-${{ hashFiles('**/go.sum') }}
-      # - name: Setup msys2
-      #   if: ${{ runner.os == 'Windows' }}
-      #   uses: msys2/setup-msys2@v2
-      #   with:
-      #     msystem: UCRT64
-      #     install: >-
-      #       base-devel
-      #       mingw-w64-ucrt-x86_64-toolchain
-      #       mingw-w64-ucrt-x86_64-libwebp
-      #       mingw-w64-ucrt-x86_64-go
 
       - name: Install Build Deps (Linux)
         if: ${{ runner.os == 'Linux' }}
-        # run: sudo apt-get install golang gcc libgl1-mesa-dev xorg-dev libwebp-dev
         run: |
           sudo apt-get update
-          sudo apt-get install golang gcc libgl1-mesa-dev xorg-dev
-      # - name: Install Build Deps (Macos)
-      #   if: ${{ runner.os == 'macOS' }}
-      #   run: brew install webp
+          sudo apt-get install gcc libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev
       - name: Install Fyne
         run: |
           go install fyne.io/tools/cmd/fyne@latest
@@ -67,10 +53,7 @@ jobs:
         run: go mod download
       - name: Build Gui (Windows)
         if: ${{ runner.os == 'Windows' }}
-        # shell: msys2 {0}
         run: |
-          # export GOROOT=/ucrt64/lib/go
-          # export GOPATH=/ucrt64
           cp FyneApp.toml ./cmd/dungeondraft-packager
           fyne package -os windows -src ./cmd/dungeondraft-packager --release -app-id io.github.ryex.dungeondraft-gopackager
       - name: Build Gui (Linux)
@@ -90,10 +73,7 @@ jobs:
           fyne package -os darwin -exe ./dungeondraft-packager --release --icon ./cmd/dungeondraft-packager/Icon.png -app-id io.github.ryex.dungeondraft-gopackager
       - name: Build Cli (Windows)
         if: ${{ runner.os == 'Windows' }}
-        # shell: msys2 {0}
         run: |
-          # export GOROOT=/ucrt64/lib/go
-          # export GOPATH=/ucrt64
           go build -ldflags "-s -w" ./cmd/dungeondraft-packager-cli
       - name: Build Cli (Linux)
         if: ${{ runner.os == 'Linux' }}
@@ -115,17 +95,12 @@ jobs:
 
       - name: Prep artifacts (Windows)
         if: ${{ runner.os == 'windows' }}
-        # shell: msys2 {0}
         run: |
           mkdir install
           cp "./cmd/dungeondraft-packager/Dungeondraft GoPackager.exe" ./install
           cp "./dungeondraft-packager-cli.exe" ./install
           cp *.md ./install
-          # cp /ucrt64/bin/libwebp-*.dll ./install
-          # cp /ucrt64/bin/libsharpyuv-*.dll ./install
           ls -r ./install
-          # ldd "./install/Dungeondraft GoPackager.exe"
-          # dumpbin /dependents "./install/Dungeondraft GoPackager.exe"
 
       - name: Prep artifacts (Linux)
         if: ${{ runner.os == 'Linux' }}
@@ -148,8 +123,6 @@ jobs:
           cp ./dungeondraft-packager* ./prep
           cp *.md ./prep
           mkdir "./prep/Dungeondraft GoPackager.app/Contents/Frameworks"
-          # cp /opt/homebrew/opt/webp/lib/libwebp.7.dylib "./install/Dungeondraft GoPackager.app/Contents/Frameworks"
-          # install_name_tool -change /opt/homebrew/opt/webp/lib/libwebp.7.dylib "@executable_path/../Frameworks/libwebp.7.dylib" "./install/Dungeondraft GoPackager.app/Contents/MacOS/dungeondraft-packager"
           ls -lah ./prep
           ls -r "./prep/Dungeondraft GoPackager.app"
           otool -L "./prep/Dungeondraft GoPackager.app/Contents/MacOS/dungeondraft-packager"
@@ -185,7 +158,8 @@ jobs:
         # software renderer of fyne.io/fyne/v2/test.
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev
+          sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev
+
 
       - name: Run tests
         run: go test ./...
