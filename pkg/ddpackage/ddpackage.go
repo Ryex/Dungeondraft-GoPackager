@@ -54,7 +54,10 @@ type Package struct {
 	packedPath    string
 	alignment     int
 
-	flLock      sync.RWMutex // guards the resourceMap and fileList
+	// flLock guards the resourceMap and the fileList, and the pack info
+	// (id, name, info), because the info is reloaded from pack.json while
+	// the file list is scanned (see LoadUnpackedPackJSON).
+	flLock      sync.RWMutex
 	fileList    *structures.FileInfoList
 	resourceMap map[string]*structures.FileInfo
 
@@ -77,32 +80,46 @@ func (p *Package) Close() {
 }
 
 func (p *Package) ID() string {
+	p.flLock.RLock()
+	defer p.flLock.RUnlock()
 	return p.id
 }
 
 func (p *Package) SetID(id string) {
+	p.flLock.Lock()
+	defer p.flLock.Unlock()
 	p.id = id
 	p.info.ID = id
 }
 
 func (p *Package) Name() string {
+	p.flLock.RLock()
+	defer p.flLock.RUnlock()
 	return p.name
 }
 
 func (p *Package) SetName(name string) {
+	p.flLock.Lock()
+	defer p.flLock.Unlock()
 	p.name = name
 	p.info.Name = name
 }
 
 func (p *Package) SetAuthor(author string) {
+	p.flLock.Lock()
+	defer p.flLock.Unlock()
 	p.info.Author = author
 }
 
 func (p *Package) SetVersion(version string) {
+	p.flLock.Lock()
+	defer p.flLock.Unlock()
 	p.info.Version = version
 }
 
 func (p *Package) SetKeywords(keywords []string) {
+	p.flLock.Lock()
+	defer p.flLock.Unlock()
 	p.info.Keywords = keywords
 	p.info.KeywordsRaw = strings.Join(keywords, ",")
 }
@@ -112,10 +129,14 @@ func (p *Package) SetAllow3rdParty(allow *bool) {
 	if allow != nil {
 		*val = *allow
 	}
+	p.flLock.Lock()
+	defer p.flLock.Unlock()
 	p.info.Allow3rdParty = val
 }
 
 func (p *Package) SetColorOverrides(overrides *structures.CustomColorOverrides) {
+	p.flLock.Lock()
+	defer p.flLock.Unlock()
 	p.info.ColorOverrides = overrides
 }
 
@@ -134,7 +155,13 @@ func (p *Package) FileList() *structures.FileInfoList {
 	return res
 }
 
+// Info returns the info of the pack that was read from its pack.json.
+//
+// The info is replaced when it is read again, so the returned pointer stays
+// usable while the package is updated.
 func (p *Package) Info() *structures.PackageInfo {
+	p.flLock.RLock()
+	defer p.flLock.RUnlock()
 	return p.info
 }
 
@@ -306,14 +333,17 @@ func (p *Package) replaceResource(old *structures.FileInfo, fInfo *structures.Fi
 	p.log.Debugf("replaced %s", fInfo.ResPath)
 }
 
+// resetData clears the resource index of the package.
+//
+// The tags and the resource metadata are not cleared here: they are cleared
+// in place when they are read again (resetTags, resetResourceMetadata). The
+// interface reads them without a lock, so they must not be written by the
+// scan of the file list, which can run in the background.
 func (p *Package) resetData() {
 	p.flLock.Lock()
 	defer p.flLock.Unlock()
 	p.fileList = structures.NewFileInfoList()
 	p.resourceMap = make(map[string]*structures.FileInfo)
-	p.walls = make(map[string]structures.PackageWall)
-	p.tilesets = make(map[string]structures.PackageTileset)
-	p.tags = structures.NewPackageTags()
 }
 
 // GetResourceInfo gets the *FileInfo for a resource identified by the passed 'res://' path

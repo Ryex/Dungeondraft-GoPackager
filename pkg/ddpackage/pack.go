@@ -78,9 +78,14 @@ func (p *Package) LoadUnpackedPackJSON(dirPath string) error {
 		return errors.Join(ErrInvalidPackJSON, err)
 	}
 
+	// The info is read by the interface while the file list can be scanned
+	// in the background, so it is written under the lock that guards the
+	// package data.
+	p.flLock.Lock()
 	p.info = &pack
 	p.id = pack.ID
 	p.name = pack.Name
+	p.flLock.Unlock()
 
 	return nil
 }

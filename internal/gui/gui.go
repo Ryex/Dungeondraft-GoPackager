@@ -112,7 +112,13 @@ type App struct {
 	packageWatcherDisabled bool
 
 	// packageUpdateLock serializes the updates of the package that the
-	// filesystem watcher triggers. It guards packageUpdateCount.
+	// filesystem watcher triggers and the replacement of the package, so
+	// that a package is not closed while it is updated. It guards
+	// packageUpdateCount.
+	//
+	// An update must not wait for the Fyne goroutine while it holds the
+	// lock: the Fyne goroutine can wait for the lock itself, when the
+	// package is replaced (see replacePackage).
 	packageUpdateLock sync.Mutex
 	// packageUpdateCount counts the updates of the package that the
 	// filesystem watcher triggered.
@@ -125,6 +131,11 @@ type App struct {
 	// loadPacked loads a packed resource pack file. It is a field so that
 	// tests can control the timing of the load.
 	loadPacked func(path string, progress func(p float64, curRes string)) (*ddpackage.Package, error)
+
+	// packageUpdateHook is called while an update of the package runs in
+	// the background, with the dialog of the update showing. It is a field
+	// so that tests can look at the interface while the update runs.
+	packageUpdateHook func(dlg *packageUpdateDialog)
 
 	// bgWG tracks the background work that touches the interface: the
 	// loads of a package and the computations of the md5 hashes.
@@ -266,12 +277,25 @@ func (a *App) setupWindow() {
 	a.window.Show()
 }
 
+// resetPkg stops the watcher of the package of the app, drops it and closes
+// it.
 func (a *App) resetPkg() {
 	a.teardownPackageWatcher()
-	pkg := a.currentPackage()
-	a.setCurrentPackage(nil)
-	if pkg != nil {
-		pkg.Close()
+	a.replacePackage(nil)
+}
+
+// replacePackage sets the package of the app and closes the one it replaces.
+//
+// It waits for an update of the package that runs in the background, so
+// that a package is not closed while it is updated.
+func (a *App) replacePackage(pkg *ddpackage.Package) {
+	a.packageUpdateLock.Lock()
+	defer a.packageUpdateLock.Unlock()
+
+	old := a.currentPackage()
+	a.setCurrentPackage(pkg)
+	if old != nil && old != pkg {
+		old.Close()
 	}
 }
 
@@ -754,7 +778,13 @@ func (a *App) setWaitContent(msg string) (binding.Float, binding.String) {
 	return activityProgress, activityStr
 }
 
+// showErrorDialog shows the error in a dialog.
+//
+// It can be called from the background work that reports the error: the
+// dialog is shown on the Fyne goroutine.
 func (a *App) showErrorDialog(err error) {
-	errDlg := dialog.NewError(err, a.window)
-	errDlg.Show()
+	fyne.Do(func() {
+		errDlg := dialog.NewError(err, a.window)
+		errDlg.Show()
+	})
 }

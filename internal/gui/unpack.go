@@ -49,7 +49,12 @@ func (a *App) loadPack(path string) {
 	)
 	a.disableButtons.Set(true)
 
-	a.resetPkg()
+	// The watcher of the package that is loaded over is stopped right away,
+	// so that its changes are not reported while the new package is loaded.
+	// The package itself is only dropped when the new one is shown (see
+	// setPackContent), so that the interface never shows the panel of a
+	// package that is not loaded anymore.
+	a.teardownPackageWatcher()
 
 	a.bgWG.Add(1)
 	go func() {
@@ -114,7 +119,10 @@ func (a *App) loadPackSync(
 }
 
 func (a *App) setPackContent(pkg *ddpackage.Package) {
-	a.pkg = pkg
+	// the package of the app is replaced only now, when the content that
+	// shows it is built, so that the interface never refers to a package
+	// that is not loaded anymore
+	a.replacePackage(pkg)
 
 	split := a.buildPackageTreeAndInfoPane(false)
 
