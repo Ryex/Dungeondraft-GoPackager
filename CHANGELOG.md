@@ -16,12 +16,25 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `$name` for a suffix match), by tag (`#tag`), by path glob (`/glob`) and by
   resource kind (`@IsTexture`), filters are combined with `&` (and), with `!`
   (not) and with `()` groups.
+- the filter entry of the resource tree shows the syntax of the filter language in
+  its placeholder and in its tool tip, in the resource view and in the tag view
+  alike.
 - a help button next to the filter of the resource tree opens a dialog that
   describes the filter syntax, with a list of its sections that scrolls the
   help to the section that is clicked.
 - the resource tree is a widget of its own with a multi selection: ctrl and shift
   add a resource to the selection or remove it from it, a double click toggles
   the selection of a resource.
+- the resource pane shows the bulk operations pane when more than one resource is
+  selected: the selected resources are listed with their icon, their file name,
+  the path they are shown under and a button to deselect them, and the tags that
+  all of them have in common are listed with a button to remove them from all of
+  them and an entry to add a tag to all of them.
+- the node of a selected resource shows the icon in the middle of the node next
+  to the texts, the path is shown below the file name and starts at the same
+  place as it, the button that deselects the resource is a small one in the top
+  right corner of the node, and the name of the resource is shown with its
+  extension.
 - the resource preview shows the resource path, the filesystem path and the md5
   hash of the resource, every one of them with a copy to clipboard button.
 - md5 hashes are computed while packaging and written into the pack header, and
@@ -38,6 +51,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Bug Fixes
 
+- the app crashed when the timers that save the tags and the metadata of a
+  package fired after the app was cleaned up.
 - highlight the selected resources in the resource tree.
 - fix the reversed context menu of the resource tree, it now offers to select an unselected
   resource and to unselect a selected one.
@@ -71,6 +86,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Code Refactoring
 
+- the parts of the interface are named where they are created and looked up by
+  name afterwards, instead of being kept in a struct with a field per part.
+- the resource tree reports the selected resources with the id of the node they
+  are shown as, their information and whether they are selected on their own.
+- new layouts for the nodes of the interface: a container with a padding of its
+  own, a container that stacks its objects with a spacing of its own, a
+  container of a fixed size and a container that puts its first object on the
+  left, in the middle, next to the others.
 - the resource tree moved into its own package (`internal/gui/resource_tree`).
 - the resource filter parser is a reusable package (`pkg/ddpackage/filter`) instead
   of a tag filter that only the gui could use.
@@ -90,6 +113,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - a declarative ui dsl (`internal/testutil/uitest`) to assert on the layout of the
   interface.
 - the ui specification (`docs/design/ui_spec.md`) is translated into tests.
+- the dsl finds the place where the text of a widget starts, so that the tests
+  can assert that two texts start at the same place.
+- the race detector is run once per set of changes before it is committed, it
+  makes the gui tests take minutes instead of seconds.
 - test fixtures that synthesize a resource pack on the fly.
 - tests for the bindings, the widgets, the theme, the resource tree and the filter
   parser.
