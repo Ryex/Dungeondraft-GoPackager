@@ -5,7 +5,7 @@ Website = "https://ryex.github.io/Dungeondraft-GoPackager/"
   Icon = "Icon.png"
   Name = "Dungeondraft GoPackager"
   ID = "io.github.ryex.dungondraft-gopackager"
-  Version = "2.0.0"
+  Version = "2.1.0"
   Build = 1
 
 [LinuxAndBSD]
