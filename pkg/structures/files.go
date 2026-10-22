@@ -134,12 +134,21 @@ func (fi *FileInfo) IsMetadata() bool {
 	return !fi.IsData() && !fi.IsTexture() && !fi.IsThumbnail()
 }
 
+// ShouldHaveMetadata reports whether the resource can have metadata: wall
+// sections and tilesets can, wall end pieces cannot.
 func (fi *FileInfo) ShouldHaveMetadata() bool {
-	return (fi.IsWall() &&
-		!strings.HasSuffix(
-			strings.TrimSuffix(filepath.Base(fi.ResPath), filepath.Ext(fi.ResPath)),
-			"_end",
-		)) || fi.IsTileset()
+	return (fi.IsWall() && !fi.IsWallEnd()) || fi.IsTileset()
+}
+
+// IsWallEnd reports whether the resource is a wall end piece: a wall texture
+// whose file name stem ends in "_end". End pieces cap the start and the end of
+// a wall and don't get the same treatment as wall sections.
+func (fi *FileInfo) IsWallEnd() bool {
+	if !fi.IsWall() {
+		return false
+	}
+	stem := strings.TrimSuffix(filepath.Base(fi.ResPath), filepath.Ext(fi.ResPath))
+	return strings.HasSuffix(stem, "_end")
 }
 
 func (fi *FileInfo) IsData() bool {
