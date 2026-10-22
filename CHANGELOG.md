@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 <!-- insertion marker -->
+## [v2.1.0](https://github.com/Ryex/Dungeondraft-GoPackager/releases/tag/v2.1.0) - 2026-10-22
+
+<small>[Compare with v2.0.4](https://github.com/Ryex/Dungeondraft-GoPackager/compare/v2.0.4...v2.1.0)</small>
+
 ### Features
 
 - the about dialog shows the version of the build amended with the commit it was
@@ -98,7 +102,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   controls of the panel are disabled with the rest of the interface.
 
 ## [v2.0.4](https://github.com/Ryex/Dungeondraft-GoPackager/releases/tag/v2.0.3) - 2025-4-25
-<small>[Compare with v2.0.3](https://github.com/Ryex/Dungeondraft-GoPackager/compare/v2.0.4...v2.0.3)</small>
+<small>[Compare with v2.0.3](https://github.com/Ryex/Dungeondraft-GoPackager/compare/v2.0.3...v2.0.4)</small>
 
 - fix MacOS packaging, Build universal x64|arm64 binaries
 - add a more powerful tag filter in "By Tag" view. see tool tip.
