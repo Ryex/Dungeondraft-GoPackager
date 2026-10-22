@@ -443,6 +443,7 @@ func TestResourceTreeClickAfterAPauseIsNoDoubleClick(t *testing.T) {
 	click(node)
 	time.Sleep(fyne.CurrentApp().Driver().DoubleTapDelay() + 50*time.Millisecond)
 	click(node)
+	time.Sleep(fyne.CurrentApp().Driver().DoubleTapDelay() + 50*time.Millisecond)
 
 	assert.True(t, tree.IsVisiblySelected(rockResPath),
 		"two clicks that are too far apart must not toggle the selection")
@@ -531,10 +532,11 @@ func TestResourceTreeModifiedClickEndsTheClickSequence(t *testing.T) {
 	require.True(t, ok, "the tree must hold a node for the resource")
 
 	click(node)
+	time.Sleep(fyne.CurrentApp().Driver().DoubleTapDelay() + 50*time.Millisecond)
 	require.True(t, tree.IsVisiblySelected(rockResPath))
 
 	// the control key removes the node from the selection, it must not be
-	// swallowed by the double click of the click before it
+	// swallowed by a double click of the click before it
 	clickWith(node, fyne.KeyModifierControl)
 	assert.False(t, tree.IsVisiblySelected(rockResPath),
 		"a modified click must not be swallowed by a double click")
@@ -542,6 +544,7 @@ func TestResourceTreeModifiedClickEndsTheClickSequence(t *testing.T) {
 	// the modified click ended the click sequence, so this click is not the
 	// second click of a double click
 	click(node)
+	time.Sleep(fyne.CurrentApp().Driver().DoubleTapDelay() + 50*time.Millisecond)
 	assert.True(t, tree.IsVisiblySelected(rockResPath),
 		"a modified click must end the click sequence")
 }
