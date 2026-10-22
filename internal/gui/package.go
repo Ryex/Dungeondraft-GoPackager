@@ -71,8 +71,8 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) *named.Named {
 	tree, filter, displayByTag := a.buildPackageTree(editable)
 
 	filterEntry := widgets.NewToolTipEntryWithData(filter)
-	filterEntry.SetPlaceHolder(lang.X("tree.filter.placeholder.resource", "Filter with glob (e.g. */objects/**)"))
-	filterErrorText := widgets.NewThemedText(lang.X("tree.filter.error", "Bad glob syntax"), theme.ColorNameError)
+	filterEntry.SetPlaceHolder(lang.X("tree.filter.placeholder", "Filter resources (e.g. rock, #stone, @IsTexture)"))
+	filterErrorText := widgets.NewThemedText(lang.X("tree.filter.error", "Bad filter syntax"), theme.ColorNameError)
 	filterErrorText.Hide()
 	filterEntry.Validator = func(s string) error {
 		_, err := ddresource_filter.ParseResourceFilter(s)
@@ -86,7 +86,7 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) *named.Named {
 		return err
 	}
 
-	filterEntry.SetToolTip(lang.X("tree.filter.toolTip.glob", "Use Glob syntax to match resource paths"))
+	filterEntry.SetToolTip(lang.X("tree.filter.toolTip", "Filter the resources of the tree"))
 
 	displayByLbl := widget.NewLabel(lang.X("tree.displayBy.label", "Display By"))
 
@@ -96,20 +96,8 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) *named.Named {
 	displayByRadio := widget.NewRadioGroup([]string{byResourceOption, byTagOption}, func(selected string) {
 		if selected == byResourceOption {
 			displayByTag.Set(false)
-			filterEntry.SetPlaceHolder(lang.X("tree.filter.placeholder.resource", "Filter with glob (e.g. */objects/**)"))
-			filterEntry.SetToolTip(lang.X("tree.filter.toolTip.glob", "Use Glob syntax to match resource paths"))
 		} else {
 			displayByTag.Set(true)
-			filterEntry.SetPlaceHolder(lang.X("tree.filter.placeholder.tags", "Filter by tag name"))
-			filterEntry.SetToolTip(lang.X(
-				"tree.filter.toolTip.tag",
-				"Filter by a set of tags. Separate tags with spaces to use multiple.\n"+
-					"If a tag contains spaces surround it with \"\".\n"+
-					"By default filters use OR (filter includes any resource that"+
-					" has at least one of the filter tags).\n"+
-					"Start the filter with a single \"&\" to filter by AND (e.g `& aTag \"another Tag\" tagC`).\n"+
-					"By Default tags use a fuzzy match, prefix a tag with a `%` to make it match exactly (e.g \" `%exactly_this_tag`\").",
-			))
 		}
 	})
 	displayByRadio.Required = true
