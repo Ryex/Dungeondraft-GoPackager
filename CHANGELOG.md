@@ -62,28 +62,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - the app crashed when the timers that save the tags and the metadata of a
   package fired after the app was cleaned up.
-- highlight the selected resources in the resource tree.
-- fix the reversed context menu of the resource tree, it now offers to select an unselected
-  resource and to unselect a selected one.
-- show a resource under every one of its tags in the tag view of the resource tree, it was only
-  shown under the last of them.
-- highlight a resource in every tag it is shown under in the tag view of the resource tree, and
-  unselect it in all of them at once.
-- toggle the selection of a resource in the resource tree with a double click.
-- don't leak the dark mode listener when the interface is rebuilt after a language change.
-- the parents of a node of the resource tree never ended their endless loop, and the check
-  for a selected parent always reported false.
 - the file watcher did not watch the root of the unpacked pack, did not pick up newly
   created folders and kept watching folders that were deleted.
 - resources that were deleted from the unpacked folder stayed in the resource index.
-- the resource index was reset to the capacity of the last update, which dropped the
-  entries it already had.
-- the file count in the header of a pack was the length of the file list instead of
-  its size.
 - the copy button of the file preview copied to the clipboard of the window instead
   of the one of the app.
-- the theme toggle did not refresh the widgets that had a hardcoded color, parts of
-  the interface kept the colors of the old theme.
 - errors showed the cause before the message, the message now comes first and the
   causes are listed below it.
 - the cli used the global logger instead of the logger of the command context.
@@ -94,12 +77,6 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - the cli `list files` logged a warning when it was called without globs.
 - the resource info of a resource that changed on disk was not updated, the hash
   and the size of the resource were the ones of the old content.
-- the resource map of the package was never filled, so the resources that changed
-  on disk kept their old info and the lookup of a resource always searched the
-  whole file list.
-- the tags and the metadata of the package were merged with the old ones when they
-  were reloaded from disk, the tags that were removed from the tags file stayed in
-  the package.
 - the info of the package was not reloaded when its pack.json changed on disk.
 - the file watcher ignored the thumbnails of the package forever, when the
   generation of the thumbnails failed.
@@ -111,72 +88,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   the Fyne goroutine, and the values of the entries of the dialog are delivered
   by that queue. The progress is now only reported when it changed, and the
   entries of the dialog are filled with the values of the package right away.
-- the interface froze while the resource index was updated from disk, so the
-  dialog that informed about the update could not be shown at all: the update
-  ran on the Fyne goroutine, which is the one the interface is drawn on. The
-  scan now runs in the background and only the parts of the update that touch
-  the interface are sent to the Fyne goroutine.
 - the package of the app was dropped as soon as a package was loaded over it, so
   the interface could refer to a package that was not loaded anymore, and the
   controls of the pack panel stayed enabled while a task of the package ran. The
   package is now only replaced when the content that shows it is built, and the
   controls of the panel are disabled with the rest of the interface.
-- the pack info of a package was reloaded from disk without synchronisation with
-  the parts of the app that read it. It is now guarded by the lock of the
-  resource index, and a scan of the file list does not touch the tags and the
-  resource metadata anymore, because the interface reads them without a lock.
-
-### Code Refactoring
-
-- the file watcher of the unpacked package is a type of its own
-  (`internal/gui/package_watcher.go`), that queues the changed paths and reports
-  them after a debounce time. It can be paused, while the app changes the files
-  of the package itself (the thumbnail and the tag generation), so that these
-  changes are not reported as external changes. When the watcher loses its
-  events (the buffer of the operating system overflows), the package is scanned
-  completely, so that all the changes are found.
-
-- the parts of the interface are named where they are created and looked up by
-  name afterwards, instead of being kept in a struct with a field per part.
-- the resource tree reports the selected resources with the id of the node they
-  are shown as, their information and whether they are selected on their own.
-- new layouts for the nodes of the interface: a container with a padding of its
-  own, a container that stacks its objects with a spacing of its own, a
-  container of a fixed size and a container that puts its first object on the
-  left, in the middle, next to the others.
-- the resource tree moved into its own package (`internal/gui/resource_tree`).
-- the resource filter parser is a reusable package (`pkg/ddpackage/filter`) instead
-  of a tag filter that only the gui could use.
-- the `lang` package is a fork of the lang package of fyne that can switch the locale
-  at runtime, it holds its own catalog for the strings of the built in fyne widgets.
-- `FileInfoList` is a struct with an encapsulated slice instead of a bare slice type,
-  the accessors of the package now return pointers to it.
-- the cli commands share one context that loads the package, the tags and the metadata
-  and that owns the progress bars.
-- new `internal/errors` helper `CausedBy` for errors that have one or more causes.
-- the pack json holds its color overrides behind a pointer, so that they are omitted
-  when they are not set.
-
-### Testing
-
-- gui tests with the software renderer of fyne, they need no display.
-- a declarative ui dsl (`internal/testutil/uitest`) to assert on the layout of the
-  interface.
-- the ui specification (`docs/design/ui_spec.md`) is translated into tests.
-- the dsl finds the place where the text of a widget starts, so that the tests
-  can assert that two texts start at the same place.
-- the race detector is run once per set of changes before it is committed, it
-  makes the gui tests take minutes instead of seconds.
-- test fixtures that synthesize a resource pack on the fly.
-- tests for the bindings, the widgets, the theme, the resource tree and the filter
-  parser.
-
-### Build
-
-- the build uses go 1.27 and fyne 2.8.
-- a ci job runs `go test ./...`.
-- the ci matrix builds on the latest macos runner.
-- `.gitattributes` enforces line feeds for all text files.
 
 ## [v2.0.4](https://github.com/Ryex/Dungeondraft-GoPackager/releases/tag/v2.0.3) - 2025-4-25
 <small>[Compare with v2.0.3](https://github.com/Ryex/Dungeondraft-GoPackager/compare/v2.0.4...v2.0.3)</small>
