@@ -924,25 +924,47 @@ func (a *App) buildBulkResourceList(
 // createBulkResourceNode creates the node of the list of the selected
 // resources.
 //
-// The node shows the icon of the resource and its file name on the first
-// line, together with a button to deselect the resource, and the path the
-// resource is shown under below it.
+// The node shows the icon of the resource in the middle of the node, next to
+// its file name and the path it is shown under, and a button to deselect the
+// resource in the top right corner.
 func createBulkResourceNode() fyne.CanvasObject {
 	icon := widget.NewFileIcon(nil)
 	nameLbl := widget.NewLabel("template")
+	nameLbl.Alignment = fyne.TextAlignLeading
 	pathLbl := widgets.NewThemedText("", theme.ColorNamePlaceHolder, bulkPathTextSize)
-	deselectBtn := widgets.NewToolTipButtonWithIcon("", theme.CancelIcon(), nil)
+	pathLbl.Text.Alignment = fyne.TextAlignLeading
+	deselectBtn := widgets.NewToolTipButtonWithIcon("", theme.ContentRemoveIcon(), nil)
 
-	// the icon and the button are shown on the same line as the name of the
-	// resource
-	nameRow := container.NewBorder(nil, nil, icon, deselectBtn, nameLbl)
+	// the deselect button is smaller than the buttons of the other parts of
+	// the interface and sits in the top right corner of the node
+	deselect := layouts.NewFixedSize(
+		fyne.NewSize(bulkDeselectSize, bulkDeselectSize), deselectBtn,
+	)
 
-	// the path is indented, so that it is shown below the name
-	indent := canvas.NewRectangle(color.Transparent)
-	indent.SetMinSize(fyne.NewSize(theme.IconInlineSize()+theme.Padding(), 1))
-	pathRow := container.NewBorder(nil, nil, indent, nil, pathLbl)
+	// the file name and the deselect button are on the first line, the path
+	// is shown below the name. The path reserves the room of the deselect
+	// button, so that both texts end at the same place.
+	nameRow := container.NewBorder(nil, nil, nil, deselect, nameLbl)
 
-	return container.NewVBox(nameRow, pathRow)
+	// the file name is a label, which insets its text by the inner padding
+	// of the theme, so the path is indented by the same amount to start at
+	// the same place. The indent is inside the row, because the border
+	// layout would add its own padding to it.
+	pathRow := container.NewBorder(
+		nil, nil, nil,
+		layouts.NewFixedSize(fyne.NewSize(bulkDeselectSize, 1)),
+		layouts.NewPadded(0, 0, 0, theme.Size(theme.SizeNameInnerPadding), pathLbl),
+	)
+
+	// the texts are close to each other and have some room above and below
+	// them, so that they are in the middle of the node
+	texts := layouts.NewPadded(
+		bulkNodePadding, 0, bulkNodePadding, 0,
+		layouts.NewStacked(bulkNodeRowSpacing, nameRow, pathRow),
+	)
+
+	// the icon is shown next to the texts, in the middle of the node
+	return layouts.NewLeadingCenter(icon, bulkNodeIconTextSpacing, texts)
 }
 
 // updateBulkResourceNode fills the node of the list of the selected resources
@@ -958,17 +980,20 @@ func (a *App) updateBulkResourceNode(
 	}
 	res := resources[id]
 
-	c := obj.(*fyne.Container)
-	nameRow := c.Objects[0].(*fyne.Container)
-	pathRow := c.Objects[1].(*fyne.Container)
+	node := obj.(*fyne.Container)
+	icon := node.Objects[0].(*widget.FileIcon)
+	texts := node.Objects[1].(*fyne.Container)
+
+	rows := texts.Objects[0].(*fyne.Container)
+	nameRow := rows.Objects[0].(*fyne.Container)
+	pathRow := rows.Objects[1].(*fyne.Container)
 
 	nameLbl := nameRow.Objects[0].(*widget.Label)
-	icon := nameRow.Objects[1].(*widget.FileIcon)
-	deselectBtn := nameRow.Objects[2].(*widgets.ToolTipButton)
-	pathLbl := pathRow.Objects[0].(*widgets.ThemedText)
+	deselectBtn := nameRow.Objects[1].(*fyne.Container).Objects[0].(*widgets.ToolTipButton)
+	pathLbl := pathRow.Objects[0].(*fyne.Container).Objects[0].(*widgets.ThemedText)
 
 	relPath := res.Info.CalcRelPath()
-	nameLbl.SetText(resourceFileStem(relPath))
+	nameLbl.SetText(resourceFileName(relPath))
 	pathLbl.Text.Text = resourceDirPath(relPath)
 	pathLbl.Refresh()
 	icon.SetURI(storage.NewFileURI(
@@ -1048,10 +1073,23 @@ func (a *App) commonTags(resources []resource_tree.SelectedResource) *structures
 // of a selected resource.
 const bulkPathTextSize = 11
 
-// resourceFileStem returns the name of the resource without its extension.
-func resourceFileStem(relPath string) string {
-	base := filepath.Base(relPath)
-	return strings.TrimSuffix(base, filepath.Ext(base))
+// The measurements of the node of a selected resource.
+const (
+	// bulkDeselectSize is the size of the button that deselects a resource.
+	bulkDeselectSize = 16
+	// bulkNodePadding is the room above and below the texts of a node.
+	bulkNodePadding = 8
+	// bulkNodeRowSpacing is the space between the file name and the path of
+	// a node.
+	bulkNodeRowSpacing = 0
+
+	// padding between resource icon and text
+	bulkNodeIconTextSpacing = 4
+)
+
+// resourceFileName returns the name of the resource.
+func resourceFileName(relPath string) string {
+	return filepath.Base(relPath)
 }
 
 // resourceDirPath returns the path the resource is shown under, without the
