@@ -104,23 +104,31 @@ func NewPackJSONDialog(
 }
 
 func (dlg *PackJSONDialog) buildUI() {
+	// A binding notifies its listeners on the Fyne goroutine, so the value
+	// of a bound widget is delivered asynchronously. The entries are filled
+	// with the values of the dialog right away, so that they show them
+	// immediately, even when the goroutine has a lot of work to do.
 	IDLbl := widget.NewLabel(lang.X("packJson.id.label", "ID"))
 	IDEntry := widget.NewEntryWithData(binding.BindString(&dlg.ID))
+	IDEntry.SetText(dlg.ID)
 	IDEntry.Validator = nil
 
 	nameLbl := widget.NewLabel(lang.X("packJson.name.label", "Name"))
 	nameEntry := widget.NewEntryWithData(binding.BindString(&dlg.Name))
+	nameEntry.SetText(dlg.Name)
 	nameEntry.Validator = nil
 	nameEntry.SetPlaceHolder(lang.X("packJson.name.placeholder", "Package name"))
 
 	authorLbl := widget.NewLabel(lang.X("packJson.author.label", "Author"))
 	authorEntry := widget.NewEntryWithData(binding.BindString(&dlg.Author))
+	authorEntry.SetText(dlg.Author)
 	authorEntry.Validator = nil
 	authorEntry.SetPlaceHolder(lang.X("packJson.author.placeholder", "Package author"))
 
 	versionLbl := widget.NewLabel(lang.X("packJson.version.label", "Version"))
 	versionEntry := widgets.NewMajorMinorVersionSpinner(0, 10000, 999, 1)
 	versionEntry.Bind(binding.BindString(&dlg.Version))
+	versionEntry.SetValue(dlg.Version)
 
 	keywordsLbl := widget.NewLabel(lang.X("packJson.keywords.label", "Keywords"))
 	keywordsEntry := widget.NewEntryWithData(bindings.NewReversibleMapping(
@@ -140,6 +148,7 @@ func (dlg *PackJSONDialog) buildUI() {
 			return words, nil
 		},
 	))
+	keywordsEntry.SetText(strings.Join(dlg.Keywords, ","))
 	keywordsEntry.Validator = nil
 	keywordsEntry.SetPlaceHolder(lang.X("packJson.keywords.placeholder", "split keywords with commas"))
 

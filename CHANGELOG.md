@@ -96,6 +96,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   generation of the thumbnails failed.
 - the file watcher and the thumbnail generation shared a flag without
   synchronisation, it was a data race.
+- the pack settings dialog showed empty entries and the default version for
+  half a minute, after the tags of a big package were generated. The generation
+  reported its progress for every file of the package, which filled the queue of
+  the Fyne goroutine, and the values of the entries of the dialog are delivered
+  by that queue. The progress is now only reported when it changed, and the
+  entries of the dialog are filled with the values of the package right away.
 
 ### Code Refactoring
 

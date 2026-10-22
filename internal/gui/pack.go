@@ -640,9 +640,12 @@ func (a *App) genThumbnails() {
 			return
 		}
 
-		errs := pkg.GenerateThumbnailsProgress(func(p float64) {
+		// the progress is reported for every thumbnail of the package, so it
+		// is throttled, to not flood the queue of the Fyne goroutine
+		progress := newProgressReporter(func(p float64) {
 			progressVal.Set(p)
 		})
+		errs := pkg.GenerateThumbnailsProgress(progress.Report)
 		fyne.Do(func() {
 			progressDlg.Hide()
 		})
@@ -702,9 +705,12 @@ func (a *App) packPackage(path string, options ddpackage.PackOptions) {
 	progressDlg.Show()
 	go func() {
 		taskStr.Set(lang.X("task.package.text", "Packaging resources ..."))
-		err := a.pkg.PackPackageProgress(path, options, func(p float64) {
+		// the progress is reported for every file of the package, so it is
+		// throttled, to not flood the queue of the Fyne goroutine
+		progress := newProgressReporter(func(p float64) {
 			progressVal.Set(p)
 		})
+		err := a.pkg.PackPackageProgress(path, options, progress.Report)
 		progressDlg.Hide()
 		if err != nil {
 			errDlg := dialog.NewError(
