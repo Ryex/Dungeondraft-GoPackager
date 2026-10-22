@@ -525,19 +525,74 @@ func (t *ResourceTree) selectedIndexOfData(uid widget.TreeNodeID) int {
 }
 
 // updateVisibleSelection rebuilds the list of the nodes that are shown as
-// selected. Every node that shows a selected resource is shown as selected.
+// selected.
+//
+// A node is shown as selected when it is selected itself, when one of its
+// ancestors is selected (a selected branch selects everything below it) or
+// when all of its siblings are selected (a branch whose children are all
+// selected is shown as selected as well). A resource that is shown under more
+// than one tag is shown as selected in every one of its occurrences.
 func (t *ResourceTree) updateVisibleSelection() {
-	visible := []widget.TreeNodeID{}
-	for _, uid := range t.selected {
-		data := t.DataFor(uid)
-		if data == nil {
-			continue
+	visibleSet := map[widget.TreeNodeID]bool{}
+
+	add := func(uid widget.TreeNodeID) {
+		if visibleSet[uid] {
+			return
 		}
-		for otherUID, otherData := range t.nodeMap {
-			if otherData == data {
-				visible = append(visible, otherUID)
+		visibleSet[uid] = true
+		// a resource that is shown under more than one tag shares its data
+		// between the occurrences, so all of them are shown as selected
+		if data := t.DataFor(uid); data != nil {
+			for otherUID, otherData := range t.nodeMap {
+				if otherData == data {
+					visibleSet[otherUID] = true
+				}
 			}
 		}
+	}
+
+	// a selected branch selects every node below it
+	var addSubtree func(uid widget.TreeNodeID)
+	addSubtree = func(uid widget.TreeNodeID) {
+		add(uid)
+		for _, child := range t.nodeTree[uid] {
+			addSubtree(child)
+		}
+	}
+	for _, uid := range t.selected {
+		addSubtree(uid)
+	}
+
+	// a branch whose children are all shown as selected is shown as selected
+	// as well; this rolls up through the nested branches
+	changed := true
+	for changed {
+		changed = false
+		for branchUID, children := range t.nodeTree {
+			if len(children) == 0 || visibleSet[branchUID] {
+				continue
+			}
+			all := true
+			for _, child := range children {
+				if !visibleSet[child] {
+					all = false
+					break
+				}
+			}
+			if all {
+				before := len(visibleSet)
+				add(branchUID)
+				if len(visibleSet) != before {
+					changed = true
+				}
+				changed = true
+			}
+		}
+	}
+
+	visible := make([]widget.TreeNodeID, 0, len(visibleSet))
+	for uid := range visibleSet {
+		visible = append(visible, uid)
 	}
 	// the map of the nodes is unordered, so the list has to be sorted to
 	// keep the order of the visible selection stable
