@@ -83,6 +83,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   keywords, they are now `-a` and `-r`.
 - the thumbnail generation could leave threads behind, it now uses `wg.Go`.
 - the cli `list files` logged a warning when it was called without globs.
+- the resource info of a resource that changed on disk was not updated, the hash
+  and the size of the resource were the ones of the old content.
+- the resource map of the package was never filled, so the resources that changed
+  on disk kept their old info and the lookup of a resource always searched the
+  whole file list.
+- the tags and the metadata of the package were merged with the old ones when they
+  were reloaded from disk, the tags that were removed from the tags file stayed in
+  the package.
 
 ### Code Refactoring
 

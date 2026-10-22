@@ -32,6 +32,7 @@ func (p *Package) loadPackedTags(r io.ReadSeeker) error {
 
 	if tagsInfo == nil {
 		p.log.Info("no default.dungeondraft_tags file in pack")
+		p.resetTags()
 		return nil
 	}
 
@@ -47,6 +48,7 @@ func (p *Package) loadPackedTags(r io.ReadSeeker) error {
 		return errors.Join(err, ErrJSONStandardize, ErrTagsParse)
 	}
 
+	p.resetTags()
 	err = json.Unmarshal(tagsBytes, &p.tags)
 	if err != nil {
 		p.log.WithError(err).WithField("res", tagsResPath).Error("failed to parse tags file")
@@ -56,10 +58,26 @@ func (p *Package) loadPackedTags(r io.ReadSeeker) error {
 	return nil
 }
 
+// resetTags clears the tags of the package, so that they can be loaded
+// again from a file.
+//
+// The tags are cleared in place, so that the parts of the app that hold the
+// tags of the package keep working.
+func (p *Package) resetTags() {
+	if p.tags == nil {
+		p.tags = structures.NewPackageTags()
+		return
+	}
+	clear(p.tags.Tags)
+	clear(p.tags.Sets)
+}
+
 func (p *Package) loadPackedResourceMetadata(r io.ReadSeeker) error {
 	if p.id == "" {
 		return ErrUnsetPackID
 	}
+
+	p.resetResourceMetadata()
 
 	for _, fi := range p.fileList.AsSlice() {
 
@@ -110,6 +128,7 @@ func (p *Package) loadUnpackedTags() error {
 
 	if tagsExist := utils.FileExists(tagsPath); !tagsExist {
 		p.log.WithField("tagsPath", tagsPath).Info("no default.dungeondraft_tags file in pack")
+		p.resetTags()
 		return nil
 	}
 
@@ -128,6 +147,7 @@ func (p *Package) loadUnpackedTags() error {
 		return errors.Join(err, ErrJSONStandardize, ErrTagsParse)
 	}
 
+	p.resetTags()
 	err = json.Unmarshal(tagsBytes, &p.tags)
 	if err != nil {
 		p.log.WithError(err).WithField("tagsPath", tagsPath).Error("failed to parse tags file")
@@ -224,6 +244,8 @@ func (p *Package) loadUnpackedResourceMetadata() error {
 		return ErrUnsetUnpackedPath
 	}
 
+	p.resetResourceMetadata()
+
 	for _, fi := range p.fileList.AsSlice() {
 
 		if !fi.IsWallData() && !fi.IsTilesetData() {
@@ -262,6 +284,24 @@ func (p *Package) loadUnpackedResourceMetadata() error {
 	}
 
 	return nil
+}
+
+// resetResourceMetadata clears the metadata of the walls and the tilesets
+// of the package, so that it can be loaded again from the files.
+//
+// The metadata is cleared in place, so that the parts of the app that hold
+// the metadata of the package keep working.
+func (p *Package) resetResourceMetadata() {
+	if p.walls == nil {
+		p.walls = make(map[string]structures.PackageWall)
+	} else {
+		clear(p.walls)
+	}
+	if p.tilesets == nil {
+		p.tilesets = make(map[string]structures.PackageTileset)
+	} else {
+		clear(p.tilesets)
+	}
 }
 
 func (p *Package) SaveUnpackedInfo() error {
