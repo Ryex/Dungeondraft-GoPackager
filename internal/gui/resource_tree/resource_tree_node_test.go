@@ -348,9 +348,12 @@ func TestResourceTreeTagModeSelectionReportsEveryNode(t *testing.T) {
 	tree.Select(tagResourceUID("tag://nature", rockResPath))
 
 	selection := tree.GetSelection()
-	assert.Len(t, selection, 2, "every node of the resource must be reported as selected")
+	// the resource is shown as selected in both of its occurrences; the
+	// tag branch that holds only this resource is shown as selected as well
+	assert.Len(t, selection, 3, "every node of the resource must be reported as selected")
 	assert.Contains(t, selection, tagResourceUID("tag://nature", rockResPath))
 	assert.Contains(t, selection, tagResourceUID("tag://rock", rockResPath))
+	assert.Contains(t, selection, widget.TreeNodeID("tag://rock"))
 
 	data := tree.GetSelectionAndChildData()
 	require.Len(t, data, 1, "the resource must be reported once")
