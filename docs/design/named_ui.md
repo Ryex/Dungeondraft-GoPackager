@@ -220,6 +220,9 @@ old `uiRegions` struct did.
 | `resourcePane`   | `nameResourcePane`    | `package.go`        |
 | `splitPane`      | `nameSplitPane`       | `package.go`        |
 | `filterEntry`    | `nameFilterEntry`     | `package.go`        |
+| `filterHelpButton` | `nameFilterHelpButton` | `package.go`      |
+| `filterHelpSectionList` | `nameFilterHelpSectionList` | `filter_help.go` |
+| `filterHelpScroll` | `nameFilterHelpScroll` | `filter_help.go`   |
 | `displayByRadio` | `nameDisplayByRadio`  | `package.go`        |
 | `infoTabs`       | `nameInfoTabs`        | `package.go`        |
 | `filePreview`    | `nameFilePreview`     | `package.go`        |

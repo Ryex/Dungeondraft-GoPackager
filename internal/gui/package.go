@@ -47,6 +47,7 @@ const (
 	nameResourcePane     = "resourcePane"
 	nameSplitPane        = "splitPane"
 	nameFilterEntry      = "filterEntry"
+	nameFilterHelpButton = "filterHelpButton"
 	nameDisplayByRadio   = "displayByRadio"
 	nameInfoTabs         = "infoTabs"
 	nameFilePreview      = "filePreview"
@@ -113,7 +114,11 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) *named.Named {
 			displayByContainer,
 			layouts.NewRightExpandHBox(
 				widget.NewLabel(lang.X("tree.label", "Resources")),
-				named.New(nameFilterEntry, filterEntry),
+				container.NewBorder(
+					nil, nil, nil,
+					named.New(nameFilterHelpButton, a.filterHelpButton()),
+					named.New(nameFilterEntry, filterEntry),
+				),
 			),
 			container.NewStack(
 				widgets.NewThemedRect(theme.ColorNameInputBackground, 4),
