@@ -117,7 +117,12 @@ func (a *App) loadUnpackedPath(path string) {
 	))
 	a.disableButtons.Set(true)
 
-	a.resetPkg()
+	// The watcher of the package that is loaded over is stopped right away,
+	// so that its changes are not reported while the new package is loaded.
+	// The package itself is only dropped when the new one is shown (see
+	// setUnpackedContent), so that the interface never shows the panel of a
+	// package that is not loaded anymore.
+	a.teardownPackageWatcher()
 
 	a.bgWG.Add(1)
 	go func() {
@@ -184,83 +189,201 @@ func (a *App) loadUnpackedPath(path string) {
 // only the given paths. It is used when the events of the watcher were lost
 // (e.g. because the buffer of the operating system overflowed), so that all
 // the changes are found.
+//
+// The scan runs on the goroutine of the caller, so that the interface stays
+// usable while it runs: it only writes the resource index of the package,
+// which is guarded by its own lock. The parts of the update that the
+// interface reads without a lock — the pack info, the tags and the resource
+// metadata — run on the Fyne goroutine as the last step of the update. The
+// dialog of the update is hidden with them, so that it disappears as soon
+// as the package can be used again.
+//
+// The update never waits for the Fyne goroutine: the Fyne goroutine can
+// wait for the update, when a package is replaced (see replacePackage).
 func (a *App) updateFromPaths(pkg *ddpackage.Package, paths []string, full bool) {
-	activity := widget.NewActivity()
-	activity.Start()
-	msgText := widgets.NewThemedText(lang.X(
-		"pack.filesystemUpdate",
-		"Updating resources from {{.Path}} (updating index) ...",
-		map[string]any{
-			"Path": utils.TruncatePathHumanFriendly(pkg.UnpackedPath(), 80),
-		},
-	), theme.ColorNameForeground)
-	msgText.Text.TextSize = 16
-	msgText.Text.Alignment = fyne.TextAlignCenter
-	activityText := widgets.NewThemedText("", theme.ColorNameForeground)
-	activityText.Text.TextSize = 12
-	activityText.Text.Alignment = fyne.TextAlignCenter
-	activityStr := binding.NewString()
-	bindings.Listen(activityStr, func(str string) {
-		activityText.Text.Text = str
-		activityText.Refresh()
-	})
-	progressBar := widget.NewProgressBar()
-	activityProgress := binding.NewFloat()
-	progressBar.Bind(activityProgress)
-
-	activityContent := container.NewVBox(
-		layout.NewSpacer(),
-		activity,
-		msgText,
-		activityText,
-		container.NewPadded(progressBar),
-		layout.NewSpacer(),
-	)
-
-	progressDlg := dialog.NewCustomWithoutButtons(
-		lang.X("task.updatePackage.text", "Updating pack resources ..."),
-		activityContent,
-		a.window,
-	)
-	progressDlg.Show()
-
-	progress := func(p float64, path string, _ int64) {
-		activityStr.Set(lang.X(
-			"pack.buildList.activity",
-			"Loading {{.Path}} ...",
-			map[string]any{
-				"Path": utils.TruncatePathHumanFriendly(path, 80),
-			},
-		))
-	}
-
 	// the info of the package is not part of the file list, so it has to be
 	// loaded separately, when the pack.json changed
 	rebuild := a.reloadPackInfo(pkg, paths)
 
+	// A scan of the package reports its progress for every file of it,
+	// while the update of a few changed paths is over in a moment: the
+	// dialog shows a progress bar for the scan and only a spinner for the
+	// paths, because there is no progress to report for them.
+	rescan := full || rebuild
+
+	dlg := a.showPackageUpdateDialog(pkg, rescan)
+
+	if a.packageUpdateHook != nil {
+		a.packageUpdateHook(dlg)
+	}
+
 	var errs []error
-	if full || rebuild {
+	if rescan {
 		log.Debugf("rescanning the package folder %s", pkg.UnpackedPath())
-		errs = pkg.BuildFileListProgress(progress)
+		errs = pkg.BuildFileListProgress(dlg.report)
 	} else {
-		errs = pkg.UpdateFromPathsProgress(paths, progress)
+		errs = pkg.UpdateFromPathsProgress(paths, dlg.report)
 	}
 	for _, err := range errs {
 		log.WithError(err).Error("could not update the package from the changed paths")
 	}
 
-	err := pkg.LoadTags()
-	if err != nil {
-		a.showErrorDialog(
-			dderrors.CausedBy(errors.New(lang.X("package.tags.error", "Failed to read tags")), err),
-		)
+	fyne.Do(func() {
+		defer dlg.hide()
+
+		if err := pkg.LoadTags(); err != nil {
+			a.showErrorDialog(
+				dderrors.CausedBy(errors.New(lang.X("package.tags.error", "Failed to read tags")), err),
+			)
+		}
+		if err := pkg.LoadResourceMetadata(); err != nil {
+			a.showErrorDialog(
+				dderrors.CausedBy(errors.New(lang.X("package.metadata.error", "Failed to read metadata")), err),
+			)
+		}
+
+		a.packageUpdated.Set(a.pkgUpdateCounter + 1)
+	})
+}
+
+// packageUpdateDialog informs about an update of the package that runs in
+// the background.
+type packageUpdateDialog struct {
+	dialog *dialog.CustomDialog
+	// activity is the spinner of the dialog. It is nil when the dialog
+	// shows a progress bar.
+	activity *widget.Activity
+
+	// progress is set when the dialog shows a progress bar, otherwise the
+	// update does not report any progress and the dialog only shows that
+	// the package is updated.
+	progress bool
+
+	// activityStr and activityProgress describe what the update does. They
+	// are set from the goroutine of the update.
+	activityStr      binding.String
+	activityProgress binding.Float
+
+	// lastPercent is the progress that was reported last. The progress of a
+	// scan is reported for every file of the package, so it is throttled,
+	// to not flood the queue of the Fyne goroutine.
+	lastPercent int
+}
+
+// showPackageUpdateDialog shows the dialog that informs about an update of
+// the package of the app.
+//
+// It must be called on the goroutine of the update; only the dialog itself
+// is shown on the Fyne goroutine.
+func (a *App) showPackageUpdateDialog(
+	pkg *ddpackage.Package,
+	progress bool,
+) *packageUpdateDialog {
+	msg := lang.X(
+		"pack.filesystemUpdate",
+		"Updating resources from {{.Path}} (updating index) ...",
+		map[string]any{
+			"Path": utils.TruncatePathHumanFriendly(pkg.UnpackedPath(), 80),
+		},
+	)
+
+	activityStr := binding.NewString()
+	activityProgress := binding.NewFloat()
+	content, activity := packageUpdateContent(msg, progress, activityStr, activityProgress)
+
+	d := &packageUpdateDialog{
+		activity:         activity,
+		progress:         progress,
+		activityStr:      activityStr,
+		activityProgress: activityProgress,
 	}
-	err = pkg.LoadResourceMetadata()
-	if err != nil {
-		a.showErrorDialog(dderrors.CausedBy(errors.New(lang.X("package.metadata.error", "Failed to read metadata")), err))
+	d.dialog = dialog.NewCustomWithoutButtons(
+		lang.X("task.updatePackage.text", "Updating pack resources ..."),
+		content,
+		a.window,
+	)
+
+	fyne.Do(d.dialog.Show)
+
+	return d
+}
+
+// packageUpdateContent builds the content of the dialog of a package update.
+//
+// When progress is set, the content shows a progress bar, because the scan
+// of the package reports its progress for every file of it. Otherwise it
+// only shows a spinner: the update of a few changed paths does not report
+// any progress.
+//
+// It returns the content and the spinner of it, which is nil when the
+// content shows a progress bar.
+func packageUpdateContent(
+	msg string,
+	progress bool,
+	activityStr binding.String,
+	activityProgress binding.Float,
+) (fyne.CanvasObject, *widget.Activity) {
+	msgText := widgets.NewThemedText(msg, theme.ColorNameForeground)
+	msgText.Text.TextSize = 16
+	msgText.Text.Alignment = fyne.TextAlignCenter
+	activityText := widgets.NewThemedText("", theme.ColorNameForeground)
+	activityText.Text.TextSize = 12
+	activityText.Text.Alignment = fyne.TextAlignCenter
+	bindings.Listen(activityStr, func(str string) {
+		activityText.Text.Text = str
+		activityText.Refresh()
+	})
+
+	var activity *widget.Activity
+	objects := []fyne.CanvasObject{layout.NewSpacer()}
+	if progress {
+		progressBar := widget.NewProgressBar()
+		progressBar.Bind(activityProgress)
+		objects = append(objects, msgText, activityText, container.NewPadded(progressBar))
+	} else {
+		activity = widget.NewActivity()
+		activity.Start()
+		objects = append(objects, activity, msgText, activityText)
 	}
-	progressDlg.Hide()
-	a.packageUpdated.Set(a.pkgUpdateCounter + 1)
+	objects = append(objects, layout.NewSpacer())
+
+	return container.NewVBox(objects...), activity
+}
+
+// report reports what the update does and, when it reports any progress,
+// how far it got.
+//
+// It is called by the scan of the package, for every file of it, so the
+// progress is throttled, to not flood the queue of the Fyne goroutine. Only
+// the goroutine of the update reports, so no lock is needed.
+func (d *packageUpdateDialog) report(p float64, curPath string, _ int64) {
+	if !d.progress {
+		return
+	}
+
+	percent := int(p * 100)
+	if percent == d.lastPercent {
+		return
+	}
+	d.lastPercent = percent
+
+	d.activityProgress.Set(p)
+	d.activityStr.Set(lang.X(
+		"pack.buildList.activity",
+		"Loading {{.Path}} ...",
+		map[string]any{
+			"Path": utils.TruncatePathHumanFriendly(curPath, 80),
+		},
+	))
+}
+
+// hide hides the dialog and stops its spinner. It runs on the Fyne
+// goroutine, where the interface can be changed.
+func (d *packageUpdateDialog) hide() {
+	if d.activity != nil {
+		d.activity.Stop()
+	}
+	d.dialog.Hide()
 }
 
 // reloadPackInfo reloads the info of the package from its pack.json, when
@@ -304,25 +427,26 @@ func samePath(a string, b string) bool {
 // onPackageChanged updates the package with the paths that changed on disk.
 //
 // It is called by the filesystem watcher, when the debounce time passed
-// without further events.
+// without further events, on the goroutine of the watcher.
 func (a *App) onPackageChanged(paths []string, full bool) {
-	pkg := a.currentPackage()
-	if pkg == nil {
-		return
-	}
-
 	// the updates are serialized, so that the package is not updated while
 	// it is read
 	a.packageUpdateLock.Lock()
 	defer a.packageUpdateLock.Unlock()
 
+	pkg := a.currentPackage()
+	if pkg == nil {
+		return
+	}
+
 	log.Debugf("updating resource paths... %s", paths)
 
-	// the update touches the interface, so it has to run on the Fyne
-	// goroutine
-	fyne.DoAndWait(func() {
-		a.updateFromPaths(pkg, paths, full)
-	})
+	// The update runs here, on the goroutine of the watcher, so that the
+	// interface stays usable while it runs: it only queues the parts of it
+	// that touch the interface. It must not wait for the Fyne goroutine,
+	// because the Fyne goroutine can wait for this update, when a package
+	// is replaced.
+	a.updateFromPaths(pkg, paths, full)
 
 	a.packageUpdateCount++
 }
@@ -456,7 +580,10 @@ func (a *App) setNotAPackageContent(path string) {
 }
 
 func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
-	a.setCurrentPackage(pkg)
+	// the package of the app is replaced only now, when the content that
+	// shows it is built, so that the interface never refers to a package
+	// that is not loaded anymore
+	a.replacePackage(pkg)
 
 	split := a.buildPackageTreeAndInfoPane(true)
 
@@ -601,6 +728,20 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 		),
 	)
 
+	// The tasks of the package (the generation of the thumbnails, the
+	// packing) disable the interface while they run, so the controls of the
+	// panel are disabled with it.
+	packPanelControls := []fyne.Disableable{
+		outEntry,
+		outBrowseBtn,
+		thumbnailsBtn,
+		editPackBtn,
+		generateTagBtn,
+		tagSetsBtn,
+		overwriteCheck,
+		packBtn,
+	}
+
 	// the parts of the interface have to be named before the content is
 	// shown, so that they are available as soon as the new content is visible
 	a.setMainContent(
@@ -611,6 +752,13 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 			split,
 		),
 		func(disable bool) {
+			for _, control := range packPanelControls {
+				if disable {
+					control.Disable()
+				} else {
+					control.Enable()
+				}
+			}
 		},
 	)
 

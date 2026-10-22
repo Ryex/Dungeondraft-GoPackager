@@ -311,7 +311,11 @@ func (p *Package) SaveUnpackedInfo() error {
 
 	packJSONPath := filepath.Join(p.unpackedPath, `pack.json`)
 
-	packJSONBytes, err := json.MarshalIndent(&p.info, "", "  ")
+	p.flLock.RLock()
+	info := p.info
+	p.flLock.RUnlock()
+
+	packJSONBytes, err := json.MarshalIndent(info, "", "  ")
 	if err != nil {
 		p.log.WithError(err).
 			Error("failed to create pack json")

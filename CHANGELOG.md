@@ -40,7 +40,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - md5 hashes are computed while packaging and written into the pack header, and
   are read back when a packed pack is loaded.
 - the resource index update that runs when files change on disk is shown in a
-  progress dialog.
+  dialog: it shows a progress bar when the package is scanned completely and
+  only a spinner when a few changed paths are updated, which is over in a
+  moment.
 - untagged resources are listed under their own "Untagged" branch in the tag view.
 - the cli can print the resource list as json with `list files --type json`, the
   output holds the tags and the wall and tileset metadata of the resources.
@@ -102,6 +104,20 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   the Fyne goroutine, and the values of the entries of the dialog are delivered
   by that queue. The progress is now only reported when it changed, and the
   entries of the dialog are filled with the values of the package right away.
+- the interface froze while the resource index was updated from disk, so the
+  dialog that informed about the update could not be shown at all: the update
+  ran on the Fyne goroutine, which is the one the interface is drawn on. The
+  scan now runs in the background and only the parts of the update that touch
+  the interface are sent to the Fyne goroutine.
+- the package of the app was dropped as soon as a package was loaded over it, so
+  the interface could refer to a package that was not loaded anymore, and the
+  controls of the pack panel stayed enabled while a task of the package ran. The
+  package is now only replaced when the content that shows it is built, and the
+  controls of the panel are disabled with the rest of the interface.
+- the pack info of a package was reloaded from disk without synchronisation with
+  the parts of the app that read it. It is now guarded by the lock of the
+  resource index, and a scan of the file list does not touch the tags and the
+  resource metadata anymore, because the interface reads them without a lock.
 
 ### Code Refactoring
 
