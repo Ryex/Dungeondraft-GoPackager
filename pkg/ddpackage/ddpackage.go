@@ -278,10 +278,32 @@ func (p *Package) AddResource(fInfo *structures.FileInfo) {
 
 // DO NOT USE WITHOUT flLock
 func (p *Package) addResource(fInfo *structures.FileInfo) {
-	if _, ok := p.resourceMap[fInfo.ResPath]; !ok {
-		p.fileList.Add(fInfo)
-		p.log.Debugf("added %s", fInfo.ResPath)
+	if _, ok := p.resourceMap[fInfo.ResPath]; ok {
+		return
 	}
+	p.fileList.Add(fInfo)
+	p.resourceMap[fInfo.ResPath] = fInfo
+	p.log.Debugf("added %s", fInfo.ResPath)
+}
+
+// replaceResource replaces the info of a resource with the given info.
+//
+// It is used when the file of a resource changed on disk, so that its size
+// and hash are picked up again.
+//
+// DO NOT USE WITHOUT flLock
+func (p *Package) replaceResource(old *structures.FileInfo, fInfo *structures.FileInfo) {
+	if old != nil {
+		if index := p.fileList.IndexOfRes(old.ResPath); index != -1 {
+			p.fileList.Remove(index)
+		}
+	}
+	if index := p.fileList.IndexOfRes(fInfo.ResPath); index != -1 {
+		p.fileList.Remove(index)
+	}
+	p.fileList.Add(fInfo)
+	p.resourceMap[fInfo.ResPath] = fInfo
+	p.log.Debugf("replaced %s", fInfo.ResPath)
 }
 
 func (p *Package) resetData() {
@@ -296,13 +318,13 @@ func (p *Package) resetData() {
 
 // GetResourceInfo gets the *FileInfo for a resource identified by the passed 'res://' path
 func (p *Package) GetResourceInfo(resPath string) (*structures.FileInfo, error) {
+	p.flLock.RLock()
+	defer p.flLock.RUnlock()
+
 	info, found := p.resourceMap[resPath]
 	if found && info != nil {
 		return info, nil
 	}
-
-	p.flLock.RLock()
-	defer p.flLock.RUnlock()
 	info = p.fileList.Find(func(fi *structures.FileInfo) bool {
 		return fi.ResPath == resPath
 	})

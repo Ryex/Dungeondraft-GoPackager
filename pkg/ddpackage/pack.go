@@ -223,14 +223,20 @@ func (p *Package) updateFromPaths(paths []string, progressCallback func(p float6
 		}
 		statInfo, err := os.Stat(absPath)
 		if err != nil {
-			errs = append(errs, err)
 			if isSub, _ := utils.PathIsSub(p.unpackedPath, absPath); isSub {
 				fi := p.fileList.Find(func(fi *structures.FileInfo) bool {
 					return fi.Path == absPath
 				})
 				if fi != nil {
+					// the file of the resource was removed, so the resource
+					// is removed from the package
+					p.log.WithField("res", fi.ResPath).Info("the file of the resource is gone")
 					toRemove.Add(fi.ResPath)
+					continue
 				}
+			}
+			if !errors.Is(err, os.ErrNotExist) {
+				errs = append(errs, err)
 			}
 			continue
 		}
@@ -282,15 +288,20 @@ func (p *Package) updateFromPaths(paths []string, progressCallback func(p float6
 		resPath := fmt.Sprintf("res://packs/%s/%s", p.id, relPath)
 
 		// update or add
-		_, ok := p.resourceMap[resPath]
+		fInfo, err := p.NewFileInfo(NewFileInfoOptions{Path: file, ResPath: &resPath, RelPath: &relPath})
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		existing, ok := p.resourceMap[fInfo.ResPath]
 		if !ok {
-			fInfo, err := p.NewFileInfo(NewFileInfoOptions{Path: file, ResPath: &resPath, RelPath: &relPath})
-			if err != nil {
-				errs = append(errs, err)
-				continue
-			}
 			p.log.Infof("including %s", file)
 			p.addResource(fInfo)
+		} else {
+			// the file changed on disk, so the info of the resource is
+			// rebuilt, to pick up its new size and hash
+			p.log.Infof("updating %s", file)
+			p.replaceResource(existing, fInfo)
 		}
 		if i%cbPoint == 0 {
 			if progressCallback != nil {
@@ -309,21 +320,20 @@ func (p *Package) updateFromPaths(paths []string, progressCallback func(p float6
 	packJSONName := fmt.Sprintf(`%s.json`, p.id)
 	packJSONResPath := "res://packs/" + packJSONName
 
+	// the info of the pack.json is built again, so that the size and the
+	// hash of the file are picked up, when it changed
 	packJSONindex := p.fileList.IndexOfRes(packJSONResPath)
-	var packJSONInfo *structures.FileInfo
 	if packJSONindex != -1 {
-		packJSONInfo = p.fileList.Remove(packJSONindex)
-	} else {
-		fi, err := p.NewFileInfo(NewFileInfoOptions{
-			Path:    packJSONPath,
-			ResPath: &packJSONResPath,
-			RelPath: &packJSONName,
-		})
-		if err != nil {
-			p.log.WithError(err).Errorf("error adding base pack.json")
-			errs = append(errs, err)
-		}
-		packJSONInfo = fi
+		p.fileList.Remove(packJSONindex)
+	}
+	packJSONInfo, err := p.NewFileInfo(NewFileInfoOptions{
+		Path:    packJSONPath,
+		ResPath: &packJSONResPath,
+		RelPath: &packJSONName,
+	})
+	if err != nil {
+		p.log.WithError(err).Errorf("error adding base pack.json")
+		errs = append(errs, err)
 	}
 	p.resourceMap[packJSONResPath] = packJSONInfo
 
