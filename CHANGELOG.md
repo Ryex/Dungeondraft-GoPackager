@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `$name` for a suffix match), by tag (`#tag`), by path glob (`/glob`) and by
   resource kind (`@IsTexture`), filters are combined with `&` (and), with `!`
   (not) and with `()` groups.
+- a help button next to the filter of the resource tree opens a dialog that
+  describes the filter syntax, with a list of its sections that scrolls the
+  help to the section that is clicked.
 - the resource tree is a widget of its own with a multi selection: ctrl and shift
   add a resource to the selection or remove it from it, a double click toggles
   the selection of a resource.

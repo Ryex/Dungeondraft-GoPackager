@@ -85,3 +85,11 @@ sub lists represent conditions that should be read as: when <parent arm> then <a
   - a path filter shows the resources with a matching path only
   - a kind filter shows the resources of that kind only
   - an empty filter shows all the resources again
+  - the filter entry has a help button to its right
+
+- when the help of the filter language is opened
+  - the dialog has a title
+  - and a close button
+  - and a list of the sections on the left
+  - and the help of the filter language on the right
+  - clicking a section scrolls the help to that section
