@@ -22,7 +22,6 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
-	xdialog "fyne.io/x/fyne/dialog"
 	fynetooltip "github.com/dweymouth/fyne-tooltip"
 
 	"github.com/ryex/dungeondraft-gopackager/internal/gui/assets"
@@ -415,24 +414,12 @@ func (a *App) buildMainUI() {
 	subTitleText.Text.Alignment = fyne.TextAlignCenter
 
 	aboutBtn := widget.NewButtonWithIcon("", assets.Icon, func() {
-		aboutDlg := xdialog.NewAbout(
-			lang.X(
-				"greeting.sub-title",
-				"Package, edit, and prepare Dungeondraft resource packs",
-			), []*widget.Hyperlink{
-				widget.NewHyperlink(
-					lang.X("website.link", "Website"),
-					siteURL,
-				),
-			}, a.app, a.window,
-		)
-		aboutDlg.Resize(
-			fyne.NewSize(
-				fyne.Min(a.window.Canvas().Size().Width, 640),
-				fyne.Min(a.window.Canvas().Size().Height, 480),
+		a.showAbout([]*widget.Hyperlink{
+			widget.NewHyperlink(
+				lang.X("website.link", "Website"),
+				siteURL,
 			),
-		)
-		aboutDlg.Show()
+		})
 	})
 
 	welcome := container.NewPadded(container.NewStack(
