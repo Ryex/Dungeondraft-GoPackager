@@ -138,22 +138,110 @@ func TestSpecBulkOperations(t *testing.T) {
 	node := resourceList.CreateItem()
 	resourceList.UpdateItem(0, node)
 
-	c := node.(*fyne.Container)
-	nameRow := c.Objects[0].(*fyne.Container)
-	pathRow := c.Objects[1].(*fyne.Container)
+	icon := node.(*fyne.Container).Objects[0].(*widget.FileIcon)
+	texts := node.(*fyne.Container).Objects[1].(*fyne.Container)
+	rows := texts.Objects[0].(*fyne.Container)
+
+	nameRow := rows.Objects[0].(*fyne.Container)
+	pathRow := rows.Objects[1].(*fyne.Container)
 
 	nameLbl := nameRow.Objects[0].(*widget.Label)
-	icon := nameRow.Objects[1].(*widget.FileIcon)
-	require.NotNil(t, nameRow.Objects[2])
-	pathLbl := pathRow.Objects[0].(*widgets.ThemedText)
+	require.NotNil(t, nameRow.Objects[1])
+	pathLbl := pathRow.Objects[0].(*fyne.Container).Objects[0].(*widgets.ThemedText)
 
-	assert.Equal(t, "Rock", nameLbl.Text)
+	assert.Equal(t, "Rock.png", nameLbl.Text)
 	assert.Equal(t, "textures/objects/", pathLbl.Text.Text)
 	assert.NotNil(t, icon.URI, "the node shows the icon of the resource")
 
 	// the list shows the tags that all the selected resources have in common
 	tagList := bulkTagList(t, a)
 	require.Equal(t, 1, tagList.Length())
+}
+
+// TestSpecBulkResourceNodeLayout verifies the layout of the node of the list
+// of the selected resources.
+//
+// Covered by this test:
+//
+//	when more than one resource is selected
+//	  - the list of the selected resources
+//	    - the path of a resource starts at the same place as its file name
+//	    - the path is shown below the file name
+//	    - the deselect button is in the top right corner of the node
+func TestSpecBulkResourceNodeLayout(t *testing.T) {
+	a := newSpecApp(t)
+	dir := bulkFixture(t)
+
+	a.loadUnpackedPath(dir)
+	waitForPackLoad(t, a)
+
+	computeMd5s(t, a.pkg)
+
+	tree := resourceTree(t, a)
+	selectObjects(t, a, tree)
+
+	resourceList := bulkResourceList(t, a)
+	node := resourceList.CreateItem()
+	resourceList.UpdateItem(0, node)
+
+	texts := node.(*fyne.Container).Objects[1].(*fyne.Container)
+	rows := texts.Objects[0].(*fyne.Container)
+
+	nameRow := rows.Objects[0].(*fyne.Container)
+	pathRow := rows.Objects[1].(*fyne.Container)
+
+	nameLbl := nameRow.Objects[0].(*widget.Label)
+	pathLbl := pathRow.Objects[0].(*fyne.Container).Objects[0].(*widgets.ThemedText)
+
+	// the node is laid out on its own, so that the widgets of it have their
+	// final positions
+	layoutNode(t, node)
+
+	scope := uitest.In(node)
+
+	// the path starts at the same place as the file name
+	nameStart := textStartX(t, scope, nameLbl)
+	pathStart := textStartX(t, scope, pathLbl)
+	assert.InDelta(t, nameStart, pathStart, 0.5,
+		"the path must start at the same place as the file name")
+
+	// the path is shown below the file name
+	namePos, ok := scope.Position(nameLbl)
+	require.True(t, ok)
+	pathPos, ok := scope.Position(pathLbl)
+	require.True(t, ok)
+	assert.Greater(t, pathPos.Y, namePos.Y,
+		"the path must be shown below the file name")
+
+	// the deselect button is in the top right corner of the node
+	deselect := nameRow.Objects[1].(*fyne.Container)
+	deselectPos, ok := scope.Position(deselect)
+	require.True(t, ok)
+	assert.InDelta(t, node.Size().Width, deselectPos.X+deselect.Size().Width, 0.5,
+		"the deselect button must be at the right edge of the node")
+	assert.InDelta(t, namePos.Y, deselectPos.Y, 0.5,
+		"the deselect button must be at the top of the file name")
+}
+
+// layoutNode lays a node of the list of the selected resources out, so that
+// the widgets of it have their final positions.
+func layoutNode(t *testing.T, node fyne.CanvasObject) {
+	t.Helper()
+
+	win := test.NewWindow(node)
+	t.Cleanup(win.Close)
+	win.Resize(fyne.NewSize(300, 60))
+}
+
+// textStartX returns the horizontal position of the start of the text of the
+// widget, relative to the root of the scope.
+func textStartX(t *testing.T, scope *uitest.Scope, w fyne.Widget) float32 {
+	t.Helper()
+
+	pos, ok := scope.Position(w)
+	require.True(t, ok, "the widget is not part of the scope")
+
+	return pos.X + uitest.TextStart(w).X
 }
 
 // TestSpecBulkDeselectFolder verifies that a resource that is selected with
@@ -185,8 +273,10 @@ func TestSpecBulkDeselectFolder(t *testing.T) {
 
 	node := resourceList.CreateItem()
 	resourceList.UpdateItem(0, node)
-	nameRow := node.(*fyne.Container).Objects[0].(*fyne.Container)
-	deselectBtn := nameRow.Objects[2].(*widgets.ToolTipButton)
+	texts := node.(*fyne.Container).Objects[1].(*fyne.Container)
+	rows := texts.Objects[0].(*fyne.Container)
+	nameRow := rows.Objects[0].(*fyne.Container)
+	deselectBtn := nameRow.Objects[1].(*fyne.Container).Objects[0].(*widgets.ToolTipButton)
 	test.Tap(deselectBtn)
 
 	// the folder is not selected any more
@@ -241,8 +331,10 @@ func TestSpecBulkDeselect(t *testing.T) {
 	node := resourceList.CreateItem()
 	resourceList.UpdateItem(0, node)
 
-	nameRow := node.(*fyne.Container).Objects[0].(*fyne.Container)
-	deselectBtn := nameRow.Objects[2].(*widgets.ToolTipButton)
+	texts := node.(*fyne.Container).Objects[1].(*fyne.Container)
+	rows := texts.Objects[0].(*fyne.Container)
+	nameRow := rows.Objects[0].(*fyne.Container)
+	deselectBtn := nameRow.Objects[1].(*fyne.Container).Objects[0].(*widgets.ToolTipButton)
 	test.Tap(deselectBtn)
 
 	// the resource is not selected any more, so the information of the
