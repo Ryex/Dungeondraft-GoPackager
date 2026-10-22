@@ -72,6 +72,8 @@ func (p *Package) generateThumbnails(progressCallback func(p float64)) []error {
 
 		if fi.IsTerrain() {
 			thumbnail = ddimage.TerrainThumbnail(img)
+		} else if fi.IsWallEnd() {
+			thumbnail = ddimage.WallEndThumbnail(img)
 		} else if fi.IsWall() {
 			thumbnail = ddimage.WallThumbnail(img)
 		} else if fi.IsPath() {

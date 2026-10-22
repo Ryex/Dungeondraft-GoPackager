@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/draw"
 	_ "image/gif"
 	_ "image/jpeg"
 	"image/png"
@@ -382,16 +383,73 @@ func ResizeVirticalAndCropWidth(img image.Image, height, maxWidth int, ifunc res
 	return resized
 }
 
+const (
+	// maxThumbnailWidth is the width wall and path thumbnails are cropped to.
+	maxThumbnailWidth = 228
+	// wallThumbnailHeight is the height wall thumbnails are resized to.
+	wallThumbnailHeight = 32
+	// pathThumbnailHeight is the height path thumbnails are resized to.
+	pathThumbnailHeight = 48
+	// endThumbnailSize is the height wall end piece thumbnails are resized to.
+	endThumbnailSize = 48
+)
+
+// RepeatHorizontally repeats img to the right (wrapping around) until it
+// fills width pixels. The last repetition is clipped at the width boundary,
+// so the result is exactly width wide and no repetition extends beyond it.
+// Images that already are at least width wide are returned unchanged.
+func RepeatHorizontally(img image.Image, width int) image.Image {
+	bounds := img.Bounds()
+	srcWidth := bounds.Dx()
+	if srcWidth <= 0 || srcWidth >= width {
+		return img
+	}
+	dst := image.NewNRGBA(image.Rect(0, 0, width, bounds.Dy()))
+	for x := 0; x < width; x += srcWidth {
+		srcRect := image.Rect(
+			bounds.Min.X,
+			bounds.Min.Y,
+			bounds.Min.X+min(srcWidth, width-x),
+			bounds.Max.Y,
+		)
+		draw.Draw(dst, srcRect.Sub(bounds.Min).Add(image.Pt(x, 0)), img, srcRect.Min, draw.Over)
+	}
+	return dst
+}
+
 func TerrainThumbnail(img image.Image) image.Image {
 	return StripAlpha(Resize(img, 0, 160, ResizeBicubic))
 }
 
 func WallThumbnail(img image.Image) image.Image {
-	return ResizeVirticalAndCropWidth(CropTransparent(img, 0, 0, 5), 32, 228, ResizeBicubic)
+	return wallPathThumbnail(img, wallThumbnailHeight)
 }
 
 func PathThumbnail(img image.Image) image.Image {
-	return ResizeVirticalAndCropWidth(CropTransparent(img, 0, 0, 5), 48, 228, ResizeBicubic)
+	return wallPathThumbnail(img, pathThumbnailHeight)
+}
+
+// wallPathThumbnail makes the thumbnail of a wall or path section: when the
+// aspect ratio of the texture is smaller than the aspect ratio of the
+// thumbnail box (maxThumbnailWidth/height), the texture is assumed to be
+// seamless and is repeated to the right until it reaches it, so the thumbnail
+// shows the tiling instead of a narrow strip. The strip is then cropped to its
+// transparent bounds, resized vertically to height keeping its aspect ratio
+// and cropped so its width does not exceed maxThumbnailWidth.
+func wallPathThumbnail(img image.Image, height int) image.Image {
+	bounds := img.Bounds()
+	targetWidth := int(math.Ceil(float64(bounds.Dy()) * float64(maxThumbnailWidth) / float64(height)))
+	if bounds.Dx() < targetWidth {
+		img = RepeatHorizontally(img, targetWidth)
+	}
+	return ResizeVirticalAndCropWidth(CropTransparent(img, 0, 0, 5), height, maxThumbnailWidth, ResizeBicubic)
+}
+
+// WallEndThumbnail makes the thumbnail of a wall end piece: the piece is
+// cropped to its transparent bounds and fitted to endThumbnailSize height,
+// its width follows its aspect ratio.
+func WallEndThumbnail(img image.Image) image.Image {
+	return Resize(CropTransparent(img, 0, 0, 5), 0, endThumbnailSize, ResizeBicubic)
 }
 
 func DefaultThumbnail(img image.Image) image.Image {

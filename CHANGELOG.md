@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 <!-- insertion marker -->
 ### Features
 
+- wall and path textures whose aspect ratio does not fill the thumbnail box
+  (228x32 for walls, 228x48 for paths) are seamlessly repeated to the right
+  until it is filled, so seamless textures show their tiling instead of a
+  narrow strip.
+- wall end pieces (`*_end`) get their own thumbnail treatment: they are only
+  cropped to their transparent bounds and fitted to the thumbnail height
+  keeping their aspect ratio.
 - dark mode toggle in the welcome header, the choice is remembered between runs.
 - language select in the welcome header, the interface is rebuilt in the selected
   language while the app is running, the choice is remembered between runs.
