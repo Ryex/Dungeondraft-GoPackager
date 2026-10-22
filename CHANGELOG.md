@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 <!-- insertion marker -->
 ### Features
 
+- the about dialog shows the version of the build amended with the commit it was
+  built from (`2.1.0 (1a2b3c4)`), which the go tool embeds into the binary, and it
+  marks builds of a modified working tree (`-dirty`).
 - wall and path textures whose aspect ratio does not fill the thumbnail box
   (228x32 for walls, 228x48 for paths) are seamlessly repeated to the right
   until it is filled, so seamless textures show their tiling instead of a
