@@ -59,6 +59,24 @@ func (p *Package) MapResourcePaths() {
 	}
 }
 
+// joinUnderBase joins the resource relative path rel to base and guarantees
+// the result stays under base. It returns ErrPathEscape when rel is empty,
+// rooted (absolute, with a volume name or starting with a path separator) or
+// when the cleaned result would resolve outside of base.
+func joinUnderBase(base, rel string) (string, error) {
+	// the separator check also catches rooted paths like "/abs" on windows,
+	// where filepath.IsAbs reports false because there is no volume name
+	if rel == "" || os.IsPathSeparator(rel[0]) ||
+		filepath.IsAbs(rel) || filepath.VolumeName(rel) != "" {
+		return "", ErrPathEscape
+	}
+	joined := filepath.Join(base, rel)
+	if ok, _ := utils.PathIsSub(base, joined); !ok {
+		return "", ErrPathEscape
+	}
+	return joined, nil
+}
+
 // extractFileList takes a slice of FileInfo and extracts the files from the package at the reader
 func (p *Package) extractFileList(outDir string, progressCallback func(p float64)) (err error) {
 	outDirPath, err := filepath.Abs(outDir)
@@ -119,7 +137,15 @@ func (p *Package) extractFileList(outDir string, progressCallback func(p float64
 			continue
 		}
 
-		path := filepath.Join(outDirPath, filepath.Dir(fi.Path))
+		path, err := joinUnderBase(outDirPath, filepath.Dir(fi.Path))
+		if err != nil {
+			p.log.
+				WithField("resPath", fi.ResPath).
+				WithField("path", filepath.Join(outDirPath, filepath.Dir(fi.Path))).
+				WithError(err).
+				Error("resource path escapes the target directory")
+			return dderrors.CausedBy(ErrPathEscape, err)
+		}
 		p.log.WithField("mappedPath", fi.Path).Debugf("%s -> %s", fi.ResPath, path)
 
 		fileNameFull := filepath.Base(fi.ResPath)
@@ -179,7 +205,13 @@ func (p *Package) ExtractFile(info *structures.FileInfo, outPath string) (string
 		}
 	}
 
-	filePath := filepath.Join(outPath, fileNameFull)
+	filePath, err := joinUnderBase(outPath, fileNameFull)
+	if err != nil {
+		l.WithField("unpackedFile", filepath.Join(outPath, fileNameFull)).
+			WithError(err).
+			Error("resource path escapes the target directory")
+		return "", dderrors.CausedBy(ErrPathEscape, err)
+	}
 	l = l.WithField("unpackedFile", filePath)
 
 	fileExists := utils.FileExists(filePath)
