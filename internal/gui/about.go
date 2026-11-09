@@ -245,9 +245,9 @@ func (r *alphaRectRenderer) Destroy() {}
 
 // withAlpha returns the color c with its opacity replaced by alpha.
 func withAlpha(c color.Color, alpha uint8) color.Color {
-	r, g, b, _ := c.RGBA()
-
-	return color.NRGBA{R: uint8(r >> 8), G: uint8(g >> 8), B: uint8(b >> 8), A: alpha}
+	n := color.NRGBAModel.Convert(c).(color.NRGBA)
+	n.A = alpha
+	return n
 }
 
 // underLayout places the background icon in the middle of the dialog at the

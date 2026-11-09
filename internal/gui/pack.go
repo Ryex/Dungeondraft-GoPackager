@@ -791,6 +791,9 @@ func (a *App) genThumbnails() {
 
 		pkg := a.currentPackage()
 		if pkg == nil {
+			fyne.Do(func() {
+				progressDlg.Hide()
+			})
 			a.disableButtons.Set(false)
 			return
 		}
@@ -835,6 +838,11 @@ func (a *App) genThumbnails() {
 }
 
 func (a *App) packPackage(path string, options ddpackage.PackOptions) {
+	pkg := a.currentPackage()
+	if pkg == nil {
+		log.WithError(ddpackage.ErrPackageNotLoaded).Warn("cannot pack without a loaded package")
+		return
+	}
 	if path == "" {
 		dialog.ShowInformation(
 			lang.X("needOutPathDialog.title", "Please Provide an Output Path"),
@@ -850,7 +858,7 @@ func (a *App) packPackage(path string, options ddpackage.PackOptions) {
 	progressBar := widget.NewProgressBarWithData(progressVal)
 	taskLbl := widget.NewLabelWithData(taskStr)
 
-	targetPath := filepath.Join(path, a.pkg.Name()+".dungeondraft_pack")
+	targetPath := filepath.Join(path, pkg.Name()+".dungeondraft_pack")
 
 	progressDlg := dialog.NewCustomWithoutButtons(
 		lang.X("pack.packageProgressDlg.title", "Packing to {{.Path}}", map[string]any{"Path": targetPath}),
@@ -865,37 +873,43 @@ func (a *App) packPackage(path string, options ddpackage.PackOptions) {
 		progress := newProgressReporter(func(p float64) {
 			progressVal.Set(p)
 		})
-		err := a.pkg.PackPackageProgress(path, options, progress.Report)
-		progressDlg.Hide()
+		err := pkg.PackPackageProgress(path, options, progress.Report)
+		fyne.Do(func() {
+			progressDlg.Hide()
+		})
 		if err != nil {
-			errDlg := dialog.NewError(
-				dderrors.CausedBy(errors.New(lang.X(
-					"pack.package.error.text",
-					"Error packing {{.Path}} to {{.Pack}}",
-					map[string]any{
-						"Path": a.pkg.UnpackedPath(),
-						"Pack": targetPath,
-					},
-				)), err),
-				a.window,
-			)
-			errDlg.Show()
+			fyne.Do(func() {
+				errDlg := dialog.NewError(
+					dderrors.CausedBy(errors.New(lang.X(
+						"pack.package.error.text",
+						"Error packing {{.Path}} to {{.Pack}}",
+						map[string]any{
+							"Path": pkg.UnpackedPath(),
+							"Pack": targetPath,
+						},
+					)), err),
+					a.window,
+				)
+				errDlg.Show()
+			})
 			return
 		}
 
-		infoDlg := dialog.NewInformation(
-			lang.X("pack.success.dlg.title", "Packaging successful"),
-			lang.X(
-				"pack.success.dlg.text",
-				"{{.Path}} Packaged to {{.Pack}} successfully",
-				map[string]any{
-					"Path": a.pkg.UnpackedPath(),
-					"Pack": targetPath,
-				},
-			),
-			a.window,
-		)
-		infoDlg.Show()
+		fyne.Do(func() {
+			infoDlg := dialog.NewInformation(
+				lang.X("pack.success.dlg.title", "Packaging successful"),
+				lang.X(
+					"pack.success.dlg.text",
+					"{{.Path}} Packaged to {{.Pack}} successfully",
+					map[string]any{
+						"Path": pkg.UnpackedPath(),
+						"Pack": targetPath,
+					},
+				),
+				a.window,
+			)
+			infoDlg.Show()
+		})
 		a.disableButtons.Set(false)
 	}()
 }
