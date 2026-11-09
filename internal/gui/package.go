@@ -166,12 +166,14 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) *named.Named {
 }
 
 func (a *App) buildPackageTree(editable bool) (*resource_tree.ResourceTree, binding.String, binding.Bool) {
+	pkg := a.currentPackage()
+
 	filter := ""
 	boundFilter := binding.BindString(&filter)
 	byTag := false
 	boundByTag := binding.BindBool(&byTag)
 
-	resourceTree := resource_tree.NewResourceTree(a.pkg, a.window)
+	resourceTree := resource_tree.NewResourceTree(pkg, a.window)
 
 	refreshTree := func() {
 		resourceTree.RefreshTree()
@@ -260,7 +262,9 @@ func (a *App) buildInfoPane(info *structures.FileInfo, editable bool) fyne.Canva
 }
 
 func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
-	fileData, err := a.pkg.LoadResource(info.ResPath)
+	pkg := a.currentPackage()
+
+	fileData, err := pkg.LoadResource(info.ResPath)
 	if err != nil {
 		log.WithError(err).Errorf("failed to read image data for %s", info.ResPath)
 		return widget.NewLabel(fmt.Sprintf("Failed to read image data for %s", info.ResPath))
@@ -374,7 +378,7 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 
 	var thumbnail fyne.CanvasObject = thumbnailErrObj
 	if info.ThumbnailResPath != "" {
-		thumbnailData, thumbErr := a.pkg.LoadResource(info.ThumbnailResPath)
+		thumbnailData, thumbErr := pkg.LoadResource(info.ThumbnailResPath)
 		if thumbErr != nil {
 			if errors.Is(thumbErr, ddpackage.ErrResourceNotFound) {
 				thumbnailErr.Set(lang.X("preview.noThumbnail", "Thumbnail not generated."))
@@ -528,7 +532,7 @@ func (a *App) buildTagInfo(info *structures.FileInfo, editable bool) fyne.Canvas
 				updateTags()
 				a.saveUnpackedTags()
 				tagSelector.SetText("")
-				tagSelector.SetOptions(a.pkg.Tags().AllTags())
+				tagSelector.SetOptions(a.currentPackage().Tags().AllTags())
 			},
 		)
 		content.Add(layouts.NewLeftExpandHBox(tagSelector, addBtn))
@@ -566,7 +570,7 @@ func (a *App) buildMetadataPane(info *structures.FileInfo, editable bool) fyne.C
 			metaPath := info.MetadataPath
 
 			defaultColor := color.NRGBA{255, 255, 255, 255}
-			wallData := a.pkg.Walls()
+			wallData := a.currentPackage().Walls()
 			metaData, ok := wallData[metaPath]
 			if ok {
 				defaultColor = metaData.Color.ToColor()
@@ -620,7 +624,7 @@ func (a *App) buildMetadataPane(info *structures.FileInfo, editable bool) fyne.C
 			tilesetName := ""
 			tilesetType := structures.TilesetNormal
 
-			tilesetData := a.pkg.Tilesets()
+			tilesetData := a.currentPackage().Tilesets()
 			metaData, ok := tilesetData[metaPath]
 			if ok {
 				defaultColor = metaData.Color.ToColor()
@@ -1044,7 +1048,7 @@ func (a *App) buildBulkTagAddRow(
 			updateTags()
 			a.saveUnpackedTags()
 			tagSelector.SetText("")
-			tagSelector.SetOptions(a.pkg.Tags().AllTags())
+			tagSelector.SetOptions(a.currentPackage().Tags().AllTags())
 		},
 	)
 

@@ -645,7 +645,7 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 		lang.X("pack.editPackBtn.text", "Edit settings"),
 		theme.DocumentCreateIcon(),
 		func() {
-			dlg := NewPackJSONDialogPkg(a.pkg, true, func(options ddpackage.SavePackageJSONOptions) {
+			dlg := NewPackJSONDialogPkg(a.currentPackage(), true, func(options ddpackage.SavePackageJSONOptions) {
 				err := ddpackage.SavePackageJSON(
 					log.WithField("path", options.Path),
 					options,
@@ -665,8 +665,8 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 					errDlg.Show()
 					return
 				}
-				a.pkg.UpdateFromPaths([]string{filepath.Join(options.Path, "pack.json")})
-				err = a.pkg.LoadUnpackedPackJSON(options.Path)
+				a.currentPackage().UpdateFromPaths([]string{filepath.Join(options.Path, "pack.json")})
+				err = a.currentPackage().LoadUnpackedPackJSON(options.Path)
 				if err != nil {
 					errDlg := dialog.NewError(
 						dderrors.CausedBy(errors.New(lang.X(
