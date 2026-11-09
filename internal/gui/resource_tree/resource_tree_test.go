@@ -229,6 +229,111 @@ func TestResourceTreeEmptyPackage(t *testing.T) {
 	assert.Contains(t, tree.ChildUIDs(PackageTreeRootID), widget.TreeNodeID("res://packs/testpack.json"))
 }
 
+// TestGetSelectedResourcesReportsDirectlySelectedResources guards the
+// Selected flag of GetSelectedResources: a resource is selected on its
+// own when one of the nodes that show it is selected, not only when the
+// uid of the reported entry is selected.
+//
+// The tree is in tag mode and the resource carries two tags, so it is
+// shown under both branches: the walk sees the branch that is selected
+// for roll-up before it sees the node that was selected directly, and the
+// entry is therefore created from an occurrence that is not the selected
+// one.
+func TestGetSelectedResourcesReportsDirectlySelectedResources(t *testing.T) {
+	pkg, _ := loadFixtureWith(t, twoTagFixture())
+	tree := newTree(t, pkg)
+	tree.SetMode(ResourceTreeTagMode)
+
+	// Rock.png carries the "nature" and the "rock" tag, so it is shown
+	// under both branches
+	natureRockUID := tagResourceUID("tag://nature", rockResPath)
+	rockBranchUID := widget.TreeNodeID("tag://rock")
+	natureBranchUID := widget.TreeNodeID("tag://nature")
+
+	entryFor := func(resources []SelectedResource, resPath string) SelectedResource {
+		for _, res := range resources {
+			if res.Info != nil && res.Info.ResPath == resPath {
+				return res
+			}
+		}
+		require.FailNowf(t, "resource not reported", "%s must be reported", resPath)
+		return SelectedResource{}
+	}
+
+	// Rock is selected on its own under one tag while the branch of the
+	// other tag is selected for roll-up: the branch is popped first by the
+	// LIFO stack, so the uid that is seen first is the branch child and
+	// not the selected one
+	tree.Select(natureRockUID)
+	tree.Select(rockBranchUID)
+
+	resources := tree.GetSelectedResources()
+	rock := entryFor(resources, string(rockResPath))
+	assert.True(t, rock.Selected, "Rock.png is selected on its own")
+
+	// only the branch is selected: Rock.png is part of the selection
+	// through its branch, but not selected on its own
+	tree.UnselectAll()
+	tree.Select(rockBranchUID)
+
+	resources = tree.GetSelectedResources()
+	rock = entryFor(resources, string(rockResPath))
+	assert.False(t, rock.Selected, "Rock.png must not be selected on its own")
+
+	// a resource with no selection of its own under another selected
+	// branch must not be reported as selected either
+	tree.UnselectAll()
+	tree.Select(rockBranchUID)
+	tree.Select(natureBranchUID)
+
+	resources = tree.GetSelectedResources()
+	rock = entryFor(resources, string(rockResPath))
+	assert.False(t, rock.Selected, "Rock.png must not be selected on its own")
+	treeRes := entryFor(resources, "res://packs/testpack/textures/objects/Tree.png")
+	assert.False(t, treeRes.Selected, "Tree.png must not be selected on its own")
+}
+
+// TestUnselectIncludingAncestorsUnselectsTheSelectedBranch guards the
+// ancestor walk of UnselectIncludingAncestors: a node below a branch that is
+// selected for roll-up is shown as selected but is not selected itself, and
+// the selection can not hold "the branch selected except this one child" -
+// unselecting the node therefore has to unselect the branch that holds it.
+//
+// The context menu of such a roll-up selected node offers to be unselected
+// as well, so it has to show the unselect item.
+func TestUnselectIncludingAncestorsUnselectsTheSelectedBranch(t *testing.T) {
+	pkg, _ := loadFixtureWith(t, twoTagFixture())
+	tree := newTree(t, pkg)
+	tree.SetMode(ResourceTreeTagMode)
+
+	tagBranchUID := widget.TreeNodeID("tag://nature")
+	childUID := tagResourceUID("tag://nature", rockResPath)
+
+	// the branch is selected, so the nodes below it are shown as selected
+	// without being selected themselves
+	tree.Select(tagBranchUID)
+	require.True(t, tree.IsVisiblySelected(childUID),
+		"the node below a selected branch must be shown as selected")
+	require.False(t, tree.IsSelected(childUID),
+		"the node below a selected branch must not be selected itself")
+
+	// the context menu of the roll-up selected node offers to be unselected
+	nodes := treeNodes(t, tree, "tag://nature")
+	childNode, ok := nodes[childUID]
+	require.True(t, ok, "the tree must hold a node for the resource")
+	items := childNode.contextMenuItems()
+	require.Len(t, items, 1)
+	assert.Equal(t, lang.X("tree.context.unselect", "Unselect"), items[0].Label)
+
+	tree.UnselectIncludingAncestors(childUID)
+
+	assert.False(t, tree.IsSelected(tagBranchUID),
+		"the selected ancestor must be unselected")
+	assert.False(t, tree.IsVisiblySelected(childUID),
+		"the node must not be shown as selected any more")
+	assert.Empty(t, tree.GetSelection())
+}
+
 // TestSelectionAtScale guards the selection bookkeeping at the scale of a
 // real pack: every resource is shown under every one of its tags, so the
 // tree holds far more nodes than there are resources.

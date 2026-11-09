@@ -95,6 +95,14 @@ type App struct {
 	// objects they belong to.
 	ui *named.Cache
 
+	// saveTimerLock guards tagSaveTimer and resSaveTimers. The save
+	// callbacks create the timers on the Fyne goroutine, while the flush
+	// of a replaced package runs on the load goroutine (replacePackage)
+	// and the cleanup runs on the main goroutine. Flushing the timer map
+	// while a save callback writes it would crash the process
+	// (concurrent map writes), not just race the race detector.
+	saveTimerLock sync.Mutex
+
 	tagSaveTimer  *time.Timer
 	resSaveTimers map[string]*time.Timer
 
@@ -139,12 +147,12 @@ type App struct {
 	// so that tests can look at the interface while the update runs.
 	packageUpdateHook func(dlg *packageUpdateDialog)
 
-	// bgWG tracks the background work that touches the interface: the
+	// bgWork tracks the background work that touches the interface: the
 	// loads of a package and the computations of the md5 hashes.
 	//
 	// The interface must not be touched while the background work is
 	// running, so the tests wait for it.
-	bgWG sync.WaitGroup
+	bgWork backgroundTracker
 
 	// prefLocaleListener is the listener registered on the locale preference.
 	// It is removed and replaced whenever the UI is rebuilt and detached
@@ -155,6 +163,53 @@ type App struct {
 	packageUpdated   binding.Int
 
 	lastSelectedTab string
+}
+
+// backgroundTracker counts the units of background work that are running,
+// so that tests can wait for them to be done.
+//
+// It replaces a sync.WaitGroup: the Add of a WaitGroup may not be called
+// concurrently with its Wait, but the background work of the app is
+// started while the tests wait for it.
+type backgroundTracker struct {
+	mu    sync.Mutex
+	cond  *sync.Cond
+	count int
+}
+
+// Start counts a new unit of background work.
+func (b *backgroundTracker) Start() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.count++
+}
+
+// Done counts a unit of background work as finished and wakes the waiters
+// when no work is left.
+//
+// A Done without a matching Start panics, fail-fast like the sync.WaitGroup
+// it replaced: an extra Done would drive the counter negative, so that a
+// later Start brings it back to zero while work is still running and Wait
+// returns too early.
+func (b *backgroundTracker) Done() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.count <= 0 {
+		panic("sync: negative backgroundTracker counter: Done called without a matching Start")
+	}
+	b.count--
+	if b.count == 0 {
+		b.cond.Broadcast()
+	}
+}
+
+// Wait blocks until no background work is counted anymore.
+func (b *backgroundTracker) Wait() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for b.count > 0 {
+		b.cond.Wait()
+	}
 }
 
 //go:embed translation
@@ -174,6 +229,7 @@ func NewApp() *App {
 	app.packageUpdated = binding.BindInt(&app.pkgUpdateCounter)
 	app.loadUnpacked = app.loadUnpackedSync
 	app.loadPacked = app.loadPackSync
+	app.bgWork.cond = sync.NewCond(&app.bgWork.mu)
 	return app
 }
 
@@ -297,6 +353,9 @@ func (a *App) replacePackage(pkg *ddpackage.Package) {
 	old := a.currentPackage()
 	a.setCurrentPackage(pkg)
 	if old != nil && old != pkg {
+		// flush the saves that are still pending for the old package
+		// before it is closed
+		a.stopSaveTimersFor(old)
 		old.Close()
 	}
 }
@@ -320,6 +379,7 @@ func (a *App) setCurrentPackage(pkg *ddpackage.Package) {
 
 func (a *App) clean() {
 	a.resetPkg()
+	a.saveTimerLock.Lock()
 	if a.tagSaveTimer != nil {
 		a.tagSaveTimer.Stop()
 		a.tagSaveTimer = nil
@@ -328,6 +388,7 @@ func (a *App) clean() {
 		timer.Stop()
 	}
 	a.resSaveTimers = map[string]*time.Timer{}
+	a.saveTimerLock.Unlock()
 	if a.prefLocaleListener != nil && a.prefLocale != nil {
 		a.prefLocale.RemoveListener(a.prefLocaleListener)
 		a.prefLocaleListener = nil
