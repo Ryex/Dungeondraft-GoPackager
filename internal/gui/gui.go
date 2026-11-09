@@ -163,6 +163,20 @@ type App struct {
 	packageUpdated   binding.Int
 
 	lastSelectedTab string
+
+	// filterDebounce is the time the filter entry of the resource tree
+	// waits for further input, before the filter is applied to the tree.
+	// It is set to defaultFilterDebounce in NewApp.
+	filterDebounce time.Duration
+
+	// filterTimer is the pending debounce of the filter entry. The
+	// listener that schedules it runs on the Fyne goroutine, while the
+	// cleanup (clean) and the replacement of the content (buildPackageTree)
+	// run on other goroutines, so filterMu guards the timer and its
+	// application: the debounce callback takes it around the rebuild of
+	// the tree as well.
+	filterTimer *time.Timer
+	filterMu    sync.Mutex
 }
 
 // backgroundTracker counts the units of background work that are running,
@@ -220,11 +234,17 @@ var translations embed.FS
 // translations more than once in the global i18n bundle.
 var translationsOnce sync.Once
 
+// defaultFilterDebounce is the time the filter entry of the resource tree
+// waits for further input, before the filter is applied to the tree, so
+// that a filter typed in quickly is only applied once.
+const defaultFilterDebounce = 200 * time.Millisecond
+
 func NewApp() *App {
 	app := &App{
 		operatingPath:  binding.NewString(),
 		disableButtons: binding.NewBool(),
 		resSaveTimers:  make(map[string]*time.Timer),
+		filterDebounce: defaultFilterDebounce,
 	}
 	app.packageUpdated = binding.BindInt(&app.pkgUpdateCounter)
 	app.loadUnpacked = app.loadUnpackedSync
@@ -389,6 +409,14 @@ func (a *App) clean() {
 	}
 	a.resSaveTimers = map[string]*time.Timer{}
 	a.saveTimerLock.Unlock()
+	// the filter of the resource tree must not be applied to the
+	// interface after it is gone
+	a.filterMu.Lock()
+	if a.filterTimer != nil {
+		a.filterTimer.Stop()
+		a.filterTimer = nil
+	}
+	a.filterMu.Unlock()
 	if a.prefLocaleListener != nil && a.prefLocale != nil {
 		a.prefLocale.RemoveListener(a.prefLocaleListener)
 		a.prefLocaleListener = nil

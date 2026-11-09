@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"fyne.io/fyne/v2/widget"
 	"github.com/stretchr/testify/assert"
@@ -228,29 +229,52 @@ func TestSpecResourceFilter(t *testing.T) {
 
 	// a name filter shows the resources with a matching name only
 	entry.SetText("%Rock")
-	assert.Equal(t, []string{resPath("textures/objects/Rock.png")}, shownResources(t, tree))
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		// the same fence as the debounce callback: it serialises this
+		// poll against the rebuild on the timer goroutine (the test
+		// driver runs fyne.Do inline there)
+		a.filterMu.Lock()
+		defer a.filterMu.Unlock()
+		assert.Equal(c, []string{resPath("textures/objects/Rock.png")}, shownResources(t, tree))
+	}, 5*time.Second, 20*time.Millisecond, "the tree must show the resources with a matching name only")
 
 	// a tag filter shows the resources with a matching tag only
 	entry.SetText("#rock")
-	assert.Equal(t, []string{resPath("textures/objects/Rock.png")}, shownResources(t, tree))
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		a.filterMu.Lock()
+		defer a.filterMu.Unlock()
+		assert.Equal(c, []string{resPath("textures/objects/Rock.png")}, shownResources(t, tree))
+	}, 5*time.Second, 20*time.Millisecond, "the tree must show the resources with a matching tag only")
 
 	// a path filter shows the resources with a matching path only
 	entry.SetText("/textures/objects/**")
-	assert.ElementsMatch(t, []string{
-		resPath("textures/objects/Rock.png"),
-		resPath("textures/objects/Tree.png"),
-	}, shownResources(t, tree))
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		a.filterMu.Lock()
+		defer a.filterMu.Unlock()
+		assert.ElementsMatch(c, []string{
+			resPath("textures/objects/Rock.png"),
+			resPath("textures/objects/Tree.png"),
+		}, shownResources(t, tree))
+	}, 5*time.Second, 20*time.Millisecond, "the tree must show the resources with a matching path only")
 
 	// a kind filter shows the resources of that kind only
 	entry.SetText("@IsTexture")
-	assert.ElementsMatch(t, []string{
-		resPath("textures/objects/Rock.png"),
-		resPath("textures/objects/Tree.png"),
-		resPath("textures/tilesets/Grass.png"),
-		resPath("textures/walls/Stone.png"),
-	}, shownResources(t, tree))
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		a.filterMu.Lock()
+		defer a.filterMu.Unlock()
+		assert.ElementsMatch(c, []string{
+			resPath("textures/objects/Rock.png"),
+			resPath("textures/objects/Tree.png"),
+			resPath("textures/tilesets/Grass.png"),
+			resPath("textures/walls/Stone.png"),
+		}, shownResources(t, tree))
+	}, 5*time.Second, 20*time.Millisecond, "the tree must show the resources of that kind only")
 
 	// an empty filter shows all the resources again
 	entry.SetText("")
-	assert.ElementsMatch(t, all, shownResources(t, tree))
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		a.filterMu.Lock()
+		defer a.filterMu.Unlock()
+		assert.ElementsMatch(c, all, shownResources(t, tree))
+	}, 5*time.Second, 20*time.Millisecond, "the tree must show all the resources again")
 }
