@@ -394,15 +394,30 @@ const (
 	endThumbnailSize = 48
 )
 
+// maxRepeatRatio bounds the repeat: the output may be at most maxRepeatRatio
+// times as wide as the source image. Legitimate wall/path thumbnails need at
+// most maxThumbnailWidth/wallThumbnailHeight = 7.125× the source height, and
+// the bound keeps the allocation linear in the source's pixel count.
+const maxRepeatRatio int64 = 64
+
 // RepeatHorizontally repeats img to the right (wrapping around) until it
 // fills width pixels. The last repetition is clipped at the width boundary,
 // so the result is exactly width wide and no repetition extends beyond it.
 // Images that already are at least width wide are returned unchanged.
+// Requests beyond maxRepeatRatio times the source width are clamped to one
+// source-repeat below the limit, so the allocation stays linear in the size
+// of the source image.
 func RepeatHorizontally(img image.Image, width int) image.Image {
 	bounds := img.Bounds()
 	srcWidth := bounds.Dx()
 	if srcWidth <= 0 || srcWidth >= width {
 		return img
+	}
+	if int64(width) > int64(srcWidth)*maxRepeatRatio {
+		// clamp to one source-repeat below the limit: two more repeats
+		// would exceed it again, and the allocation is bounded at
+		// (maxRepeatRatio-1) times the source's pixel count.
+		width = int(int64(srcWidth) * (maxRepeatRatio - 1))
 	}
 	dst := image.NewNRGBA(image.Rect(0, 0, width, bounds.Dy()))
 	for x := 0; x < width; x += srcWidth {
