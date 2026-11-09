@@ -70,6 +70,24 @@ const (
 	nameTagList          = "tagList"
 )
 
+// paneKind describes the kind of content the resource pane shows.
+//
+// The kind decides whether a change of the selection has to rebuild the
+// content of the pane or can update it in place.
+type paneKind int
+
+const (
+	// paneKindNone means that nothing is selected, so the resource pane
+	// shows the default preview.
+	paneKindNone paneKind = iota
+	// paneKindSingle means that the resource pane shows the information of
+	// a single resource.
+	paneKindSingle
+	// paneKindBulk means that the resource pane shows the operations that
+	// can be applied to all the selected resources at once.
+	paneKindBulk
+)
+
 func (a *App) buildPackageTreeAndInfoPane(editable bool) *named.Named {
 	tree, filter, displayByTag := a.buildPackageTree(editable)
 
@@ -135,28 +153,70 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) *named.Named {
 
 	rightSplit := container.NewStack(defaultPreview)
 
-	tree.OnSelectionChanged = func() {
-		selected := tree.GetSelectionAndChildData()
-		content := func() fyne.CanvasObject {
-			if len(selected) == 0 {
-				return defaultPreview
-			} else if len(selected) == 1 {
-				switch data := selected[0].(type) {
-				case *resource_tree.ResourceFileInfoNode:
-					return a.buildInfoPane(data.Info, editable)
-				}
-			}
-			return a.buildBulkOpsPane(tree, tree.GetSelectedResources(), editable)
-		}()
+	// the kind of content the resource pane shows and the parts of it that
+	// build it, so that a change of the selection within the same kind can
+	// update the content instead of rebuilding it
+	paneMode := paneKindNone
+	var singleInfo *structures.FileInfo
+	var bulk *bulkPane
+
+	// setContent replaces the content of the resource pane.
+	//
+	// The parts of the new content are new objects, so the cache of the
+	// named parts has to forget the old ones.
+	setContent := func(content fyne.CanvasObject) {
 		rightSplit.RemoveAll()
 		rightSplit.Add(content)
 		rightSplit.Refresh()
 
-		// the parts of the information pane are new objects, so the cache
-		// of the named parts has to forget the old ones
 		if a.ui != nil {
 			a.ui.Reset()
 		}
+	}
+
+	tree.OnSelectionChanged = func() {
+		selected := tree.GetSelectionAndChildData()
+
+		if len(selected) == 0 {
+			// the default preview is only built when it is not shown
+			// already
+			if paneMode == paneKindNone {
+				return
+			}
+			paneMode = paneKindNone
+			singleInfo = nil
+			bulk = nil
+			setContent(defaultPreview)
+			return
+		}
+
+		if len(selected) == 1 {
+			if data, isResource := selected[0].(*resource_tree.ResourceFileInfoNode); isResource {
+				// the information of the resource is shown already, only
+				// the occurrence of it in the selection changed
+				if paneMode == paneKindSingle && singleInfo == data.Info {
+					return
+				}
+				paneMode = paneKindSingle
+				singleInfo = data.Info
+				bulk = nil
+				setContent(a.buildInfoPane(data.Info, editable))
+				return
+			}
+		}
+
+		// the operations of many resources are shown: they are updated in
+		// place when they are on screen already, only a change of the kind
+		// of the content rebuilds the pane
+		if paneMode == paneKindBulk && bulk != nil {
+			bulk.setResources(tree.GetSelectedResources())
+			return
+		}
+		paneMode = paneKindBulk
+		singleInfo = nil
+		content, newBulk := a.buildBulkOpsPane(tree, tree.GetSelectedResources(), editable)
+		bulk = newBulk
+		setContent(content)
 	}
 
 	split := container.NewPadded(container.NewHSplit(
@@ -911,14 +971,75 @@ func (a *App) saveTilesetMetadata(metaPath string) {
 	})
 }
 
+// bulkPane is the pane that holds the operations that can be applied to all
+// the selected resources at once.
+//
+// The pane is updated in place when the selection changes, so that its parts
+// are only built when the kind of the content of the resource pane changes.
+type bulkPane struct {
+	// resources are the resources the operations are applied to.
+	resources []resource_tree.SelectedResource
+	// byUID indexes the resources by the id of the node they are shown as,
+	// so that a row of the list can be filled from the id it is bound to.
+	byUID map[widget.TreeNodeID]resource_tree.SelectedResource
+	// idStrings are the ids of the nodes of the resources. They are bound
+	// to the list of the selected resources.
+	idStrings []string
+	ids       binding.ExternalStringList
+	// tagStrings are the tags that all the resources have in common. They
+	// are bound to the list of the common tags.
+	tagStrings []string
+	tags       binding.ExternalStringList
+	// updateTags recomputes the common tags of the resources.
+	updateTags func()
+	// tree is the resource tree the resources are selected in.
+	tree *resource_tree.ResourceTree
+	// editable tells whether the resources may be changed.
+	editable bool
+}
+
+// setResources replaces the resources the pane works on.
+//
+// The lists of the pane are updated from the new resources, so that the
+// interface shows the new selection without the pane being rebuilt.
+func (b *bulkPane) setResources(resources []resource_tree.SelectedResource) {
+	b.resources = resources
+
+	b.byUID = make(map[widget.TreeNodeID]resource_tree.SelectedResource, len(resources))
+	b.idStrings = make([]string, 0, len(resources))
+	for _, res := range resources {
+		b.byUID[res.Uid] = res
+		b.idStrings = append(b.idStrings, string(res.Uid))
+	}
+	b.ids.Reload()
+
+	b.updateTags()
+}
+
 // buildBulkOpsPane builds the pane that holds the operations that can be
 // applied to all the selected resources at once.
+//
+// The pane is returned together with its state, so that the caller can update
+// it in place when the selection changes.
 func (a *App) buildBulkOpsPane(
 	tree *resource_tree.ResourceTree,
 	resources []resource_tree.SelectedResource,
 	editable bool,
-) fyne.CanvasObject {
-	tagsPane := a.buildBulkTagsPane(tree, resources, editable)
+) (fyne.CanvasObject, *bulkPane) {
+	bulk := &bulkPane{
+		tree:     tree,
+		editable: editable,
+	}
+	bulk.ids = binding.BindStringList(&bulk.idStrings)
+	bulk.tags = binding.BindStringList(&bulk.tagStrings)
+	bulk.updateTags = func() {
+		bulk.tagStrings = a.commonTags(bulk.resources).AsSlice()
+		slices.Sort(bulk.tagStrings)
+		bulk.tags.Reload()
+	}
+	bulk.setResources(resources)
+
+	tagsPane := a.buildBulkTagsPane(bulk)
 
 	tabs := container.NewAppTabs(
 		container.NewTabItemWithIcon(
@@ -931,16 +1052,12 @@ func (a *App) buildBulkOpsPane(
 	return named.New(nameBulkOpsPane, container.NewBorder(
 		nil, nil, nil, nil,
 		named.New(nameBulkOpsTabs, tabs),
-	))
+	)), bulk
 }
 
 // buildBulkTagsPane builds the tab that shows the tag operations that can be
 // applied to all the selected resources at once.
-func (a *App) buildBulkTagsPane(
-	tree *resource_tree.ResourceTree,
-	resources []resource_tree.SelectedResource,
-	editable bool,
-) fyne.CanvasObject {
+func (a *App) buildBulkTagsPane(b *bulkPane) fyne.CanvasObject {
 	header := named.New(nameBulkTagHeader, container.NewStack(
 		widgets.NewThemedRect(theme.ColorNameHeaderBackground, 4),
 		container.NewCenter(
@@ -948,18 +1065,9 @@ func (a *App) buildBulkTagsPane(
 		),
 	))
 
-	// the tags that are common to all the selected resources
-	var tags []string
-	boundTags := binding.BindStringList(&tags)
-	updateTags := func() {
-		tags = a.commonTags(resources).AsSlice()
-		slices.Sort(tags)
-		boundTags.Reload()
-	}
-	updateTags()
-
+	// the list of the tags that all the resources have in common
 	tagList := widget.NewListWithData(
-		boundTags,
+		b.tags,
 		func() fyne.CanvasObject {
 			return layouts.NewLeftExpandHBox(
 				widget.NewLabel("template"),
@@ -971,7 +1079,7 @@ func (a *App) buildBulkTagsPane(
 			lbl := c.Objects[0].(*widget.Label)
 			lbl.Bind(di.(binding.String))
 			btn := c.Objects[1].(*fyne.Container).Objects[0].(*widgets.ToolTipButton)
-			if !editable {
+			if !b.editable {
 				btn.Disable()
 				btn.Hide()
 				return
@@ -981,11 +1089,13 @@ func (a *App) buildBulkTagsPane(
 				log.WithError(err).Error("failed to get tag in del tag btn")
 				return
 			}
+			// the resources are read when the button is tapped, so that
+			// they are never the ones of a selection that is gone already
 			btn.OnTapped = func() {
-				for _, res := range resources {
+				for _, res := range b.resources {
 					a.currentPackage().Tags().Untag(tag, res.Info.RelPath)
 				}
-				updateTags()
+				b.updateTags()
 				a.saveUnpackedTags()
 			}
 			btn.SetToolTip(lang.X(
@@ -1000,7 +1110,7 @@ func (a *App) buildBulkTagsPane(
 
 	rightSection := container.NewBorder(
 		nil,
-		a.buildBulkTagAddRow(resources, updateTags, editable),
+		a.buildBulkTagAddRow(b),
 		nil, nil,
 		container.NewStack(
 			widgets.NewThemedRect(theme.ColorNameInputBackground, 4),
@@ -1010,7 +1120,7 @@ func (a *App) buildBulkTagsPane(
 
 	leftSection := container.NewStack(
 		widgets.NewThemedRect(theme.ColorNameInputBackground, 4),
-		container.NewPadded(named.New(nameBulkResourceList, a.buildBulkResourceList(tree, resources))),
+		container.NewPadded(named.New(nameBulkResourceList, a.buildBulkResourceList(b))),
 	)
 
 	return container.NewPadded(container.NewBorder(
@@ -1023,19 +1133,20 @@ func (a *App) buildBulkTagsPane(
 
 // buildBulkResourceList builds the list of the resources that are selected in
 // the resource tree.
-func (a *App) buildBulkResourceList(
-	tree *resource_tree.ResourceTree,
-	resources []resource_tree.SelectedResource,
-) fyne.CanvasObject {
-	return widget.NewList(
-		func() int {
-			return len(resources)
-		},
-		func() fyne.CanvasObject {
-			return createBulkResourceNode()
-		},
-		func(id widget.ListItemID, obj fyne.CanvasObject) {
-			a.updateBulkResourceNode(tree, resources, id, obj)
+//
+// The list is bound to the ids of the pane, so that it follows a new
+// selection without being rebuilt.
+func (a *App) buildBulkResourceList(b *bulkPane) fyne.CanvasObject {
+	return widget.NewListWithData(
+		b.ids,
+		createBulkResourceNode,
+		func(di binding.DataItem, obj fyne.CanvasObject) {
+			uid, err := di.(binding.String).Get()
+			if err != nil {
+				log.WithError(err).Error("failed to get the id of a selected resource")
+				return
+			}
+			a.updateBulkResourceNode(b, uid, obj)
 		},
 	)
 }
@@ -1087,17 +1198,18 @@ func createBulkResourceNode() fyne.CanvasObject {
 }
 
 // updateBulkResourceNode fills the node of the list of the selected resources
-// with the information of the resource.
+// with the information of the resource the node shows.
 func (a *App) updateBulkResourceNode(
-	tree *resource_tree.ResourceTree,
-	resources []resource_tree.SelectedResource,
-	id widget.ListItemID,
+	b *bulkPane,
+	uid string,
 	obj fyne.CanvasObject,
 ) {
-	if id < 0 || id >= len(resources) {
+	res, ok := b.byUID[widget.TreeNodeID(uid)]
+	if !ok {
+		// the id is not part of the selection any more, the node is
+		// updated from the new selection right after
 		return
 	}
-	res := resources[id]
 
 	node := obj.(*fyne.Container)
 	icon := node.Objects[0].(*widget.FileIcon)
@@ -1119,7 +1231,7 @@ func (a *App) updateBulkResourceNode(
 		filepath.Join(a.currentPackage().UnpackedPath(), utils.NormalizeResourcePath(res.Info.ResPath)),
 	))
 	deselectBtn.OnTapped = func() {
-		deselectResource(tree, res)
+		deselectResource(b.tree, res)
 	}
 	deselectBtn.SetToolTip(lang.X(
 		"bulk.tagOps.deselect.tooltip",
@@ -1139,12 +1251,8 @@ func deselectResource(tree *resource_tree.ResourceTree, res resource_tree.Select
 
 // buildBulkTagAddRow builds the row that adds a tag to all the selected
 // resources.
-func (a *App) buildBulkTagAddRow(
-	resources []resource_tree.SelectedResource,
-	updateTags func(),
-	editable bool,
-) fyne.CanvasObject {
-	if !editable {
+func (a *App) buildBulkTagAddRow(b *bulkPane) fyne.CanvasObject {
+	if !b.editable {
 		return nil
 	}
 
@@ -1156,10 +1264,12 @@ func (a *App) buildBulkTagAddRow(
 			if tagSelector.Text == "" {
 				return
 			}
-			for _, res := range resources {
+			// the resources are read when the button is tapped, so that
+			// they are never the ones of a selection that is gone already
+			for _, res := range b.resources {
 				a.currentPackage().Tags().Tag(tagSelector.Text, res.Info.RelPath)
 			}
-			updateTags()
+			b.updateTags()
 			a.saveUnpackedTags()
 			tagSelector.SetText("")
 			tagSelector.SetOptions(a.currentPackage().Tags().AllTags())
