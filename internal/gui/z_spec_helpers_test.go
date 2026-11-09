@@ -78,7 +78,7 @@ func blockPackedLoad(a *App) (release func()) {
 	a.loadPacked = func(
 		path string,
 		progress func(p float64, curRes string),
-	) (*ddpackage.Package, error) {
+	) (packedLoadResult, error) {
 		<-releaseCh
 		return a.loadPackSync(path, progress)
 	}
@@ -110,7 +110,7 @@ func waitForPackLoad(t *testing.T, a *App) {
 
 	loaded := make(chan struct{})
 	go func() {
-		a.bgWG.Wait()
+		a.bgWork.Wait()
 		close(loaded)
 	}()
 	select {
@@ -133,7 +133,7 @@ func waitForBackgroundWork(t *testing.T, a *App) {
 
 	done := make(chan struct{})
 	go func() {
-		a.bgWG.Wait()
+		a.bgWork.Wait()
 		close(done)
 	}()
 	select {

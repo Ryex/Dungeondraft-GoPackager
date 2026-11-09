@@ -55,7 +55,7 @@ func loadWatchedPackage(t *testing.T, a *App) (string, *ddpackage.Package) {
 	a.loadUnpackedPath(dir)
 	waitForPackLoad(t, a)
 
-	require.NotNil(t, a.packageWatcher, "the package watcher must be running")
+	require.NotNil(t, a.watcher(), "the package watcher must be running")
 
 	return dir, a.currentPackage()
 }
@@ -94,7 +94,7 @@ func waitForWatcherIdle(t *testing.T, a *App) int {
 	require.Eventually(t, func() bool {
 		current := packageUpdates(a)
 		count = current
-		if current == last && len(a.packageWatcher.Pending()) == 0 {
+		if current == last && len(a.watcher().Pending()) == 0 {
 			stable++
 			return stable >= 3
 		}
@@ -468,10 +468,10 @@ func TestPackageWatcherRescansThePackageAfterAnOverflow(t *testing.T) {
 	require.NoError(t, os.Remove(filepath.Join(dir, "textures", "objects", "Rock.png")))
 
 	// the events of the watcher were lost, so the queued changes are dropped
-	a.packageWatcher.DiscardUnder("")
+	a.watcher().DiscardUnder("")
 
 	// the watcher tells the app that it lost its events
-	a.packageWatcher.overflow()
+	a.watcher().overflow()
 
 	a.resumePackageWatcher()
 
@@ -599,4 +599,56 @@ func TestTagGenerationUpdatesTheTagsWithoutSpammingTheWatcher(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(data), "nature",
 		"the generated tags must be written to the tags file")
+}
+
+// TestPackageWatcherRescansWhenPackIDChanges verifies that a change of the
+// id in the pack.json forces a scan of the whole package, because the id is
+// part of the resource path of every resource of the package.
+func TestPackageWatcherRescansWhenPackIDChanges(t *testing.T) {
+	a := newWatcherApp(t)
+
+	// The hook is set before the package is loaded, so that the watcher
+	// does not read it while the test writes it: the change of the id is
+	// the update it reports, so every update it shows must be a scan of
+	// the whole package.
+	a.packageUpdateHook = func(dlg *packageUpdateDialog) {
+		assert.True(t, dlg.progress,
+			"a change of the id of the pack must rescan the whole package")
+	}
+
+	dir, _ := loadWatchedPackage(t, a)
+
+	count := waitForWatcherIdle(t, a)
+
+	packJSONPath := filepath.Join(dir, "pack.json")
+	data, err := os.ReadFile(packJSONPath)
+	require.NoError(t, err)
+	updated := strings.Replace(string(data), `"id": "testpack"`, `"id": "testpack2"`, 1)
+	require.NotEqual(t, string(data), updated, "the id of the pack must be changed")
+	require.NoError(t, os.WriteFile(packJSONPath, []byte(updated), 0o644))
+
+	waitForPackageUpdate(t, a, count)
+
+	inspectPackage(t, a, func(pkg *ddpackage.Package) {
+		assert.Equal(t, "testpack2", pkg.ID(), "the package must know the new id")
+
+		prefix := "res://packs/testpack2/"
+		packJSONResPath := "res://packs/testpack2.json"
+		_, err := pkg.GetResourceInfo(packJSONResPath)
+		require.NoError(t, err, "the info of the pack.json must use the new id")
+
+		files := pkg.FileList().AsSlice()
+		require.NotEmpty(t, files, "the package must know its resources")
+		for _, fi := range files {
+			if fi.ResPath == packJSONResPath {
+				continue
+			}
+			assert.True(t, strings.HasPrefix(fi.ResPath, prefix),
+				"the resource %s must live under %s", fi.ResPath, prefix)
+		}
+
+		_, err = pkg.GetResourceInfo("res://packs/testpack/textures/objects/Rock.png")
+		assert.ErrorIs(t, err, ddpackage.ErrResourceNotFound,
+			"the resources under the old id must be gone")
+	})
 }

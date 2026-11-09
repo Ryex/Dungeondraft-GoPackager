@@ -130,7 +130,7 @@
   "bulk.tagOps.deselect.tooltip": "Deselect this resource from the tree",
   "task.genthumbnails.text": "Generating thumbnails ...",
   "task.package.text": "Packaging resources ...",
-  "task.updatePackage.text": "Updating pack recources ...",
+  "task.updatePackage.text": "Updating pack resources ...",
   "tagSets.dialog.title": "Tag Sets",
   "tagSets.dialog.dismiss": "Close",
   "tagSets.tagSet.label.text": "Tag Sets",
