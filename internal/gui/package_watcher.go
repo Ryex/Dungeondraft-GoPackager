@@ -120,6 +120,16 @@ func (pw *packageWatcher) watch() {
 			if event.Has(fsnotify.Chmod) {
 				continue
 			}
+			// The watch of a path dies with the path itself: the OS
+			// drops it when the directory is deleted or moved and
+			// fsnotify drops its internal entry when it dispatches the
+			// event. The cache is cleared here, where the events are
+			// first seen — independent of the debounce and of a paused
+			// watcher — so that a folder that is created again at the
+			// same place is watched again.
+			if event.Has(fsnotify.Remove) || event.Has(fsnotify.Rename) {
+				pw.forgetWatched(event.Name)
+			}
 			pw.enqueue(event.Name)
 		case err, ok := <-pw.watcher.Errors:
 			if !ok {
@@ -238,7 +248,16 @@ func (pw *packageWatcher) cleanupWatchList(paths []string) {
 		if !watched {
 			continue
 		}
-		if err := pw.watcher.Remove(path); err != nil {
+		// fsnotify drops its internal entry when it dispatches the
+		// deletion of a watch (inotify IN_IGNORED/IN_DELETE_SELF, the
+		// handle of a removed directory on windows), and Remove of a
+		// path that is gone fails with ErrNonExistentWatch or with a
+		// not existent path error before it even looks the watch up:
+		// both mean "already gone" and are not logged, so that only
+		// genuine failures stay visible.
+		if err := pw.watcher.Remove(path); err != nil &&
+			!errors.Is(err, fsnotify.ErrNonExistentWatch) &&
+			!errors.Is(err, os.ErrNotExist) {
 			log.WithError(err).
 				WithField("path", path).
 				Warn("could not remove the deleted folder from the watch list")
@@ -339,6 +358,18 @@ func (pw *packageWatcher) isWatched(path string) bool {
 	pw.watchMu.Lock()
 	defer pw.watchMu.Unlock()
 	return pw.watched[filepath.Clean(path)]
+}
+
+// forgetWatched removes the given path from the cache of the watched
+// paths.
+//
+// It is called when the removal of the path is noticed: the watch of a
+// path dies with the path itself, so a path that is created again at the
+// same place has to be watched again.
+func (pw *packageWatcher) forgetWatched(path string) {
+	pw.watchMu.Lock()
+	defer pw.watchMu.Unlock()
+	delete(pw.watched, filepath.Clean(path))
 }
 
 // Watch adds the given folder and all of its subfolders to the watch list.
