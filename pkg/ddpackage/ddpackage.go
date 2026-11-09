@@ -61,6 +61,16 @@ type Package struct {
 	fileList    *structures.FileInfoList
 	resourceMap map[string]*structures.FileInfo
 
+	// md5Mu guards md5Inflight, the callbacks queued behind a running md5
+	// computation. Lock order: flLock may be held while acquiring md5Mu,
+	// never the reverse; md5Mu is never held while doing I/O or invoking
+	// callbacks.
+	md5Mu       sync.Mutex
+	md5Inflight map[string][]func(string, error)
+	// pkgFileMu serializes the seek+read of the shared packed file between
+	// concurrent md5 computations (see readPackedFileFromPackage).
+	pkgFileMu sync.Mutex
+
 	info *structures.PackageInfo
 
 	walls    map[string]structures.PackageWall
@@ -523,52 +533,104 @@ func (p *Package) NewFileInfo(options NewFileInfoOptions) (*structures.FileInfo,
 	return info, nil
 }
 
+// GetOrUpdateResourceMd5 reports the md5 hash of fi through callback. When the
+// hash is not known yet it is computed once per resource: further callers for
+// the same resource queue behind the inflight computation (single-flight) and
+// every callback receives the same result. The hash is published under flLock
+// before the callbacks run, so a callback always observes a valid fi.Md5.
 func (p *Package) GetOrUpdateResourceMd5(fi *structures.FileInfo, callback func(string, error)) {
+	key := fi.ResPath
+
+	p.md5Mu.Lock()
 	if fi.Md5.IsValid() {
-		callback(fi.Md5.String(), nil)
+		hash := fi.Md5.String()
+		p.md5Mu.Unlock()
+		callback(hash, nil)
+		return
+	}
+	if inflight, ok := p.md5Inflight[key]; ok {
+		p.md5Inflight[key] = append(inflight, callback)
+		p.md5Mu.Unlock()
+		return
+	}
+	if p.md5Inflight == nil {
+		p.md5Inflight = make(map[string][]func(string, error))
+	}
+	p.md5Inflight[key] = []func(string, error){callback}
+	p.md5Mu.Unlock()
+
+	go p.computeMd5(fi, key)
+}
+
+// computeMd5 reads fi once, publishes the hash under flLock and then invokes
+// every callback that GetOrUpdateResourceMd5 queued for key. It runs in its
+// own goroutine with the single-flight entry for key already registered.
+func (p *Package) computeMd5(fi *structures.FileInfo, key string) {
+	hash := md5.New()
+	var err error
+
+	switch {
+	case p.mode == PackageModeUnpacked:
+		l := p.log.WithField("filePath", fi.Path)
+		file, openErr := os.Open(fi.Path)
+		if openErr != nil {
+			l.WithError(openErr).Error("can not open path to compute md5")
+			err = dderrors.CausedBy(fmt.Errorf("failed to open %s for hashing", fi.Path), openErr)
+			break
+		}
+		defer file.Close()
+
+		if _, copyErr := io.Copy(hash, file); copyErr != nil {
+			l.WithError(copyErr).Errorf("failed to read file")
+			err = dderrors.CausedBy(fmt.Errorf("failed to read file"), copyErr)
+		}
+	case p.mode == PackageModePacked && p.pkgFile != nil:
+		l := p.log.WithField("resPath", fi.ResPath)
+		// the seek+read of readPackedFileFromPackage moves the position of
+		// the shared file, so concurrent computations must not interleave
+		p.pkgFileMu.Lock()
+		data, readErr := p.readPackedFileFromPackage(p.pkgFile, fi)
+		p.pkgFileMu.Unlock()
+		if readErr != nil {
+			l.WithError(readErr).Errorf("failed to read packed file")
+			err = dderrors.CausedBy(errors.New("failed to read packed file"), readErr)
+			break
+		}
+		if _, writeErr := hash.Write(data); writeErr != nil {
+			err = dderrors.CausedBy(errors.New("failed to write hash"), writeErr)
+		}
+	default:
+		p.log.WithField("resPath", fi.ResPath).Error("Can not update hash for file info, unknown package state")
+		err = dderrors.CausedBy(ErrPackageNotLoaded, errors.New("unknown package state"))
+	}
+
+	var (
+		result  string
+		waiters []func(string, error)
+	)
+	if err == nil {
+		sum := hash.Sum(nil)
+		// publish under both locks: flLock guards fi.Md5 for the rest of
+		// the package, md5Mu keeps readers of fi.Md5 that only hold md5Mu
+		// ordered with this write. Lock order flLock -> md5Mu.
+		p.flLock.Lock()
+		p.md5Mu.Lock()
+		fi.Md5.UpdateWith(sum)
+		result = fi.Md5.String()
+		waiters = p.md5Inflight[key]
+		delete(p.md5Inflight, key)
+		p.md5Mu.Unlock()
+		p.flLock.Unlock()
 	} else {
-		go func() {
-			hash := md5.New()
-			if p.mode == PackageModeUnpacked {
+		p.md5Mu.Lock()
+		waiters = p.md5Inflight[key]
+		delete(p.md5Inflight, key)
+		p.md5Mu.Unlock()
+	}
 
-				l := p.log.WithField("filePath", fi.Path)
-				file, err := os.Open(fi.Path)
-				if err != nil {
-					l.WithError(err).Error("can not open path to compute md5")
-					err = dderrors.CausedBy(fmt.Errorf("failed to open %s for hashing", fi.Path), err)
-
-					callback("", err)
-					return
-				}
-				defer file.Close()
-
-				if _, err := io.Copy(hash, file); err != nil {
-					l.WithError(err).Errorf("failed to read file")
-					callback("", dderrors.CausedBy(fmt.Errorf("failed to read file"), err))
-					return
-				}
-
-			} else if p.mode == PackageModePacked && p.pkgFile != nil {
-				l := p.log.WithField("resPath", fi.ResPath)
-				data, err := p.readPackedFileFromPackage(p.pkgFile, fi)
-				if err != nil {
-					l.WithError(err).Errorf("failed to read packed file")
-					callback("", dderrors.CausedBy(errors.New("failed to read packed file"), err))
-					return
-				}
-				if _, err := hash.Write(data); err != nil {
-					callback("", dderrors.CausedBy(errors.New("failed to write hash"), err))
-					return
-				}
-			} else {
-				p.log.WithField("resPath", fi.ResPath).Error("Can not update hash for file info, unknown package state")
-				callback("", dderrors.CausedBy(ErrPackageNotLoaded, errors.New("unknown package state")))
-				return
-			}
-			hashBytes := hash.Sum(nil)
-			fi.Md5.UpdateWith(hashBytes)
-			callback(fi.Md5.String(), nil)
-		}()
+	// the callbacks run without any lock held
+	for _, waiter := range waiters {
+		waiter(result, err)
 	}
 }
 
@@ -582,10 +644,16 @@ func (p *Package) UpdateResources(options UpdateResourcesOptions, progressCallba
 	sem := structures.NewSemaphore(numCPUs)
 	wg := sync.WaitGroup{}
 
+	// Only the snapshot of the file list is taken under flLock: the md5
+	// single-flight publishes hashes under flLock (computeMd5), and the
+	// workers below block waiting for those callbacks — holding flLock
+	// across them would deadlock, because the publish could never acquire
+	// the lock. The snapshot may go stale during the run; that is safe
+	// because the workers hold *FileInfo pointers and the package replaces
+	// file list entries rather than mutating them.
 	p.flLock.Lock()
-	defer p.flLock.Unlock()
-
 	fileList := p.fileList.AsSlice()
+	p.flLock.Unlock()
 	total := len(fileList)
 
 	type result struct {

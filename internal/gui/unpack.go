@@ -56,9 +56,9 @@ func (a *App) loadPack(path string) {
 	// package that is not loaded anymore.
 	a.teardownPackageWatcher()
 
-	a.bgWG.Add(1)
+	a.bgWork.Start()
 	go func() {
-		defer a.bgWG.Done()
+		defer a.bgWork.Done()
 
 		loader := a.loadPacked
 		if loader == nil {

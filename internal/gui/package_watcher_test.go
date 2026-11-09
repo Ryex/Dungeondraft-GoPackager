@@ -694,3 +694,55 @@ func TestWatcherWatchesAFolderAgainAfterItWasDeletedAndRecreated(t *testing.T) {
 			"the texture in the recreated folder must be part of the package")
 	})
 }
+
+// TestPackageWatcherRescansWhenPackIDChanges verifies that a change of the
+// id in the pack.json forces a scan of the whole package, because the id is
+// part of the resource path of every resource of the package.
+func TestPackageWatcherRescansWhenPackIDChanges(t *testing.T) {
+	a := newWatcherApp(t)
+
+	// The hook is set before the package is loaded, so that the watcher
+	// does not read it while the test writes it: the change of the id is
+	// the update it reports, so every update it shows must be a scan of
+	// the whole package.
+	a.packageUpdateHook = func(dlg *packageUpdateDialog) {
+		assert.True(t, dlg.progress,
+			"a change of the id of the pack must rescan the whole package")
+	}
+
+	dir, _ := loadWatchedPackage(t, a)
+
+	count := waitForWatcherIdle(t, a)
+
+	packJSONPath := filepath.Join(dir, "pack.json")
+	data, err := os.ReadFile(packJSONPath)
+	require.NoError(t, err)
+	updated := strings.Replace(string(data), `"id": "testpack"`, `"id": "testpack2"`, 1)
+	require.NotEqual(t, string(data), updated, "the id of the pack must be changed")
+	require.NoError(t, os.WriteFile(packJSONPath, []byte(updated), 0o644))
+
+	waitForPackageUpdate(t, a, count)
+
+	inspectPackage(t, a, func(pkg *ddpackage.Package) {
+		assert.Equal(t, "testpack2", pkg.ID(), "the package must know the new id")
+
+		prefix := "res://packs/testpack2/"
+		packJSONResPath := "res://packs/testpack2.json"
+		_, err := pkg.GetResourceInfo(packJSONResPath)
+		require.NoError(t, err, "the info of the pack.json must use the new id")
+
+		files := pkg.FileList().AsSlice()
+		require.NotEmpty(t, files, "the package must know its resources")
+		for _, fi := range files {
+			if fi.ResPath == packJSONResPath {
+				continue
+			}
+			assert.True(t, strings.HasPrefix(fi.ResPath, prefix),
+				"the resource %s must live under %s", fi.ResPath, prefix)
+		}
+
+		_, err = pkg.GetResourceInfo("res://packs/testpack/textures/objects/Rock.png")
+		assert.ErrorIs(t, err, ddpackage.ErrResourceNotFound,
+			"the resources under the old id must be gone")
+	})
+}
