@@ -1066,19 +1066,11 @@ func (a *App) updateBulkResourceNode(
 // deselectResource unselects the given resource in the tree.
 //
 // A resource that is only selected because one of the branches that hold it
-// is selected can not be unselected on its own, so the branch is unselected
-// instead.
+// is selected can not be unselected on its own, so UnselectIncludingAncestors
+// unselects the branch instead - the same way the context menu of the tree
+// does.
 func deselectResource(tree *resource_tree.ResourceTree, res resource_tree.SelectedResource) {
-	if res.Selected {
-		tree.Unselect(res.Uid)
-		return
-	}
-	for _, parent := range tree.AllParentsOf(res.Uid) {
-		if tree.IsSelected(parent) {
-			tree.Unselect(parent)
-			return
-		}
-	}
+	tree.UnselectIncludingAncestors(res.Uid)
 }
 
 // buildBulkTagAddRow builds the row that adds a tag to all the selected
