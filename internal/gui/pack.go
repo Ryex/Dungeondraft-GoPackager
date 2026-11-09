@@ -470,7 +470,11 @@ func (a *App) setupPackageWatcher() {
 	}
 	a.packageWatcher = watcher
 
-	toWatchPath := a.pkg.UnpackedPath()
+	pkg := a.currentPackage()
+	if pkg == nil {
+		return
+	}
+	toWatchPath := pkg.UnpackedPath()
 	if toWatchPath == "" {
 		return
 	}

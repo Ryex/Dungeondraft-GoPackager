@@ -328,10 +328,13 @@ func (p *Package) updateFromPaths(paths []string, progressCallback func(p float6
 	// the info of the pack.json is built again, so that the size and the
 	// hash of the file are picked up, when it changed
 	packJSONindex := p.fileList.IndexOfRes(packJSONResPath)
+	// the entry that is already in the list is kept, when the new info can
+	// not be built, so that no nil info ends up in the list
+	var packJSONInfo *structures.FileInfo
 	if packJSONindex != -1 {
-		p.fileList.Remove(packJSONindex)
+		packJSONInfo = p.fileList.Remove(packJSONindex)
 	}
-	packJSONInfo, err := p.NewFileInfo(NewFileInfoOptions{
+	newPackJSONInfo, err := p.NewFileInfo(NewFileInfoOptions{
 		Path:    packJSONPath,
 		ResPath: &packJSONResPath,
 		RelPath: &packJSONName,
@@ -339,8 +342,12 @@ func (p *Package) updateFromPaths(paths []string, progressCallback func(p float6
 	if err != nil {
 		p.log.WithError(err).Errorf("error adding base pack.json")
 		errs = append(errs, err)
+	} else {
+		packJSONInfo = newPackJSONInfo
 	}
-	p.resourceMap[packJSONResPath] = packJSONInfo
+	if packJSONInfo != nil {
+		p.resourceMap[packJSONResPath] = packJSONInfo
+	}
 
 	// remove duplicates
 	p.fileList.DeduplicateBy(func(a, b *structures.FileInfo) bool {
@@ -350,7 +357,9 @@ func (p *Package) updateFromPaths(paths []string, progressCallback func(p float6
 
 	// sort list and assure pack json is first
 	p.fileList.Sort()
-	p.fileList.Insert(0, packJSONInfo)
+	if packJSONInfo != nil {
+		p.fileList.Insert(0, packJSONInfo)
+	}
 	return
 }
 

@@ -181,9 +181,9 @@ type ResourceTree struct {
 	// suppressSelectionChanged silences OnSelectionChanged while a compound
 	// operation (such as selectOnly) performs several steps.
 	suppressSelectionChanged bool
-	nodeTree      map[widget.TreeNodeID][]widget.TreeNodeID
-	nodeMap       map[widget.TreeNodeID]ResourceTreeNodeData
-	mode          ResourceTreeMode
+	nodeTree                 map[widget.TreeNodeID][]widget.TreeNodeID
+	nodeMap                  map[widget.TreeNodeID]ResourceTreeNodeData
+	mode                     ResourceTreeMode
 
 	editable bool
 	filter   filter.ResourceFilter
@@ -535,6 +535,14 @@ func (t *ResourceTree) selectedIndexOfData(uid widget.TreeNodeID) int {
 func (t *ResourceTree) updateVisibleSelection() {
 	visibleSet := map[widget.TreeNodeID]bool{}
 
+	// the nodes that show the same resource share their data between them,
+	// so the occurrences are indexed once here instead of looking them up
+	// in the whole map for every node that is added
+	occurrences := map[ResourceTreeNodeData][]widget.TreeNodeID{}
+	for uid, data := range t.nodeMap {
+		occurrences[data] = append(occurrences[data], uid)
+	}
+
 	add := func(uid widget.TreeNodeID) {
 		if visibleSet[uid] {
 			return
@@ -543,10 +551,8 @@ func (t *ResourceTree) updateVisibleSelection() {
 		// a resource that is shown under more than one tag shares its data
 		// between the occurrences, so all of them are shown as selected
 		if data := t.DataFor(uid); data != nil {
-			for otherUID, otherData := range t.nodeMap {
-				if otherData == data {
-					visibleSet[otherUID] = true
-				}
+			for _, otherUID := range occurrences[data] {
+				visibleSet[otherUID] = true
 			}
 		}
 	}
@@ -580,11 +586,7 @@ func (t *ResourceTree) updateVisibleSelection() {
 				}
 			}
 			if all {
-				before := len(visibleSet)
 				add(branchUID)
-				if len(visibleSet) != before {
-					changed = true
-				}
 				changed = true
 			}
 		}
