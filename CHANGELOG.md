@@ -6,6 +6,50 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 <!-- insertion marker -->
+## [Unreleased]
+
+### Bug Fixes
+
+- a hostile pack could write files outside the directory it was unpacked into
+  or make the loader read absurd amounts of data: resource paths that escape
+  the target directory are now rejected, and the path lengths and read sizes
+  of a packed header are bounded.
+- the name of a pack was used as-is as the directory it is unpacked into, so a
+  pack named `../../evil` escaped the chosen folder; pack names are now
+  sanitised to a single directory segment.
+- progress dialogs could stay open forever when a task started without a
+  package or failed, and the buttons of the interface stayed disabled after a
+  load error; every exit path now hides its dialog, and a load error
+  re-enables the buttons.
+- generating tags blocked the interface while it ran, and the tags file it
+  wrote itself was reported by the file watcher as an external change; tag
+  generation now runs off the UI thread and its own write is discarded, so
+  the package is not reloaded for the tags it just saved.
+- the filter entry of the resource tree re-filtered on every keystroke; it
+  now applies the filter after a short pause, so typing no longer rebuilds
+  the resource tree for every character.
+- a resource that is only selected through one of its tag branches could not
+  be deselected: the deselect button and the context menu entry now unselect
+  the branch the resource is shown under, and a fast second click applies
+  the pending click instead of cancelling it, so the selection no longer
+  ends up empty.
+- pending tag and metadata saves were lost when another package was loaded
+  over the current one; the save timers are now stopped and their saves
+  flushed when the package is replaced.
+- md5 hashes were computed repeatedly when several places asked for the same
+  resource at once, and a request in an unknown package state reported
+  success with an empty hash; concurrent requests now share one computation,
+  and the unknown state reports an error.
+- the file preview read a whole file before deciding that it was too large
+  to show; the size limit is now checked before reading, so previewing a
+  huge file no longer loads it into memory.
+- repeating a texture to fill the thumbnail box could allocate an arbitrarily
+  large image for a texture with an extreme aspect ratio; the repeat is now
+  capped so that the width can not run away from the size of the texture.
+- `structures.Stack.IsEmpty` reported the opposite of its name: it returned
+  true for a stack that held entries; it now returns true only for an empty
+  stack.
+
 ## [v2.1.0](https://github.com/Ryex/Dungeondraft-GoPackager/releases/tag/v2.1.0) - 2026-10-22
 
 <small>[Compare with v2.0.4](https://github.com/Ryex/Dungeondraft-GoPackager/compare/v2.0.4...v2.1.0)</small>
@@ -31,8 +75,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   resource kind (`@IsTexture`), filters are combined with `&` (and), with `!`
   (not) and with `()` groups.
 - the filter entry of the resource tree shows the syntax of the filter language in
-  its placeholder and in its tool tip, in the resource view and in the tag view
-  alike.
+  its placeholder, in the resource view and in the tag view alike.
 - a help button next to the filter of the resource tree opens a dialog that
   describes the filter syntax, with a list of its sections that scrolls the
   help to the section that is clicked.
@@ -101,7 +144,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   package is now only replaced when the content that shows it is built, and the
   controls of the panel are disabled with the rest of the interface.
 
-## [v2.0.4](https://github.com/Ryex/Dungeondraft-GoPackager/releases/tag/v2.0.3) - 2025-4-25
+## [v2.0.4](https://github.com/Ryex/Dungeondraft-GoPackager/releases/tag/v2.0.4) - 2025-4-25
 <small>[Compare with v2.0.3](https://github.com/Ryex/Dungeondraft-GoPackager/compare/v2.0.3...v2.0.4)</small>
 
 - fix MacOS packaging, Build universal x64|arm64 binaries
