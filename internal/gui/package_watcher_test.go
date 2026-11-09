@@ -600,3 +600,44 @@ func TestTagGenerationUpdatesTheTagsWithoutSpammingTheWatcher(t *testing.T) {
 	assert.Contains(t, string(data), "nature",
 		"the generated tags must be written to the tags file")
 }
+
+// TestWatcherDoesNotWatchSymlinksLeavingThePackage verifies that a symlink
+// in the package that points out of it is not watched, so that the changes
+// of the files in its target are not reported as changes of the package.
+func TestWatcherDoesNotWatchSymlinksLeavingThePackage(t *testing.T) {
+	a := newWatcherApp(t)
+	dir, _ := loadWatchedPackage(t, a)
+
+	waitForWatcherIdle(t, a)
+
+	// a folder outside of the package and a symlink in the package that
+	// points to it
+	outsideDir := t.TempDir()
+	symlinkPath := filepath.Join(dir, "outside-link")
+	if err := os.Symlink(outsideDir, symlinkPath); err != nil {
+		t.Skipf("symlinks can not be created on this system: %v", err)
+	}
+
+	// the creation of the link is reported by the watcher
+	waitForWatcherIdle(t, a)
+
+	assert.False(t, a.watcher().isWatched(symlinkPath),
+		"a symlink that leaves the package must not be watched")
+
+	// the file list of the package before the file outside of it is touched
+	before := 0
+	inspectPackage(t, a, func(pkg *ddpackage.Package) {
+		before = pkg.FileList().Size()
+	})
+
+	// a file in the target of the link
+	outsideFile := filepath.Join(outsideDir, "Outside.png")
+	writeTestTexture(t, outsideFile, color.NRGBA{R: 10, G: 20, B: 30, A: 255})
+
+	waitForWatcherIdle(t, a)
+
+	inspectPackage(t, a, func(pkg *ddpackage.Package) {
+		assert.Equal(t, before, pkg.FileList().Size(),
+			"the file outside of the package must not be indexed")
+	})
+}
