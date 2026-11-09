@@ -269,7 +269,27 @@ func (a *App) setPackContent(pkg *ddpackage.Package) {
 	a.disableButtons.Set(false)
 }
 
+// unpackTargetPath returns the directory under base that a package with the
+// given name is extracted to.
+//
+// The name is reduced to a single path segment, so that it can not nest the
+// extraction deeper than base or escape it: a name that contains path
+// separators becomes one segment, and a name that cleans to no usable
+// segment at all (".", "..", empty, a bare separator) falls back to "pack".
+func unpackTargetPath(base, packName string) string {
+	seg := filepath.Base(filepath.Clean(strings.TrimSpace(packName)))
+	if seg == "." || seg == ".." || seg == "" || seg == "/" || seg == "\\" {
+		seg = "pack"
+	}
+	return filepath.Join(base, seg)
+}
+
 func (a *App) extractPackage(path string, options ddpackage.UnpackOptions) {
+	pkg := a.currentPackage()
+	if pkg == nil {
+		log.WithError(ddpackage.ErrPackageNotLoaded).Warn("cannot extract without a loaded package")
+		return
+	}
 	if path == "" {
 		dialog.ShowInformation(
 			lang.X("needOutPathDialog.title", "Please Provide an Output Path"),
@@ -282,7 +302,7 @@ func (a *App) extractPackage(path string, options ddpackage.UnpackOptions) {
 	progressVal := binding.NewFloat()
 	progressBar := widget.NewProgressBarWithData(progressVal)
 
-	targetPath := filepath.Join(path, a.pkg.Name())
+	targetPath := unpackTargetPath(path, pkg.Name())
 	progressDlg := dialog.NewCustomWithoutButtons(
 		lang.X("unpack.extractProgressDlg.title", "Extracting to {{.Path}}", map[string]any{"Path": targetPath}),
 		progressBar,
@@ -290,7 +310,7 @@ func (a *App) extractPackage(path string, options ddpackage.UnpackOptions) {
 	)
 	progressDlg.Show()
 	go func() {
-		err := a.pkg.ExtractPackageProgress(targetPath, options, func(p float64) {
+		err := pkg.ExtractPackageProgress(targetPath, options, func(p float64) {
 			progressVal.Set(p)
 		})
 		progressDlg.Hide()
