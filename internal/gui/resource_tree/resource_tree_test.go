@@ -293,6 +293,47 @@ func TestGetSelectedResourcesReportsDirectlySelectedResources(t *testing.T) {
 	assert.False(t, treeRes.Selected, "Tree.png must not be selected on its own")
 }
 
+// TestUnselectIncludingAncestorsUnselectsTheSelectedBranch guards the
+// ancestor walk of UnselectIncludingAncestors: a node below a branch that is
+// selected for roll-up is shown as selected but is not selected itself, and
+// the selection can not hold "the branch selected except this one child" -
+// unselecting the node therefore has to unselect the branch that holds it.
+//
+// The context menu of such a roll-up selected node offers to be unselected
+// as well, so it has to show the unselect item.
+func TestUnselectIncludingAncestorsUnselectsTheSelectedBranch(t *testing.T) {
+	pkg, _ := loadFixtureWith(t, twoTagFixture())
+	tree := newTree(t, pkg)
+	tree.SetMode(ResourceTreeTagMode)
+
+	tagBranchUID := widget.TreeNodeID("tag://nature")
+	childUID := tagResourceUID("tag://nature", rockResPath)
+
+	// the branch is selected, so the nodes below it are shown as selected
+	// without being selected themselves
+	tree.Select(tagBranchUID)
+	require.True(t, tree.IsVisiblySelected(childUID),
+		"the node below a selected branch must be shown as selected")
+	require.False(t, tree.IsSelected(childUID),
+		"the node below a selected branch must not be selected itself")
+
+	// the context menu of the roll-up selected node offers to be unselected
+	nodes := treeNodes(t, tree, "tag://nature")
+	childNode, ok := nodes[childUID]
+	require.True(t, ok, "the tree must hold a node for the resource")
+	items := childNode.contextMenuItems()
+	require.Len(t, items, 1)
+	assert.Equal(t, lang.X("tree.context.unselect", "Unselect"), items[0].Label)
+
+	tree.UnselectIncludingAncestors(childUID)
+
+	assert.False(t, tree.IsSelected(tagBranchUID),
+		"the selected ancestor must be unselected")
+	assert.False(t, tree.IsVisiblySelected(childUID),
+		"the node must not be shown as selected any more")
+	assert.Empty(t, tree.GetSelection())
+}
+
 // TestSelectionAtScale guards the selection bookkeeping at the scale of a
 // real pack: every resource is shown under every one of its tags, so the
 // tree holds far more nodes than there are resources.
