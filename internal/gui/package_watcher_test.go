@@ -55,7 +55,7 @@ func loadWatchedPackage(t *testing.T, a *App) (string, *ddpackage.Package) {
 	a.loadUnpackedPath(dir)
 	waitForPackLoad(t, a)
 
-	require.NotNil(t, a.packageWatcher, "the package watcher must be running")
+	require.NotNil(t, a.watcher(), "the package watcher must be running")
 
 	return dir, a.currentPackage()
 }
@@ -94,7 +94,7 @@ func waitForWatcherIdle(t *testing.T, a *App) int {
 	require.Eventually(t, func() bool {
 		current := packageUpdates(a)
 		count = current
-		if current == last && len(a.packageWatcher.Pending()) == 0 {
+		if current == last && len(a.watcher().Pending()) == 0 {
 			stable++
 			return stable >= 3
 		}
@@ -468,10 +468,10 @@ func TestPackageWatcherRescansThePackageAfterAnOverflow(t *testing.T) {
 	require.NoError(t, os.Remove(filepath.Join(dir, "textures", "objects", "Rock.png")))
 
 	// the events of the watcher were lost, so the queued changes are dropped
-	a.packageWatcher.DiscardUnder("")
+	a.watcher().DiscardUnder("")
 
 	// the watcher tells the app that it lost its events
-	a.packageWatcher.overflow()
+	a.watcher().overflow()
 
 	a.resumePackageWatcher()
 
