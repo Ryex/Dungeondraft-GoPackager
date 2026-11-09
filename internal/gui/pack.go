@@ -451,6 +451,13 @@ func (a *App) onPackageChanged(paths []string, full bool) {
 	a.packageUpdateCount++
 }
 
+// watcher returns the filesystem watcher of the app, or nil when there is
+// none. It loads the pointer atomically, because the watcher is replaced
+// when a package is loaded, while it is read.
+func (a *App) watcher() *packageWatcher {
+	return a.packageWatcher.Load()
+}
+
 // setupPackageWatcher starts the watcher that notices the changes of the
 // files of the unpacked package.
 func (a *App) setupPackageWatcher() {
@@ -468,7 +475,7 @@ func (a *App) setupPackageWatcher() {
 		log.WithError(err).Error("failed to setup filesystem watcher")
 		return
 	}
-	a.packageWatcher = watcher
+	a.packageWatcher.Store(watcher)
 
 	pkg := a.currentPackage()
 	if pkg == nil {
@@ -489,19 +496,17 @@ func (a *App) setupPackageWatcher() {
 // The changes that happen while the watcher is paused are still queued, so
 // that they are reported when it is resumed.
 func (a *App) pausePackageWatcher() {
-	if a.packageWatcher == nil {
-		return
+	if w := a.watcher(); w != nil {
+		w.Pause()
 	}
-	a.packageWatcher.Pause()
 }
 
 // resumePackageWatcher lets the watcher report the changes that happened
 // while it was paused.
 func (a *App) resumePackageWatcher() {
-	if a.packageWatcher == nil {
-		return
+	if w := a.watcher(); w != nil {
+		w.Resume()
 	}
-	a.packageWatcher.Resume()
 }
 
 // discardPackageWatcherChanges forgets the queued changes of the files under
@@ -510,16 +515,14 @@ func (a *App) resumePackageWatcher() {
 // It is used by the tasks that change the files of the package themselves
 // and update the affected parts of the package themselves.
 func (a *App) discardPackageWatcherChanges(dir string) {
-	if a.packageWatcher == nil {
-		return
+	if w := a.watcher(); w != nil {
+		w.DiscardUnder(dir)
 	}
-	a.packageWatcher.DiscardUnder(dir)
 }
 
 func (a *App) teardownPackageWatcher() {
-	if a.packageWatcher != nil {
-		a.packageWatcher.Close()
-		a.packageWatcher = nil
+	if w := a.packageWatcher.Swap(nil); w != nil {
+		w.Close()
 	}
 }
 
@@ -642,7 +645,7 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 		lang.X("pack.editPackBtn.text", "Edit settings"),
 		theme.DocumentCreateIcon(),
 		func() {
-			dlg := NewPackJSONDialogPkg(a.pkg, true, func(options ddpackage.SavePackageJSONOptions) {
+			dlg := NewPackJSONDialogPkg(a.currentPackage(), true, func(options ddpackage.SavePackageJSONOptions) {
 				err := ddpackage.SavePackageJSON(
 					log.WithField("path", options.Path),
 					options,
@@ -662,8 +665,8 @@ func (a *App) setUnpackedContent(pkg *ddpackage.Package) {
 					errDlg.Show()
 					return
 				}
-				a.pkg.UpdateFromPaths([]string{filepath.Join(options.Path, "pack.json")})
-				err = a.pkg.LoadUnpackedPackJSON(options.Path)
+				a.currentPackage().UpdateFromPaths([]string{filepath.Join(options.Path, "pack.json")})
+				err = a.currentPackage().LoadUnpackedPackJSON(options.Path)
 				if err != nil {
 					errDlg := dialog.NewError(
 						dderrors.CausedBy(errors.New(lang.X(
