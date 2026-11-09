@@ -294,6 +294,9 @@ func (a *App) replacePackage(pkg *ddpackage.Package) {
 	old := a.currentPackage()
 	a.setCurrentPackage(pkg)
 	if old != nil && old != pkg {
+		// flush the saves that are still pending for the old package
+		// before it is closed
+		a.stopSaveTimersFor(old)
 		old.Close()
 	}
 }
