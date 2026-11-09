@@ -5,7 +5,7 @@ created, and looked up by name afterwards.
 
 ## The problem
 
-The parts of the user interface are addressed by name. Today they are kept in
+The parts of the user interface were addressed by name. They were kept in
 `uiRegions` (`internal/gui/regions.go`), a struct with one field per part of
 the interface:
 
@@ -14,8 +14,8 @@ a.ui.Header = welcome
 a.ui.ThemeToggle = darkThemeToggle
 ```
 
-Every named part has to be declared in the struct, and every place that creates
-it has to remember to assign it. A new part of the interface therefore means
+Every named part had to be declared in the struct, and every place that created
+it had to remember to assign it. A new part of the interface therefore meant
 three edits: the declaration, the assignment and — for the parts the
 specification tests address — the test.
 
@@ -242,6 +242,11 @@ old `uiRegions` struct did.
 | `textPreview`    | `nameTextPreview`     | `package.go`        |
 | `tooLargeLabel`  | `nameTooLargeLabel`   | `package.go`        |
 
+`filterHelpSectionList` and `filterHelpScroll` live in the filter-help dialog
+overlay and are **not** resolvable through `a.ui`: the specification tests
+build a second `named.Cache` rooted at `popup.Content`
+(`z_spec_filter_help_test.go:43-52`).
+
 The two button panels have different names, because they are different parts
 of the interface: the one of `pack.go` packs an unpacked folder, the one of
 `unpack.go` extracts a packed file. The split pane, the resource tree and the
@@ -261,7 +266,7 @@ resource pane are the same for both, so they share their names.
 - a name is a string: a typo is a runtime error, not a compile error (mitigated
   by constants);
 - `Get` returns a `fyne.CanvasObject`, so the caller has to assert the type
-  (the fields of `uiRegions` are typed);
+  (the fields of `uiRegions` were typed);
 - every named part adds a node to the object tree;
 - the wrapper has to be transparent, which means it has to follow the rules of
   the Fyne internals — the renderer registration above is the subtle part of
