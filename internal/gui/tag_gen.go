@@ -3,6 +3,7 @@ package gui
 import (
 	"maps"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -32,7 +33,9 @@ import (
 // generateTags generates the tags of the package and saves them.
 //
 // The watcher is paused while the tags are generated, because the generation
-// writes the tags file, which would be reported as an external change.
+// writes the tags file, which would be reported as an external change; the
+// change of the file the generation wrote is discarded before the watcher is
+// resumed, because it is already applied.
 func (a *App) generateTags(generator *ddpackage.GenerateTags, progressCallback func(p float64)) {
 	pkg := a.currentPackage()
 	if pkg == nil {
@@ -43,6 +46,12 @@ func (a *App) generateTags(generator *ddpackage.GenerateTags, progressCallback f
 	defer a.resumePackageWatcher()
 
 	pkg.GenerateTagsProgress(generator, progressCallback)
+
+	// the generation writes the tags file itself, so the change is already
+	// applied and must not be reported by the watcher a second time; the
+	// watcher is still paused here, the deferred resume runs after this
+	// statement
+	a.discardPackageWatcherChanges(filepath.Join(pkg.UnpackedPath(), "data", "default.dungeondraft_tags"))
 }
 
 func (a *App) createTagGenDialog() dialog.Dialog {
@@ -457,7 +466,8 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 
 	var genTagsDlg *dialog.CustomDialog
 
-	generateBtn := widget.NewButtonWithIcon(
+	var generateBtn *widget.Button
+	generateBtn = widget.NewButtonWithIcon(
 		lang.X("pathGen.generateBtl.label", "Generate"),
 		theme.ConfirmIcon(),
 		func() {
@@ -471,22 +481,33 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 				a.window,
 			)
 			progressDlg.Show()
+			a.disableButtons.Set(true)
+			generateBtn.Disable()
 			// the progress is reported for every file of the package, so it
 			// is throttled, to not flood the queue of the Fyne goroutine
 			progress := newProgressReporter(func(p float64) {
 				progressVal.Set(p)
 			})
-			a.generateTags(generator, progress.Report)
-			progressDlg.Hide()
-			doneDlg := dialog.NewInformation(
-				lang.X("pathGen.doneDialog.title", "Tags Generated"),
-				lang.X("pathGen.doneDialog.msg", "Tags have finished generating."),
-				a.window,
-			)
-			doneDlg.SetOnClosed(func() {
-				genTagsDlg.Hide()
-			})
-			doneDlg.Show()
+			// the generation reads and writes the files of the package, so
+			// it runs on its own goroutine and leaves the Fyne goroutine
+			// free for the interface
+			go func() {
+				a.generateTags(generator, progress.Report)
+				fyne.Do(func() {
+					progressDlg.Hide()
+					a.disableButtons.Set(false)
+					generateBtn.Enable()
+					doneDlg := dialog.NewInformation(
+						lang.X("pathGen.doneDialog.title", "Tags Generated"),
+						lang.X("pathGen.doneDialog.msg", "Tags have finished generating."),
+						a.window,
+					)
+					doneDlg.SetOnClosed(func() {
+						genTagsDlg.Hide()
+					})
+					doneDlg.Show()
+				})
+			}()
 		},
 	)
 

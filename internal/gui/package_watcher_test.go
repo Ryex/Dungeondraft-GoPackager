@@ -590,10 +590,11 @@ func TestTagGenerationUpdatesTheTagsWithoutSpammingTheWatcher(t *testing.T) {
 	})
 	a.generateTags(generator, nil)
 
-	// the watcher must not report the change of the tags file more than once
+	// the generation writes the tags file itself, so the watcher must not
+	// report it at all
 	updated := waitForWatcherIdle(t, a)
-	assert.LessOrEqual(t, updated-count, 1,
-		"the watcher must not report the change of the tags file more than once")
+	assert.Equal(t, 0, updated-count,
+		"the watcher must not report the tags file the generation itself wrote")
 
 	inspectPackage(t, a, func(pkg *ddpackage.Package) {
 		assert.True(t, pkg.Tags().TagExists("nature"),
