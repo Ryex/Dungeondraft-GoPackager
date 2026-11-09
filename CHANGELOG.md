@@ -17,10 +17,20 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - the name of a pack was used as-is as the directory it is unpacked into, so a
   pack named `../../evil` escaped the chosen folder; pack names are now
   sanitised to a single directory segment.
+- the file watcher followed symlinks that left the pack and picked up changes
+  from outside of it, so a pack could index files from outside of its folder;
+  symlinks that leave the pack root are no longer followed, and paths outside
+  of the pack are ignored.
 - progress dialogs could stay open forever when a task started without a
   package or failed, and the buttons of the interface stayed disabled after a
   load error; every exit path now hides its dialog, and a load error
   re-enables the buttons.
+- the colours of the about dialog were premultiplied, so a semi-transparent
+  colour was shown with its rgb channels darkened; only the opacity is
+  replaced now, the colours keep their rgb values.
+- tag and metadata errors of a packed load were swallowed, the pack opened as
+  if its tags and metadata had been read; they are now reported in an error
+  dialog while the pack is loaded.
 - generating tags blocked the interface while it ran, and the tags file it
   wrote itself was reported by the file watcher as an external change; tag
   generation now runs off the UI thread and its own write is discarded, so
