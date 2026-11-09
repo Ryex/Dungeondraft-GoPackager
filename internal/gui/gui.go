@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -94,11 +95,21 @@ type App struct {
 	// objects they belong to.
 	ui *named.Cache
 
+	// saveTimerLock guards tagSaveTimer and resSaveTimers. The save
+	// callbacks create the timers on the Fyne goroutine, while the flush
+	// of a replaced package runs on the load goroutine (replacePackage)
+	// and the cleanup runs on the main goroutine. Flushing the timer map
+	// while a save callback writes it would crash the process
+	// (concurrent map writes), not just race the race detector.
+	saveTimerLock sync.Mutex
+
 	tagSaveTimer  *time.Timer
 	resSaveTimers map[string]*time.Timer
 
 	// packageWatcher watches the unpacked folder of the package for changes.
-	packageWatcher *packageWatcher
+	// It is atomic, because it is replaced when a package is loaded, while
+	// it may be read from the goroutine of the watcher and from the UI.
+	packageWatcher atomic.Pointer[packageWatcher]
 
 	// packageWatcherDebounce is the time the watcher waits for further
 	// events, before it reports the changed paths. It is zero in the app,
@@ -129,19 +140,19 @@ type App struct {
 
 	// loadPacked loads a packed resource pack file. It is a field so that
 	// tests can control the timing of the load.
-	loadPacked func(path string, progress func(p float64, curRes string)) (*ddpackage.Package, error)
+	loadPacked func(path string, progress func(p float64, curRes string)) (packedLoadResult, error)
 
 	// packageUpdateHook is called while an update of the package runs in
 	// the background, with the dialog of the update showing. It is a field
 	// so that tests can look at the interface while the update runs.
 	packageUpdateHook func(dlg *packageUpdateDialog)
 
-	// bgWG tracks the background work that touches the interface: the
+	// bgWork tracks the background work that touches the interface: the
 	// loads of a package and the computations of the md5 hashes.
 	//
 	// The interface must not be touched while the background work is
 	// running, so the tests wait for it.
-	bgWG sync.WaitGroup
+	bgWork backgroundTracker
 
 	// prefLocaleListener is the listener registered on the locale preference.
 	// It is removed and replaced whenever the UI is rebuilt and detached
@@ -152,6 +163,67 @@ type App struct {
 	packageUpdated   binding.Int
 
 	lastSelectedTab string
+
+	// filterDebounce is the time the filter entry of the resource tree
+	// waits for further input, before the filter is applied to the tree.
+	// It is set to defaultFilterDebounce in NewApp.
+	filterDebounce time.Duration
+
+	// filterTimer is the pending debounce of the filter entry. The
+	// listener that schedules it runs on the Fyne goroutine, while the
+	// cleanup (clean) and the replacement of the content (buildPackageTree)
+	// run on other goroutines, so filterMu guards the timer and its
+	// application: the debounce callback takes it around the rebuild of
+	// the tree as well.
+	filterTimer *time.Timer
+	filterMu    sync.Mutex
+}
+
+// backgroundTracker counts the units of background work that are running,
+// so that tests can wait for them to be done.
+//
+// It replaces a sync.WaitGroup: the Add of a WaitGroup may not be called
+// concurrently with its Wait, but the background work of the app is
+// started while the tests wait for it.
+type backgroundTracker struct {
+	mu    sync.Mutex
+	cond  *sync.Cond
+	count int
+}
+
+// Start counts a new unit of background work.
+func (b *backgroundTracker) Start() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.count++
+}
+
+// Done counts a unit of background work as finished and wakes the waiters
+// when no work is left.
+//
+// A Done without a matching Start panics, fail-fast like the sync.WaitGroup
+// it replaced: an extra Done would drive the counter negative, so that a
+// later Start brings it back to zero while work is still running and Wait
+// returns too early.
+func (b *backgroundTracker) Done() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.count <= 0 {
+		panic("sync: negative backgroundTracker counter: Done called without a matching Start")
+	}
+	b.count--
+	if b.count == 0 {
+		b.cond.Broadcast()
+	}
+}
+
+// Wait blocks until no background work is counted anymore.
+func (b *backgroundTracker) Wait() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for b.count > 0 {
+		b.cond.Wait()
+	}
 }
 
 //go:embed translation
@@ -162,15 +234,22 @@ var translations embed.FS
 // translations more than once in the global i18n bundle.
 var translationsOnce sync.Once
 
+// defaultFilterDebounce is the time the filter entry of the resource tree
+// waits for further input, before the filter is applied to the tree, so
+// that a filter typed in quickly is only applied once.
+const defaultFilterDebounce = 200 * time.Millisecond
+
 func NewApp() *App {
 	app := &App{
 		operatingPath:  binding.NewString(),
 		disableButtons: binding.NewBool(),
 		resSaveTimers:  make(map[string]*time.Timer),
+		filterDebounce: defaultFilterDebounce,
 	}
 	app.packageUpdated = binding.BindInt(&app.pkgUpdateCounter)
 	app.loadUnpacked = app.loadUnpackedSync
 	app.loadPacked = app.loadPackSync
+	app.bgWork.cond = sync.NewCond(&app.bgWork.mu)
 	return app
 }
 
@@ -294,6 +373,9 @@ func (a *App) replacePackage(pkg *ddpackage.Package) {
 	old := a.currentPackage()
 	a.setCurrentPackage(pkg)
 	if old != nil && old != pkg {
+		// flush the saves that are still pending for the old package
+		// before it is closed
+		a.stopSaveTimersFor(old)
 		old.Close()
 	}
 }
@@ -317,6 +399,7 @@ func (a *App) setCurrentPackage(pkg *ddpackage.Package) {
 
 func (a *App) clean() {
 	a.resetPkg()
+	a.saveTimerLock.Lock()
 	if a.tagSaveTimer != nil {
 		a.tagSaveTimer.Stop()
 		a.tagSaveTimer = nil
@@ -325,6 +408,15 @@ func (a *App) clean() {
 		timer.Stop()
 	}
 	a.resSaveTimers = map[string]*time.Timer{}
+	a.saveTimerLock.Unlock()
+	// the filter of the resource tree must not be applied to the
+	// interface after it is gone
+	a.filterMu.Lock()
+	if a.filterTimer != nil {
+		a.filterTimer.Stop()
+		a.filterTimer = nil
+	}
+	a.filterMu.Unlock()
 	if a.prefLocaleListener != nil && a.prefLocale != nil {
 		a.prefLocale.RemoveListener(a.prefLocaleListener)
 		a.prefLocaleListener = nil
@@ -711,6 +803,9 @@ func (a *App) setErrContent(msg string, errs ...error) {
 		layout.NewSpacer(),
 	)
 
+	// the error content replaces the content of a failed load, which has
+	// disabled the controls of the interface, so they are enabled again
+	a.disableButtons.Set(false)
 	a.setMainContent(msgContent)
 }
 

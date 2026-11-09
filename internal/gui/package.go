@@ -1,9 +1,11 @@
 package gui
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"image/color"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -66,6 +68,24 @@ const (
 	nameTextPreview      = "textPreview"
 	nameTooLargeLabel    = "tooLargeLabel"
 	nameTagList          = "tagList"
+)
+
+// paneKind describes the kind of content the resource pane shows.
+//
+// The kind decides whether a change of the selection has to rebuild the
+// content of the pane or can update it in place.
+type paneKind int
+
+const (
+	// paneKindNone means that nothing is selected, so the resource pane
+	// shows the default preview.
+	paneKindNone paneKind = iota
+	// paneKindSingle means that the resource pane shows the information of
+	// a single resource.
+	paneKindSingle
+	// paneKindBulk means that the resource pane shows the operations that
+	// can be applied to all the selected resources at once.
+	paneKindBulk
 )
 
 func (a *App) buildPackageTreeAndInfoPane(editable bool) *named.Named {
@@ -133,28 +153,70 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) *named.Named {
 
 	rightSplit := container.NewStack(defaultPreview)
 
-	tree.OnSelectionChanged = func() {
-		selected := tree.GetSelectionAndChildData()
-		content := func() fyne.CanvasObject {
-			if len(selected) == 0 {
-				return defaultPreview
-			} else if len(selected) == 1 {
-				switch data := selected[0].(type) {
-				case *resource_tree.ResourceFileInfoNode:
-					return a.buildInfoPane(data.Info, editable)
-				}
-			}
-			return a.buildBulkOpsPane(tree, tree.GetSelectedResources(), editable)
-		}()
+	// the kind of content the resource pane shows and the parts of it that
+	// build it, so that a change of the selection within the same kind can
+	// update the content instead of rebuilding it
+	paneMode := paneKindNone
+	var singleInfo *structures.FileInfo
+	var bulk *bulkPane
+
+	// setContent replaces the content of the resource pane.
+	//
+	// The parts of the new content are new objects, so the cache of the
+	// named parts has to forget the old ones.
+	setContent := func(content fyne.CanvasObject) {
 		rightSplit.RemoveAll()
 		rightSplit.Add(content)
 		rightSplit.Refresh()
 
-		// the parts of the information pane are new objects, so the cache
-		// of the named parts has to forget the old ones
 		if a.ui != nil {
 			a.ui.Reset()
 		}
+	}
+
+	tree.OnSelectionChanged = func() {
+		selected := tree.GetSelectionAndChildData()
+
+		if len(selected) == 0 {
+			// the default preview is only built when it is not shown
+			// already
+			if paneMode == paneKindNone {
+				return
+			}
+			paneMode = paneKindNone
+			singleInfo = nil
+			bulk = nil
+			setContent(defaultPreview)
+			return
+		}
+
+		if len(selected) == 1 {
+			if data, isResource := selected[0].(*resource_tree.ResourceFileInfoNode); isResource {
+				// the information of the resource is shown already, only
+				// the occurrence of it in the selection changed
+				if paneMode == paneKindSingle && singleInfo == data.Info {
+					return
+				}
+				paneMode = paneKindSingle
+				singleInfo = data.Info
+				bulk = nil
+				setContent(a.buildInfoPane(data.Info, editable))
+				return
+			}
+		}
+
+		// the operations of many resources are shown: they are updated in
+		// place when they are on screen already, only a change of the kind
+		// of the content rebuilds the pane
+		if paneMode == paneKindBulk && bulk != nil {
+			bulk.setResources(tree.GetSelectedResources())
+			return
+		}
+		paneMode = paneKindBulk
+		singleInfo = nil
+		content, newBulk := a.buildBulkOpsPane(tree, tree.GetSelectedResources(), editable)
+		bulk = newBulk
+		setContent(content)
 	}
 
 	split := container.NewPadded(container.NewHSplit(
@@ -166,12 +228,23 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) *named.Named {
 }
 
 func (a *App) buildPackageTree(editable bool) (*resource_tree.ResourceTree, binding.String, binding.Bool) {
+	// the content is replaced, so a filter that is still pending must not
+	// be applied anymore
+	a.filterMu.Lock()
+	if a.filterTimer != nil {
+		a.filterTimer.Stop()
+		a.filterTimer = nil
+	}
+	a.filterMu.Unlock()
+
+	pkg := a.currentPackage()
+
 	filter := ""
 	boundFilter := binding.BindString(&filter)
 	byTag := false
 	boundByTag := binding.BindBool(&byTag)
 
-	resourceTree := resource_tree.NewResourceTree(a.pkg, a.window)
+	resourceTree := resource_tree.NewResourceTree(pkg, a.window)
 
 	refreshTree := func() {
 		resourceTree.RefreshTree()
@@ -180,13 +253,37 @@ func (a *App) buildPackageTree(editable bool) (*resource_tree.ResourceTree, bind
 	}
 
 	boundFilter.AddListener(binding.NewDataListener(func() {
-		f, err := ddresource_filter.ParseResourceFilter(filter)
-		if err != nil {
+		// parse right away to reject a bad filter: the validator of the
+		// entry shows the error text, the debounce only schedules a
+		// filter that parses
+		if _, err := ddresource_filter.ParseResourceFilter(filter); err != nil {
 			return
 		}
-		log.Debugf("Using filter: %s", f)
-		resourceTree.SetFilter(f)
-		resourceTree.OpenBranch(resource_tree.PackageTreeRootID)
+		a.filterMu.Lock()
+		defer a.filterMu.Unlock()
+		if a.filterTimer != nil {
+			a.filterTimer.Stop()
+		}
+		// the filter is read again when the timer fires, so the latest
+		// text of the entry is the one that is applied
+		a.filterTimer = time.AfterFunc(a.filterDebounce, func() {
+			fyne.Do(func() {
+				f, err := ddresource_filter.ParseResourceFilter(filter)
+				if err != nil {
+					return
+				}
+				log.Debugf("Using filter: %s", f)
+				// The fence: under the test driver fyne.Do runs inline on
+				// the goroutine of the debounce timer, so this rebuild has
+				// to be serialised against readers that poll the state of
+				// the tree (the filter spec test). The listener and clean
+				// take the same lock for the pending timer.
+				a.filterMu.Lock()
+				defer a.filterMu.Unlock()
+				resourceTree.SetFilter(f)
+				resourceTree.OpenBranch(resource_tree.PackageTreeRootID)
+			})
+		})
 	}))
 
 	boundByTag.AddListener(binding.NewDataListener(func() {
@@ -259,12 +356,12 @@ func (a *App) buildInfoPane(info *structures.FileInfo, editable bool) fyne.Canva
 	)
 }
 
+// maxTextPreviewBytes is the size above which the preview of a text file does
+// not read the file at all: the "too large" label is shown instead.
+const maxTextPreviewBytes int64 = 4 << 20
+
 func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
-	fileData, err := a.pkg.LoadResource(info.ResPath)
-	if err != nil {
-		log.WithError(err).Errorf("failed to read image data for %s", info.ResPath)
-		return widget.NewLabel(fmt.Sprintf("Failed to read image data for %s", info.ResPath))
-	}
+	pkg := a.currentPackage()
 
 	showThumbnail := binding.BindPreferenceBool("showThumbnails", a.app.Preferences())
 	thumbnailToggle := widgets.NewToggleWithData(showThumbnail)
@@ -295,9 +392,9 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 	// the md5 of the resource is computed in the background when it is not
 	// known yet, so the update of the entry is tracked as background work
 	// that touches the interface
-	a.bgWG.Add(1)
+	a.bgWork.Start()
 	a.currentPackage().GetOrUpdateResourceMd5(info, func(md5 string, err error) {
-		defer a.bgWG.Done()
+		defer a.bgWork.Done()
 
 		if err != nil {
 			log.WithError(err).Errorf("Failed to update hash for %s", info.ResPath)
@@ -314,18 +411,41 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 
 	bg := widgets.NewThemedRect(theme.ColorNameInputBackground, 4)
 
-	if !ddimage.PathIsSupportedImage(info.RelPath) {
-		textContent := string(fileData)
-		if len(strings.Split(textContent, "\n")) > 200 {
-			return container.NewPadded(
-				layouts.NewBottomExpandVBox(
-					infoCont,
-					container.NewStack(
-						bg, tooLarge,
-					),
+	tooLargeContent := func() fyne.CanvasObject {
+		return container.NewPadded(
+			layouts.NewBottomExpandVBox(
+				infoCont,
+				container.NewStack(
+					bg, tooLarge,
 				),
-			)
+			),
+		)
+	}
+
+	if !ddimage.PathIsSupportedImage(info.RelPath) {
+		// a text file above the size gate is not read at all: its size
+		// alone decides that the preview is too large. Unpacked resources
+		// carry no size, packed ones carry the size from their header.
+		size := info.Size
+		if size <= 0 && info.Path != "" {
+			if stat, statErr := os.Stat(info.Path); statErr == nil {
+				size = stat.Size()
+			}
 		}
+		if size > maxTextPreviewBytes {
+			return tooLargeContent()
+		}
+
+		fileData, err := pkg.LoadResource(info.ResPath)
+		if err != nil {
+			log.WithError(err).Errorf("failed to read image data for %s", info.ResPath)
+			return widget.NewLabel(fmt.Sprintf("Failed to read image data for %s", info.ResPath))
+		}
+
+		if bytes.Count(fileData, []byte("\n"))+1 > 200 {
+			return tooLargeContent()
+		}
+		textContent := string(fileData)
 		textEntry := widget.NewMultiLineEntry()
 		textEntry.Text = textContent
 		copyBtn := widget.NewButtonWithIcon("", theme.ContentCopyIcon(), func() {
@@ -347,6 +467,14 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 			),
 		)
 		return content
+	}
+
+	// the preview of an image needs its bytes, so the file is read
+	// unconditionally here
+	fileData, err := pkg.LoadResource(info.ResPath)
+	if err != nil {
+		log.WithError(err).Errorf("failed to read image data for %s", info.ResPath)
+		return widget.NewLabel(fmt.Sprintf("Failed to read image data for %s", info.ResPath))
 	}
 
 	img, _, err := ddimage.BytesToImage(fileData)
@@ -374,7 +502,7 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 
 	var thumbnail fyne.CanvasObject = thumbnailErrObj
 	if info.ThumbnailResPath != "" {
-		thumbnailData, thumbErr := a.pkg.LoadResource(info.ThumbnailResPath)
+		thumbnailData, thumbErr := pkg.LoadResource(info.ThumbnailResPath)
 		if thumbErr != nil {
 			if errors.Is(thumbErr, ddpackage.ErrResourceNotFound) {
 				thumbnailErr.Set(lang.X("preview.noThumbnail", "Thumbnail not generated."))
@@ -528,7 +656,7 @@ func (a *App) buildTagInfo(info *structures.FileInfo, editable bool) fyne.Canvas
 				updateTags()
 				a.saveUnpackedTags()
 				tagSelector.SetText("")
-				tagSelector.SetOptions(a.pkg.Tags().AllTags())
+				tagSelector.SetOptions(a.currentPackage().Tags().AllTags())
 			},
 		)
 		content.Add(layouts.NewLeftExpandHBox(tagSelector, addBtn))
@@ -538,6 +666,9 @@ func (a *App) buildTagInfo(info *structures.FileInfo, editable bool) fyne.Canvas
 }
 
 func (a *App) saveUnpackedTags() {
+	a.saveTimerLock.Lock()
+	defer a.saveTimerLock.Unlock()
+
 	if a.tagSaveTimer != nil {
 		a.tagSaveTimer.Stop()
 		a.tagSaveTimer = nil
@@ -551,11 +682,64 @@ func (a *App) saveUnpackedTags() {
 		}
 		err := pkg.SaveUnpackedTags()
 		if err != nil {
-			fyne.Do(func() {
-				a.showErrorDialog(err)
-			})
+			a.showErrorDialog(err)
 		}
 	})
+}
+
+// stopSaveTimersFor stops the pending save timers of the package old and
+// performs the saves they still owe synchronously, so that a save that was
+// scheduled before the package was replaced is neither lost nor written
+// after the package was closed.
+//
+// The timers are stopped under saveTimerLock, because the save callbacks
+// create them on the Fyne goroutine; the saves themselves run after the
+// lock is released, so no file I/O is serialised against them.
+//
+// A timer that already fired is left alone: its callback holds the same
+// package and the write to the unpacked folder of a replaced package is
+// harmless.
+func (a *App) stopSaveTimersFor(old *ddpackage.Package) {
+	if old == nil {
+		return
+	}
+
+	// what is saved is collected under the lock, the saves run outside
+	// of it (file I/O, and no lock may be held across them)
+	var flushTags bool
+	var flushMeta []string
+
+	a.saveTimerLock.Lock()
+	if t := a.tagSaveTimer; t != nil && t.Stop() {
+		flushTags = true
+	}
+	a.tagSaveTimer = nil
+
+	for key, timer := range a.resSaveTimers {
+		if timer.Stop() {
+			flushMeta = append(flushMeta, key)
+		}
+	}
+	a.resSaveTimers = map[string]*time.Timer{}
+	a.saveTimerLock.Unlock()
+
+	if flushTags {
+		if err := old.SaveUnpackedTags(); err != nil {
+			log.WithError(err).Error("failed to flush the pending tag save")
+		}
+	}
+	for _, key := range flushMeta {
+		var err error
+		if strings.HasSuffix(key, ".dungeondraft_wall") {
+			err = old.SaveUnpackedWall(key)
+		} else {
+			err = old.SaveUnpackedTileset(key)
+		}
+		if err != nil {
+			log.WithError(err).WithField("metaPath", key).
+				Error("failed to flush the pending metadata save")
+		}
+	}
 }
 
 func (a *App) buildMetadataPane(info *structures.FileInfo, editable bool) fyne.CanvasObject {
@@ -566,7 +750,7 @@ func (a *App) buildMetadataPane(info *structures.FileInfo, editable bool) fyne.C
 			metaPath := info.MetadataPath
 
 			defaultColor := color.NRGBA{255, 255, 255, 255}
-			wallData := a.pkg.Walls()
+			wallData := a.currentPackage().Walls()
 			metaData, ok := wallData[metaPath]
 			if ok {
 				defaultColor = metaData.Color.ToColor()
@@ -620,7 +804,7 @@ func (a *App) buildMetadataPane(info *structures.FileInfo, editable bool) fyne.C
 			tilesetName := ""
 			tilesetType := structures.TilesetNormal
 
-			tilesetData := a.pkg.Tilesets()
+			tilesetData := a.currentPackage().Tilesets()
 			metaData, ok := tilesetData[metaPath]
 			if ok {
 				defaultColor = metaData.Color.ToColor()
@@ -742,6 +926,9 @@ func (a *App) buildMetadataPane(info *structures.FileInfo, editable bool) fyne.C
 }
 
 func (a *App) saveWallMetadata(metaPath string) {
+	a.saveTimerLock.Lock()
+	defer a.saveTimerLock.Unlock()
+
 	timer := a.resSaveTimers[metaPath]
 	if timer != nil {
 		timer.Stop()
@@ -756,14 +943,15 @@ func (a *App) saveWallMetadata(metaPath string) {
 		log.Infof("save timer called for %s", metaPath)
 		err := pkg.SaveUnpackedWall(metaPath)
 		if err != nil {
-			fyne.Do(func() {
-				a.showErrorDialog(err)
-			})
+			a.showErrorDialog(err)
 		}
 	})
 }
 
 func (a *App) saveTilesetMetadata(metaPath string) {
+	a.saveTimerLock.Lock()
+	defer a.saveTimerLock.Unlock()
+
 	timer := a.resSaveTimers[metaPath]
 	if timer != nil {
 		timer.Stop()
@@ -778,21 +966,80 @@ func (a *App) saveTilesetMetadata(metaPath string) {
 		log.Infof("save timer called for %s", metaPath)
 		err := pkg.SaveUnpackedTileset(metaPath)
 		if err != nil {
-			fyne.Do(func() {
-				a.showErrorDialog(err)
-			})
+			a.showErrorDialog(err)
 		}
 	})
 }
 
+// bulkPane is the pane that holds the operations that can be applied to all
+// the selected resources at once.
+//
+// The pane is updated in place when the selection changes, so that its parts
+// are only built when the kind of the content of the resource pane changes.
+type bulkPane struct {
+	// resources are the resources the operations are applied to.
+	resources []resource_tree.SelectedResource
+	// byUID indexes the resources by the id of the node they are shown as,
+	// so that a row of the list can be filled from the id it is bound to.
+	byUID map[widget.TreeNodeID]resource_tree.SelectedResource
+	// idStrings are the ids of the nodes of the resources. They are bound
+	// to the list of the selected resources.
+	idStrings []string
+	ids       binding.ExternalStringList
+	// tagStrings are the tags that all the resources have in common. They
+	// are bound to the list of the common tags.
+	tagStrings []string
+	tags       binding.ExternalStringList
+	// updateTags recomputes the common tags of the resources.
+	updateTags func()
+	// tree is the resource tree the resources are selected in.
+	tree *resource_tree.ResourceTree
+	// editable tells whether the resources may be changed.
+	editable bool
+}
+
+// setResources replaces the resources the pane works on.
+//
+// The lists of the pane are updated from the new resources, so that the
+// interface shows the new selection without the pane being rebuilt.
+func (b *bulkPane) setResources(resources []resource_tree.SelectedResource) {
+	b.resources = resources
+
+	b.byUID = make(map[widget.TreeNodeID]resource_tree.SelectedResource, len(resources))
+	b.idStrings = make([]string, 0, len(resources))
+	for _, res := range resources {
+		b.byUID[res.Uid] = res
+		b.idStrings = append(b.idStrings, string(res.Uid))
+	}
+	b.ids.Reload()
+
+	b.updateTags()
+}
+
 // buildBulkOpsPane builds the pane that holds the operations that can be
 // applied to all the selected resources at once.
+//
+// The pane is returned together with its state, so that the caller can update
+// it in place when the selection changes.
 func (a *App) buildBulkOpsPane(
 	tree *resource_tree.ResourceTree,
 	resources []resource_tree.SelectedResource,
 	editable bool,
-) fyne.CanvasObject {
-	tagsPane := a.buildBulkTagsPane(tree, resources, editable)
+) (fyne.CanvasObject, *bulkPane) {
+	bulk := &bulkPane{
+		tree:     tree,
+		editable: editable,
+	}
+	bulk.ids = binding.BindStringList(&bulk.idStrings)
+	bulk.tags = binding.BindStringList(&bulk.tagStrings)
+	bulk.updateTags = func() {
+		bulk.tagStrings = a.commonTags(bulk.resources).AsSlice()
+		slices.Sort(bulk.tagStrings)
+		bulk.tags.Reload()
+	}
+	bulk.setResources(resources)
+
+	tagsPane := a.buildBulkTagsPane(bulk)
 
 	tabs := container.NewAppTabs(
 		container.NewTabItemWithIcon(
@@ -805,16 +1052,12 @@ func (a *App) buildBulkOpsPane(
 	return named.New(nameBulkOpsPane, container.NewBorder(
 		nil, nil, nil, nil,
 		named.New(nameBulkOpsTabs, tabs),
-	))
+	)), bulk
 }
 
 // buildBulkTagsPane builds the tab that shows the tag operations that can be
 // applied to all the selected resources at once.
-func (a *App) buildBulkTagsPane(
-	tree *resource_tree.ResourceTree,
-	resources []resource_tree.SelectedResource,
-	editable bool,
-) fyne.CanvasObject {
+func (a *App) buildBulkTagsPane(b *bulkPane) fyne.CanvasObject {
 	header := named.New(nameBulkTagHeader, container.NewStack(
 		widgets.NewThemedRect(theme.ColorNameHeaderBackground, 4),
 		container.NewCenter(
@@ -822,18 +1065,9 @@ func (a *App) buildBulkTagsPane(
 		),
 	))
 
-	// the tags that are common to all the selected resources
-	var tags []string
-	boundTags := binding.BindStringList(&tags)
-	updateTags := func() {
-		tags = a.commonTags(resources).AsSlice()
-		slices.Sort(tags)
-		boundTags.Reload()
-	}
-	updateTags()
-
+	// the list of the tags that all the resources have in common
 	tagList := widget.NewListWithData(
-		boundTags,
+		b.tags,
 		func() fyne.CanvasObject {
 			return layouts.NewLeftExpandHBox(
 				widget.NewLabel("template"),
@@ -845,7 +1079,7 @@ func (a *App) buildBulkTagsPane(
 			lbl := c.Objects[0].(*widget.Label)
 			lbl.Bind(di.(binding.String))
 			btn := c.Objects[1].(*fyne.Container).Objects[0].(*widgets.ToolTipButton)
-			if !editable {
+			if !b.editable {
 				btn.Disable()
 				btn.Hide()
 				return
@@ -855,11 +1089,13 @@ func (a *App) buildBulkTagsPane(
 				log.WithError(err).Error("failed to get tag in del tag btn")
 				return
 			}
+			// the resources are read when the button is tapped, so that
+			// they are never the ones of a selection that is gone already
 			btn.OnTapped = func() {
-				for _, res := range resources {
+				for _, res := range b.resources {
 					a.currentPackage().Tags().Untag(tag, res.Info.RelPath)
 				}
-				updateTags()
+				b.updateTags()
 				a.saveUnpackedTags()
 			}
 			btn.SetToolTip(lang.X(
@@ -874,7 +1110,7 @@ func (a *App) buildBulkTagsPane(
 
 	rightSection := container.NewBorder(
 		nil,
-		a.buildBulkTagAddRow(resources, updateTags, editable),
+		a.buildBulkTagAddRow(b),
 		nil, nil,
 		container.NewStack(
 			widgets.NewThemedRect(theme.ColorNameInputBackground, 4),
@@ -884,7 +1120,7 @@ func (a *App) buildBulkTagsPane(
 
 	leftSection := container.NewStack(
 		widgets.NewThemedRect(theme.ColorNameInputBackground, 4),
-		container.NewPadded(named.New(nameBulkResourceList, a.buildBulkResourceList(tree, resources))),
+		container.NewPadded(named.New(nameBulkResourceList, a.buildBulkResourceList(b))),
 	)
 
 	return container.NewPadded(container.NewBorder(
@@ -897,19 +1133,20 @@ func (a *App) buildBulkTagsPane(
 
 // buildBulkResourceList builds the list of the resources that are selected in
 // the resource tree.
-func (a *App) buildBulkResourceList(
-	tree *resource_tree.ResourceTree,
-	resources []resource_tree.SelectedResource,
-) fyne.CanvasObject {
-	return widget.NewList(
-		func() int {
-			return len(resources)
-		},
-		func() fyne.CanvasObject {
-			return createBulkResourceNode()
-		},
-		func(id widget.ListItemID, obj fyne.CanvasObject) {
-			a.updateBulkResourceNode(tree, resources, id, obj)
+//
+// The list is bound to the ids of the pane, so that it follows a new
+// selection without being rebuilt.
+func (a *App) buildBulkResourceList(b *bulkPane) fyne.CanvasObject {
+	return widget.NewListWithData(
+		b.ids,
+		createBulkResourceNode,
+		func(di binding.DataItem, obj fyne.CanvasObject) {
+			uid, err := di.(binding.String).Get()
+			if err != nil {
+				log.WithError(err).Error("failed to get the id of a selected resource")
+				return
+			}
+			a.updateBulkResourceNode(b, uid, obj)
 		},
 	)
 }
@@ -961,17 +1198,18 @@ func createBulkResourceNode() fyne.CanvasObject {
 }
 
 // updateBulkResourceNode fills the node of the list of the selected resources
-// with the information of the resource.
+// with the information of the resource the node shows.
 func (a *App) updateBulkResourceNode(
-	tree *resource_tree.ResourceTree,
-	resources []resource_tree.SelectedResource,
-	id widget.ListItemID,
+	b *bulkPane,
+	uid string,
 	obj fyne.CanvasObject,
 ) {
-	if id < 0 || id >= len(resources) {
+	res, ok := b.byUID[widget.TreeNodeID(uid)]
+	if !ok {
+		// the id is not part of the selection any more, the node is
+		// updated from the new selection right after
 		return
 	}
-	res := resources[id]
 
 	node := obj.(*fyne.Container)
 	icon := node.Objects[0].(*widget.FileIcon)
@@ -993,7 +1231,7 @@ func (a *App) updateBulkResourceNode(
 		filepath.Join(a.currentPackage().UnpackedPath(), utils.NormalizeResourcePath(res.Info.ResPath)),
 	))
 	deselectBtn.OnTapped = func() {
-		deselectResource(tree, res)
+		deselectResource(b.tree, res)
 	}
 	deselectBtn.SetToolTip(lang.X(
 		"bulk.tagOps.deselect.tooltip",
@@ -1004,29 +1242,17 @@ func (a *App) updateBulkResourceNode(
 // deselectResource unselects the given resource in the tree.
 //
 // A resource that is only selected because one of the branches that hold it
-// is selected can not be unselected on its own, so the branch is unselected
-// instead.
+// is selected can not be unselected on its own, so UnselectIncludingAncestors
+// unselects the branch instead - the same way the context menu of the tree
+// does.
 func deselectResource(tree *resource_tree.ResourceTree, res resource_tree.SelectedResource) {
-	if res.Selected {
-		tree.Unselect(res.Uid)
-		return
-	}
-	for _, parent := range tree.AllParentsOf(res.Uid) {
-		if tree.IsSelected(parent) {
-			tree.Unselect(parent)
-			return
-		}
-	}
+	tree.UnselectIncludingAncestors(res.Uid)
 }
 
 // buildBulkTagAddRow builds the row that adds a tag to all the selected
 // resources.
-func (a *App) buildBulkTagAddRow(
-	resources []resource_tree.SelectedResource,
-	updateTags func(),
-	editable bool,
-) fyne.CanvasObject {
-	if !editable {
+func (a *App) buildBulkTagAddRow(b *bulkPane) fyne.CanvasObject {
+	if !b.editable {
 		return nil
 	}
 
@@ -1038,13 +1264,15 @@ func (a *App) buildBulkTagAddRow(
 			if tagSelector.Text == "" {
 				return
 			}
-			for _, res := range resources {
+			// the resources are read when the button is tapped, so that
+			// they are never the ones of a selection that is gone already
+			for _, res := range b.resources {
 				a.currentPackage().Tags().Tag(tagSelector.Text, res.Info.RelPath)
 			}
-			updateTags()
+			b.updateTags()
 			a.saveUnpackedTags()
 			tagSelector.SetText("")
-			tagSelector.SetOptions(a.pkg.Tags().AllTags())
+			tagSelector.SetOptions(a.currentPackage().Tags().AllTags())
 		},
 	)
 

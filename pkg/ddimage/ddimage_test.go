@@ -112,6 +112,17 @@ func TestRepeatHorizontallyWideEnoughIsUnchanged(t *testing.T) {
 	}
 }
 
+func TestRepeatHorizontallyClampsBeyondTheRatio(t *testing.T) {
+	// a request beyond the repeat ratio limit (64x the source width) is
+	// clamped to one source-repeat below it: 10*64+100 = 740 requested,
+	// (64-1)*10 = 630 clamped, so two more repeats would hit the limit.
+	src := solidImage(10, 10, testGray)
+
+	got := RepeatHorizontally(src, 10*64+100)
+
+	checkSize(t, got, 63*10, 10)
+}
+
 func TestWallThumbnailRepeatsShortSeamlessTexture(t *testing.T) {
 	// 100x33 has an aspect ratio of ~3.03, smaller than the thumbnail box
 	// 228/32 (= 7.125), so the texture is assumed to be seamless and
@@ -174,6 +185,24 @@ func TestWallThumbnailTallTextureIsRepeated(t *testing.T) {
 	checkRed(t, got, 30, 16)   // first tile
 	checkGray(t, got, 110, 16) // first tile
 	checkRed(t, got, 200, 16)  // second tile: proof that the texture repeated
+}
+
+// Written after the RepeatHorizontally ratio cap: pre-fix this would request
+// a repeat to ceil(10000*228/32) = 71250px wide (~2.8 GB of NRGBA) and OOM.
+// Post-fix the repeat is clamped to 63*10 = 630 wide (~25 MB) and the
+// thumbnail still fits the box.
+func TestWallThumbnailOfVeryTallTexture(t *testing.T) {
+	src := solidImage(10, 10000, testGray)
+
+	got := WallThumbnail(src)
+
+	b := got.Bounds()
+	if b.Dx() > maxThumbnailWidth {
+		t.Errorf("width = %d, want <= %d", b.Dx(), maxThumbnailWidth)
+	}
+	if b.Dy() != wallThumbnailHeight {
+		t.Errorf("height = %d, want %d", b.Dy(), wallThumbnailHeight)
+	}
 }
 
 func TestWallThumbnailWideTextureIsNotRepeated(t *testing.T) {
