@@ -215,12 +215,12 @@ pipeline refills itself as chains complete.
 > the branch it starts from. `AGENTS.md` is local-only and will NOT exist in
 > worktrees — subagent prompts must carry the Global Constraints section.
 
-- [ ] **Step 1: Verify the baseline is green**
+- [x] **Step 1: Verify the baseline is green**
 
 Run: `. .\setcc-gcc.ps1; go build ./...; go test ./pkg/ddpackage/... ./internal/gui/resource_tree/...; gofmt -l .`
 Expected: build OK, tests PASS, `gofmt -l .` prints nothing.
 
-- [ ] **Step 2: Commit the four verified fixes as-is**
+- [x] **Step 2: Commit the four verified fixes as-is**
 
 ```powershell
 git add pkg/ddpackage/pack.go internal/gui/pack.go internal/gui/package.go internal/gui/resource_tree/resource_tree.go internal/gui/resource_tree/resource_tree_node_test.go docs/plans/2026-11-08-review-fixes.md
@@ -242,7 +242,7 @@ git commit -m "fix: guard nil pack.json entry, lock package access, index select
 **Interfaces:**
 - Produces: `var ErrPathEscape = errors.New("resource path escapes the target directory")`; `func joinUnderBase(base, rel string) (string, error)` (returns `ErrPathEscape` for empty/absolute/volume-name `rel` or a result not under `base`).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```go
 func TestJoinUnderBaseRejectsEscapingPaths(t *testing.T) {
@@ -253,20 +253,20 @@ func TestJoinUnderBaseAcceptsNestedPaths(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Run to verify it fails** — `go test ./pkg/ddpackage/ -run TestJoinUnderBase -v` → FAIL (undefined).
+- [x] **Step 2: Run to verify it fails** — `go test ./pkg/ddpackage/ -run TestJoinUnderBase -v` → FAIL (undefined).
 
-- [ ] **Step 3: Implement in `pkg/ddpackage/unpack.go`**
+- [x] **Step 3: Implement in `pkg/ddpackage/unpack.go`**
 
 Body of `joinUnderBase`: reject `rel == "" || filepath.IsAbs(rel) || filepath.VolumeName(rel) != ""`; `joined := filepath.Join(base, rel)`; `if ok, _ := utils.PathIsSub(base, joined); !ok → return "", ErrPathEscape`. Add `ErrPathEscape` to `error.go`.
 
-- [ ] **Step 4: Guard both sinks**
+- [x] **Step 4: Guard both sinks**
 
 - `extractFileList`: replace `path := filepath.Join(outDirPath, filepath.Dir(fi.Path))` with `path, err := joinUnderBase(outDirPath, filepath.Dir(fi.Path))`; on error log with `logrus` fields (`resPath`, `path`) and return `dderrors.CausedBy(ErrPathEscape, err)` — extraction of a hostile pack must abort, not skip silently.
 - `ExtractFile`: `filePath, err := joinUnderBase(outPath, fileNameFull)` before the `os.Create` check; wrap with `dderrors.CausedBy(ErrPathEscape, err)` and field `unpackedFile`.
 
-- [ ] **Step 5: Run tests** — `go test ./pkg/ddpackage/ -run 'TestJoinUnderBase|TestExtract' -v` → PASS.
+- [x] **Step 5: Run tests** — `go test ./pkg/ddpackage/ -run 'TestJoinUnderBase|TestExtract' -v` → PASS.
 
-- [ ] **Step 6: Commit** — `git add pkg/ddpackage/error.go pkg/ddpackage/unpack.go pkg/ddpackage/unpack_test.go; git commit -m "fix: reject resource paths that escape the extraction directory"`
+- [x] **Step 6: Commit** — `git add pkg/ddpackage/error.go pkg/ddpackage/unpack.go pkg/ddpackage/unpack_test.go; git commit -m "fix: reject resource paths that escape the extraction directory"`
 
 ### Task 2: C2 — pack name used as extraction target
 
@@ -277,21 +277,21 @@ Body of `joinUnderBase`: reject `rel == "" || filepath.IsAbs(rel) || filepath.Vo
 **Interfaces:**
 - Produces: `func unpackTargetPath(base, packName string) string`
 
-- [ ] **Step 1: Write the failing test** — table-driven `TestUnpackTargetPath`: names `"../../evil"`, `".."`, `""`, `"a/../../b"`, `"C:\\evil"`, `"My Pack"` → result is a single segment under `base` (`filepath.Rel(base, result)` has no `..` and is not absolute); normal names pass through unchanged.
+- [x] **Step 1: Write the failing test** — table-driven `TestUnpackTargetPath`: names `"../../evil"`, `".."`, `""`, `"a/../../b"`, `"C:\\evil"`, `"My Pack"` → result is a single segment under `base` (`filepath.Rel(base, result)` has no `..` and is not absolute); normal names pass through unchanged.
 
-- [ ] **Step 2: Run to verify it fails** — `go test ./internal/gui/ -run TestUnpackTargetPath -v` → FAIL (undefined).
+- [x] **Step 2: Run to verify it fails** — `go test ./internal/gui/ -run TestUnpackTargetPath -v` → FAIL (undefined).
 
-- [ ] **Step 3: Implement `unpackTargetPath` in `internal/gui/unpack.go`**
+- [x] **Step 3: Implement `unpackTargetPath` in `internal/gui/unpack.go`**
 
 `seg := filepath.Base(filepath.Clean(strings.TrimSpace(packName)))`; if `seg` is `"."`, `".."`, `""` or a separator → `seg = "pack"`; return `filepath.Join(base, seg)`. Note in the commit: names containing separators now become one segment (behaviour change, only for names that previously nested or escaped).
 
-- [ ] **Step 4: Use it in `extractPackage`**
+- [x] **Step 4: Use it in `extractPackage`**
 
 Capture once at function top: `pkg := a.currentPackage()`; `if pkg == nil { log.WithError(...).Warn(...); return }`; `targetPath := unpackTargetPath(path, pkg.Name())`; pass `pkg` to `pkg.ExtractPackageProgress(...)` (replaces the two direct `a.pkg` reads at :267/:275).
 
-- [ ] **Step 5: Run tests** — `go test ./internal/gui/ -run TestUnpackTargetPath -v` → PASS; full `go test ./internal/gui/` still green.
+- [x] **Step 5: Run tests** — `go test ./internal/gui/ -run TestUnpackTargetPath -v` → PASS; full `go test ./internal/gui/` still green.
 
-- [ ] **Step 6: Commit** — `git add internal/gui/unpack.go internal/gui/unpack_test.go; git commit -m "fix: sanitize pack name before using it as extraction directory"`
+- [x] **Step 6: Commit** — `git add internal/gui/unpack.go internal/gui/unpack_test.go; git commit -m "fix: sanitize pack name before using it as extraction directory"`
 
 ### Task 3: DoS bounds for packed headers
 
@@ -302,18 +302,18 @@ Capture once at function top: `pkg := a.currentPackage()`; `if pkg == nil { log.
 **Interfaces:**
 - Produces: `const maxResPathBytes int32 = 4096`; `func checkResPathLength(n int32) error`; `func checkPackedReadBounds(offset, size, fileSize int64) error` (both return errors, no panics).
 
-- [ ] **Step 1: Write the failing tests** — `TestCheckResPathLength`: `0`, `-1`, `4097` → error; `1`, `4096` → nil. `TestCheckPackedReadBounds`: negative size, size beyond `fileSize-offset`, negative offset → error; in-bounds → nil.
+- [x] **Step 1: Write the failing tests** — `TestCheckResPathLength`: `0`, `-1`, `4097` → error; `1`, `4096` → nil. `TestCheckPackedReadBounds`: negative size, size beyond `fileSize-offset`, negative offset → error; in-bounds → nil.
 
-- [ ] **Step 2: Run to verify they fail** — `go test ./pkg/ddpackage/ -run 'TestCheckResPathLength|TestCheckPackedReadBounds' -v` → FAIL.
+- [x] **Step 2: Run to verify they fail** — `go test ./pkg/ddpackage/ -run 'TestCheckResPathLength|TestCheckPackedReadBounds' -v` → FAIL.
 
-- [ ] **Step 3: Implement the checks**
+- [x] **Step 3: Implement the checks**
 
 - `getFileList`: after `binary.Read` of `filePathLength`, `if err := checkResPathLength(filePathLength); err != nil { log with FileNum/filePathLength; return dderrors.CausedBy(ErrInvalidPackage, err) }` **before** `make([]byte, filePathLength)`.
 - `readPackedFileFromPackage`: before `make([]byte, info.Size)`, determine file size — `end, err := r.Seek(0, io.SeekEnd)` then seek back to `info.Offset` (keep the existing offset seek semantics); `checkPackedReadBounds(info.Offset, info.Size, end)` → on error `return nil, dderrors.CausedBy(ErrReadPacked, err)`.
 
-- [ ] **Step 4: Run tests** — `go test ./pkg/ddpackage/` → PASS.
+- [x] **Step 4: Run tests** — `go test ./pkg/ddpackage/` → PASS.
 
-- [ ] **Step 5: Commit** — `git add pkg/ddpackage/unpack.go pkg/ddpackage/unpack_test.go; git commit -m "fix: bound packed header path lengths and read sizes"`
+- [x] **Step 5: Commit** — `git add pkg/ddpackage/unpack.go pkg/ddpackage/unpack_test.go; git commit -m "fix: bound packed header path lengths and read sizes"`
 
 ### Task 4: GUI dialog/lifecycle one-liners
 
@@ -321,37 +321,37 @@ Capture once at function top: `pkg := a.currentPackage()`; `if pkg == nil { log.
 - Modify: `internal/gui/pack.go` (`genThumbnails` ~:772, `packPackage` ~:834), `internal/gui/gui.go` (`setErrContent` ~:687), `internal/gui/about.go` (`withAlpha` ~:247)
 - Test: `internal/gui/pack_test.go` (new), `internal/gui/gui_test.go`, `internal/gui/about_test.go`
 
-- [ ] **Step 1: Write three failing tests**
+- [x] **Step 1: Write three failing tests**
 
 1. `TestGenThumbnailsWithoutPackageHidesProgressDialog` (in `pack_test.go`): `a := newTestApp(t)` (no package) → `a.genThumbnails()` → `require.Eventually(a.window.Canvas().Overlays().Top() == nil)` — today the dialog stays open forever (FAIL).
 2. `TestSetErrContentReenablesButtons` (in `gui_test.go`): `a.disableButtons.Set(true)` → `a.setErrContent("msg", errors.New("x"))` → `disabled, _ := a.disableButtons.Get(); assert.False(disabled)` — today stays `true` (FAIL).
 3. `TestWithAlphaKeepsRGBOfSemiTransparentColors` (in `about_test.go`): `withAlpha(color.NRGBA{200, 100, 50, 128}, 200)` must equal `color.NRGBA{200, 100, 50, 200}` — today premultiplied (FAIL).
 
-- [ ] **Step 2: Run to verify they fail** — `go test ./internal/gui/ -run 'TestGenThumbnailsWithoutPackage|TestSetErrContent|TestWithAlpha' -v` → FAIL.
+- [x] **Step 2: Run to verify they fail** — `go test ./internal/gui/ -run 'TestGenThumbnailsWithoutPackage|TestSetErrContent|TestWithAlpha' -v` → FAIL.
 
-- [ ] **Step 3: Fix `genThumbnails` nil path** — in the `pkg == nil` branch add `fyne.Do(func() { progressDlg.Hide() })` beside `a.disableButtons.Set(false)`.
+- [x] **Step 3: Fix `genThumbnails` nil path** — in the `pkg == nil` branch add `fyne.Do(func() { progressDlg.Hide() })` beside `a.disableButtons.Set(false)`.
 
-- [ ] **Step 4: Fix `packPackage` goroutine** — capture `pkg := a.currentPackage()` at function top with a nil guard (mirrors Task 2); inside the goroutine wrap `progressDlg.Hide()`, the error dialog and the success dialog in `fyne.Do(...)` exactly like `genThumbnails` does at :801-817; use the captured `pkg` for `PackPackageProgress` and the message fields (replaces reads at :850/:865/:873/:889). Do the same `fyne.Do` wrapping for `progressDlg.Hide()` and both dialogs in `extractPackage`'s goroutine (`internal/gui/unpack.go` ~:274-300).
+- [x] **Step 4: Fix `packPackage` goroutine** — capture `pkg := a.currentPackage()` at function top with a nil guard (mirrors Task 2); inside the goroutine wrap `progressDlg.Hide()`, the error dialog and the success dialog in `fyne.Do(...)` exactly like `genThumbnails` does at :801-817; use the captured `pkg` for `PackPackageProgress` and the message fields (replaces reads at :850/:865/:873/:889). Do the same `fyne.Do` wrapping for `progressDlg.Hide()` and both dialogs in `extractPackage`'s goroutine (`internal/gui/unpack.go` ~:274-300).
 
-- [ ] **Step 5: Fix `setErrContent` and `withAlpha`** — `setErrContent`: add `a.disableButtons.Set(false)` before `a.setMainContent(msgContent)` (every caller is a failed load). `withAlpha`: `n := color.NRGBAModel.Convert(c).(color.NRGBA); n.A = alpha; return n`.
+- [x] **Step 5: Fix `setErrContent` and `withAlpha`** — `setErrContent`: add `a.disableButtons.Set(false)` before `a.setMainContent(msgContent)` (every caller is a failed load). `withAlpha`: `n := color.NRGBAModel.Convert(c).(color.NRGBA); n.A = alpha; return n`.
 
-- [ ] **Step 6: Run tests** — `go test ./internal/gui/` → PASS.
+- [x] **Step 6: Run tests** — `go test ./internal/gui/` → PASS.
 
-- [ ] **Step 7: Commit** — stage `internal/gui/pack.go internal/gui/unpack.go internal/gui/gui.go internal/gui/about.go internal/gui/pack_test.go internal/gui/gui_test.go internal/gui/about_test.go`; `git commit -m "fix: hide progress dialogs on every exit path, re-enable buttons after load errors, un-premultiply withAlpha"`
+- [x] **Step 7: Commit** — stage `internal/gui/pack.go internal/gui/unpack.go internal/gui/gui.go internal/gui/about.go internal/gui/pack_test.go internal/gui/gui_test.go internal/gui/about_test.go`; `git commit -m "fix: hide progress dialogs on every exit path, re-enable buttons after load errors, un-premultiply withAlpha"`
 
 ### Task 5: md5 unknown-state reports success with an empty hash
 
 **Files:** Modify: `pkg/ddpackage/ddpackage.go` (`GetOrUpdateResourceMd5` ~:563-568); Test: `pkg/ddpackage/ddpackage_test.go` (new)
 
-- [ ] **Step 1: Write the failing test** — `TestGetOrUpdateResourceMd5UnknownPackageState`: `pkg := ddpackage.NewPackage(log)` (mode is `PackageModeUnloaded`), `fi := &structures.FileInfo{Path: "...", ResPath: "res://packs/x/y.png"}` with invalid md5 → call `GetOrUpdateResourceMd5` → callback gets `md5 == ""` and `err != nil`; `fi.Md5.IsValid()` stays false. Today: callback gets the md5 of the empty string and `err == nil` (FAIL).
+- [x] **Step 1: Write the failing test** — `TestGetOrUpdateResourceMd5UnknownPackageState`: `pkg := ddpackage.NewPackage(log)` (mode is `PackageModeUnloaded`), `fi := &structures.FileInfo{Path: "...", ResPath: "res://packs/x/y.png"}` with invalid md5 → call `GetOrUpdateResourceMd5` → callback gets `md5 == ""` and `err != nil`; `fi.Md5.IsValid()` stays false. Today: callback gets the md5 of the empty string and `err == nil` (FAIL).
 
-- [ ] **Step 2: Run to verify it fails** — `go test ./pkg/ddpackage/ -run TestGetOrUpdateResourceMd5UnknownPackageState -v` → FAIL.
+- [x] **Step 2: Run to verify it fails** — `go test ./pkg/ddpackage/ -run TestGetOrUpdateResourceMd5UnknownPackageState -v` → FAIL.
 
-- [ ] **Step 3: Implement** — in the `else` branch (~:563): log with fields as today, then `callback("", dderrors.CausedBy(ErrPackageNotLoaded, errors.New("unknown package state")))` and `return` — never fall through to `hash.Sum`.
+- [x] **Step 3: Implement** — in the `else` branch (~:563): log with fields as today, then `callback("", dderrors.CausedBy(ErrPackageNotLoaded, errors.New("unknown package state")))` and `return` — never fall through to `hash.Sum`.
 
-- [ ] **Step 4: Run tests** — `go test ./pkg/ddpackage/` → PASS.
+- [x] **Step 4: Run tests** — `go test ./pkg/ddpackage/` → PASS.
 
-- [ ] **Step 5: Commit** — `git add pkg/ddpackage/ddpackage.go pkg/ddpackage/ddpackage_test.go; git commit -m "fix: report an error for md5 hashing in an unknown package state"`
+- [x] **Step 5: Commit** — `git add pkg/ddpackage/ddpackage.go pkg/ddpackage/ddpackage_test.go; git commit -m "fix: report an error for md5 hashing in an unknown package state"`
 
 ### Task 6: `loadPackSync` returns tag/metadata errors (dead `err = nil` removed)
 
@@ -362,10 +362,10 @@ Capture once at function top: `pkg := a.currentPackage()`; `if pkg == nil { log.
 **Interfaces:**
 - Produces: `type packedLoadResult struct { Pkg *ddpackage.Package; TagsErr, MetadataErr error }`; `loadPacked func(path string, progress func(p float64, curRes string)) (packedLoadResult, error)` (mirrors `unpackedLoadResult`).
 
-- [ ] **Step 1: Change the signature** — `loadPackSync` returns `packedLoadResult`; delete the two `showErrorDialog` calls and both dead `err = nil` lines; return `TagsErr`/`MetadataErr` on the result.
-- [ ] **Step 2: Move the dialogs to `loadPack`** — after `loader(...)` succeeds: `if result.TagsErr != nil { a.showErrorDialog(dderrors.CausedBy(errors.New(lang.X("package.tags.error", "Failed to read tags")), result.TagsErr)) }` and the metadata equivalent, then `a.setPackContent(result.Pkg)` (same shape as `loadUnpackedPath` ~:165-175). Update the `loadPacked` field type and `blockPackedLoad`.
-- [ ] **Step 3: Run tests** — `. .\setcc-gcc.ps1; go build ./...; go test ./internal/gui/` → PASS (existing suite covers the load paths).
-- [ ] **Step 4: Commit** — `git add internal/gui/unpack.go internal/gui/gui.go internal/gui/z_spec_helpers_test.go; git commit -m "refactor: loadPackSync reports tag and metadata errors like loadUnpackedSync"`
+- [x] **Step 1: Change the signature** — `loadPackSync` returns `packedLoadResult`; delete the two `showErrorDialog` calls and both dead `err = nil` lines; return `TagsErr`/`MetadataErr` on the result.
+- [x] **Step 2: Move the dialogs to `loadPack`** — after `loader(...)` succeeds: `if result.TagsErr != nil { a.showErrorDialog(dderrors.CausedBy(errors.New(lang.X("package.tags.error", "Failed to read tags")), result.TagsErr)) }` and the metadata equivalent, then `a.setPackContent(result.Pkg)` (same shape as `loadUnpackedPath` ~:165-175). Update the `loadPacked` field type and `blockPackedLoad`.
+- [x] **Step 3: Run tests** — `. .\setcc-gcc.ps1; go build ./...; go test ./internal/gui/` → PASS (existing suite covers the load paths).
+- [x] **Step 4: Commit** — `git add internal/gui/unpack.go internal/gui/gui.go internal/gui/z_spec_helpers_test.go; git commit -m "refactor: loadPackSync reports tag and metadata errors like loadUnpackedSync"`
 
 **Phase 1 gate:** `. .\setcc-gcc.ps1; go build ./...; go test ./...; gofmt -l .; git diff --check` → all clean.
 
@@ -381,26 +381,26 @@ Capture once at function top: `pkg := a.currentPackage()`; `if pkg == nil { log.
 - Field becomes `packageWatcher atomic.Pointer[packageWatcher]` (type and field share the name — legal Go).
 - Produces: `func (a *App) watcher() *packageWatcher` (loads the pointer; returns nil when none).
 
-- [ ] **Step 1: Swap the field and accessors** — `setupPackageWatcher`: `a.packageWatcher.Store(watcher)`. `teardownPackageWatcher`: `if w := a.packageWatcher.Swap(nil); w != nil { w.Close() }`. `pause/resume/discardPackageWatcherChanges`: `if w := a.watcher(); w != nil { w.Pause()/Resume()/DiscardUnder(dir) }`. Each call may act on a replaced instance — that is safe: `Resume` on a never-paused watcher is a no-op, `Pause` on a closed watcher is inert (closed ⇒ timers stopped).
-- [ ] **Step 2: Update test references** — replace `a.packageWatcher` reads in `gui_test.go` (`assert.Nil`) and `package_watcher_test.go` (`require.NotNil`, `.DiscardUnder`, `.overflow`, `.Pending`) with `a.watcher()`.
-- [ ] **Step 3: Run tests** — `go test ./internal/gui/` → PASS.
-- [ ] **Step 4: Commit** — `git add internal/gui/gui.go internal/gui/pack.go internal/gui/gui_test.go internal/gui/package_watcher_test.go; git commit -m "fix: guard the package watcher with an atomic pointer"`
+- [x] **Step 1: Swap the field and accessors** — `setupPackageWatcher`: `a.packageWatcher.Store(watcher)`. `teardownPackageWatcher`: `if w := a.packageWatcher.Swap(nil); w != nil { w.Close() }`. `pause/resume/discardPackageWatcherChanges`: `if w := a.watcher(); w != nil { w.Pause()/Resume()/DiscardUnder(dir) }`. Each call may act on a replaced instance — that is safe: `Resume` on a never-paused watcher is a no-op, `Pause` on a closed watcher is inert (closed ⇒ timers stopped).
+- [x] **Step 2: Update test references** — replace `a.packageWatcher` reads in `gui_test.go` (`assert.Nil`) and `package_watcher_test.go` (`require.NotNil`, `.DiscardUnder`, `.overflow`, `.Pending`) with `a.watcher()`.
+- [x] **Step 3: Run tests** — `go test ./internal/gui/` → PASS.
+- [x] **Step 4: Commit** — `git add internal/gui/gui.go internal/gui/pack.go internal/gui/gui_test.go internal/gui/package_watcher_test.go; git commit -m "fix: guard the package watcher with an atomic pointer"`
 
 ### Task 8: sweep the remaining direct `a.pkg` reads
 
 **Files:** Modify: `internal/gui/package.go` (:174, :263, :377, :531, :569, :623, :1047), `internal/gui/pack.go` (:645, :665, :666), `internal/gui/tag_gen.go` (:127), `internal/gui/tag_sets.go` (:39, :50, :78, :118, :188, :196, :209, :210, :214), `internal/gui/unpack.go` (:196)
 
-- [ ] **Step 1: Convert every listed read** to `a.currentPackage()` (mechanical swap; `nil` behaves exactly like today's field read). For `buildFilePreview` and `buildPackageTree` capture `pkg := a.currentPackage()` once at the top and use the local. (Tasks 2 and 4 already covered `extractPackage` and `packPackage` — do not touch those again.)
-- [ ] **Step 2: Run tests** — `go build ./...; go test ./internal/gui/` → PASS.
-- [ ] **Step 3: Commit** — `git add internal/gui/package.go internal/gui/pack.go internal/gui/tag_gen.go internal/gui/tag_sets.go internal/gui/unpack.go; git commit -m "fix: read the package through currentPackage everywhere in the gui"`
+- [x] **Step 1: Convert every listed read** to `a.currentPackage()` (mechanical swap; `nil` behaves exactly like today's field read). For `buildFilePreview` and `buildPackageTree` capture `pkg := a.currentPackage()` once at the top and use the local. (Tasks 2 and 4 already covered `extractPackage` and `packPackage` — do not touch those again.)
+- [x] **Step 2: Run tests** — `go build ./...; go test ./internal/gui/` → PASS.
+- [x] **Step 3: Commit** — `git add internal/gui/package.go internal/gui/pack.go internal/gui/tag_gen.go internal/gui/tag_sets.go internal/gui/unpack.go; git commit -m "fix: read the package through currentPackage everywhere in the gui"`
 
 ### Task 9: pre-scan under `flLock` in `updateFromPaths`
 
 **Files:** Modify: `pkg/ddpackage/pack.go` (`updateFromPaths` ~:223-247)
 
-- [ ] **Step 1: Move the `p.fileList.Find` block** (the `os.Stat` error branch at :231-242) under `p.flLock.RLock()/RUnlock()` — a read lock held only around the `Find`, not across the `os.Stat` loop; the write lock at :259 stays where it is. Do not hold `RLock` while calling `ListDir`.
-- [ ] **Step 2: Run tests** — `go test ./pkg/ddpackage/` → PASS (the `-race` run in Task 32 is the real proof).
-- [ ] **Step 3: Commit** — `git add pkg/ddpackage/pack.go; git commit -m "fix: guard the removal pre-scan of the file list with flLock"`
+- [x] **Step 1: Move the `p.fileList.Find` block** (the `os.Stat` error branch at :231-242) under `p.flLock.RLock()/RUnlock()` — a read lock held only around the `Find`, not across the `os.Stat` loop; the write lock at :259 stays where it is. Do not hold `RLock` while calling `ListDir`.
+- [x] **Step 2: Run tests** — `go test ./pkg/ddpackage/` → PASS (the `-race` run in Task 32 is the real proof).
+- [x] **Step 3: Commit** — `git add pkg/ddpackage/pack.go; git commit -m "fix: guard the removal pre-scan of the file list with flLock"`
 
 ### Task 10: md5 single-flight, published under `flLock`
 
@@ -412,18 +412,18 @@ Capture once at function top: `pkg := a.currentPackage()`; `if pkg == nil { log.
 
 **Lock order rule (must not be violated):** `flLock` may be held while acquiring `md5Mu`; never the reverse. `md5Mu` is never held while doing I/O or invoking callbacks.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
   1. `TestGetOrUpdateResourceMd5SingleFlight`: one unpacked file, 8 concurrent `GetOrUpdateResourceMd5` calls → all 8 callbacks fire with the identical correct hash; the file is read once (count via a `logrus` hook or by asserting callbacks fire in one batch — simplest: assert every callback receives `hex(md5(filebytes))` and no error; the single-flight structure is asserted by `TestGetOrUpdateResourceMd5QueuesCallbacksBehindAnInflightComputation` if needed).
   2. `TestGetOrUpdateResourceMd5PublishedUnderLock`: `go vet`-clean by construction; rely on `-race` (Task 32) for the lock proof — the test still asserts `fi.Md5.IsValid()` only after the callback runs.
 
-- [ ] **Step 2: Run to verify they fail (or race)** — `go test -race ./pkg/ddpackage/ -run TestGetOrUpdateResourceMd5 -v` → FAIL/race today.
+- [x] **Step 2: Run to verify they fail (or race)** — `go test -race ./pkg/ddpackage/ -run TestGetOrUpdateResourceMd5 -v` → FAIL/race today.
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
   - `GetOrUpdateResourceMd5`: under `md5Mu` — if `fi.Md5.IsValid()` copy `hash := fi.Md5.String()`, unlock, `callback(hash, nil)`; else if `key := fi.ResPath` has inflight entries, append the callback and return; else create the entry and start `go p.computeMd5(fi, key)`.
   - `computeMd5`: run the existing mode branches (unpack read / packed read guarded by `pkgFileMu` around seek+read inside `readPackedFileFromPackage`); on success `p.flLock.Lock(); fi.Md5.UpdateWith(sum); p.flLock.Unlock()`; then under `md5Mu` pop the waiter list, unlock, invoke every callback with the result (or the error — including the unknown-state error from Task 5).
 
-- [ ] **Step 4: Run tests** — `go test ./pkg/ddpackage/` → PASS; `go test -race ./pkg/ddpackage/` → PASS.
-- [ ] **Step 5: Commit** — `git add pkg/ddpackage/ddpackage.go pkg/ddpackage/ddpackage_test.go; git commit -m "fix: single-flight md5 computation, publish hashes under flLock"`
+- [x] **Step 4: Run tests** — `go test ./pkg/ddpackage/` → PASS; `go test -race ./pkg/ddpackage/` → PASS.
+- [x] **Step 5: Commit** — `git add pkg/ddpackage/ddpackage.go pkg/ddpackage/ddpackage_test.go; git commit -m "fix: single-flight md5 computation, publish hashes under flLock"`
 
 ### Task 11: background-work tracker without WaitGroup misuse
 
@@ -432,11 +432,11 @@ Capture once at function top: `pkg := a.currentPackage()`; `if pkg == nil { log.
 **Interfaces:**
 - Produces: `type backgroundTracker struct { mu sync.Mutex; cond *sync.Cond; count int }` with `Start()`, `Done()`, `Wait()`; App field `bgWork backgroundTracker` (cond created in `NewApp` via `sync.NewCond(&app.bgWork.mu)`).
 
-- [ ] **Step 1: Write the failing test** — `TestBackgroundTrackerConcurrentStartAndWait`: goroutine loop calling `Start()`/`Done()` while the main goroutine calls `Wait()` in a loop for a bounded number of rounds — today's `sync.WaitGroup` pattern panics/races with `Add` concurrent with `Wait`; the tracker must complete without panic (FAIL today if written against `bgWG` — write it against `bgWork` after the rename, verifying semantics: `Wait` returns only when `count == 0`).
-- [ ] **Step 2: Implement** `Start` (`count++`), `Done` (`count--; if count == 0 { cond.Broadcast() }`), `Wait` (`for count > 0 { cond.Wait() }`).
-- [ ] **Step 3: Replace all `a.bgWG` uses** — `a.bgWG.Add(1)` → `a.bgWork.Start()`; `defer a.bgWG.Done()` → `defer a.bgWork.Done()`; test helpers `a.bgWG.Wait()` → `a.bgWork.Wait()`; delete the `bgWG` field, update its doc comment.
-- [ ] **Step 4: Run tests** — `go test ./internal/gui/` → PASS.
-- [ ] **Step 5: Commit** — `git add internal/gui/gui.go internal/gui/pack.go internal/gui/unpack.go internal/gui/package.go internal/gui/z_spec_helpers_test.go internal/gui/background_test.go; git commit -m "fix: track background work with a condvar so Add can not race Wait"`
+- [x] **Step 1: Write the failing test** — `TestBackgroundTrackerConcurrentStartAndWait`: goroutine loop calling `Start()`/`Done()` while the main goroutine calls `Wait()` in a loop for a bounded number of rounds — today's `sync.WaitGroup` pattern panics/races with `Add` concurrent with `Wait`; the tracker must complete without panic (FAIL today if written against `bgWG` — write it against `bgWork` after the rename, verifying semantics: `Wait` returns only when `count == 0`).
+- [x] **Step 2: Implement** `Start` (`count++`), `Done` (`count--; if count == 0 { cond.Broadcast() }`), `Wait` (`for count > 0 { cond.Wait() }`).
+- [x] **Step 3: Replace all `a.bgWG` uses** — `a.bgWG.Add(1)` → `a.bgWork.Start()`; `defer a.bgWG.Done()` → `defer a.bgWork.Done()`; test helpers `a.bgWG.Wait()` → `a.bgWork.Wait()`; delete the `bgWG` field, update its doc comment.
+- [x] **Step 4: Run tests** — `go test ./internal/gui/` → PASS.
+- [x] **Step 5: Commit** — `git add internal/gui/gui.go internal/gui/pack.go internal/gui/unpack.go internal/gui/package.go internal/gui/z_spec_helpers_test.go internal/gui/background_test.go; git commit -m "fix: track background work with a condvar so Add can not race Wait"`
 
 ### Task 12: save timers stopped (and flushed) on package replace
 
@@ -445,31 +445,31 @@ Capture once at function top: `pkg := a.currentPackage()`; `if pkg == nil { log.
 **Interfaces:**
 - Produces: `func (a *App) stopSaveTimersFor(old *ddpackage.Package)` (stops `tagSaveTimer` + `resSaveTimers`; a timer stopped before firing performs its save synchronously on `old`).
 
-- [ ] **Step 1: Write the failing test** — `TestReplacePackageFlushesPendingTagSave`: load fixture, `a.pkg.Tags().Tag("pending", ...)`, `a.saveUnpackedTags()` (schedules 500 ms timer), immediately `a.resetPkg()` → `require.Eventually` the tags file on disk contains `pending` (today the timer survives and writes after close / races — FAIL or flaky).
-- [ ] **Step 2: Implement `stopSaveTimersFor`** — tag timer: `if t := a.tagSaveTimer; t != nil && t.Stop() { if err := old.SaveUnpackedTags(); err != nil { log.WithError(err)... } }; a.tagSaveTimer = nil`. Resource timers: for each key, `Stop()` true → save synchronously: suffix `.dungeondraft_wall` → `old.SaveUnpackedWall(key)`, else `old.SaveUnpackedTileset(key)`; clear the map. (A timer that already fired is left alone — its callback holds the same `old` and writes are harmless for unpacked packages.)
-- [ ] **Step 3: Call it from `replacePackage`** — before `old.Close()`, only when `old != nil && old != pkg`.
-- [ ] **Step 4: Drop the redundant `fyne.Do` wrappers** around `a.showErrorDialog(err)` in the three save callbacks (the helper already queues — review finding "double-queued layering").
-- [ ] **Step 5: Run tests** — `go test ./internal/gui/` → PASS.
-- [ ] **Step 6: Commit** — `git add internal/gui/gui.go internal/gui/package.go internal/gui/package_save_test.go; git commit -m "fix: flush pending tag and metadata saves when the package is replaced"`
+- [x] **Step 1: Write the failing test** — `TestReplacePackageFlushesPendingTagSave`: load fixture, `a.pkg.Tags().Tag("pending", ...)`, `a.saveUnpackedTags()` (schedules 500 ms timer), immediately `a.resetPkg()` → `require.Eventually` the tags file on disk contains `pending` (today the timer survives and writes after close / races — FAIL or flaky).
+- [x] **Step 2: Implement `stopSaveTimersFor`** — tag timer: `if t := a.tagSaveTimer; t != nil && t.Stop() { if err := old.SaveUnpackedTags(); err != nil { log.WithError(err)... } }; a.tagSaveTimer = nil`. Resource timers: for each key, `Stop()` true → save synchronously: suffix `.dungeondraft_wall` → `old.SaveUnpackedWall(key)`, else `old.SaveUnpackedTileset(key)`; clear the map. (A timer that already fired is left alone — its callback holds the same `old` and writes are harmless for unpacked packages.)
+- [x] **Step 3: Call it from `replacePackage`** — before `old.Close()`, only when `old != nil && old != pkg`.
+- [x] **Step 4: Drop the redundant `fyne.Do` wrappers** around `a.showErrorDialog(err)` in the three save callbacks (the helper already queues — review finding "double-queued layering").
+- [x] **Step 5: Run tests** — `go test ./internal/gui/` → PASS.
+- [x] **Step 6: Commit** — `git add internal/gui/gui.go internal/gui/package.go internal/gui/package_save_test.go; git commit -m "fix: flush pending tag and metadata saves when the package is replaced"`
 
 ### Task 13: `updateFromPaths` — dialog built on the Fyne goroutine, disk I/O off it
 
 **Files:** Modify: `internal/gui/pack.go` (`updateFromPaths` ~:203-247, `showPackageUpdateDialog` ~:283-307, `packageUpdateContent` ~:325-350)
 
-- [ ] **Step 1: Build the dialog inside `fyne.Do`** — `showPackageUpdateDialog` creates the bindings outside (safe), then one `fyne.Do(func(){ d.dialog = dialog.NewCustomWithoutButtons(...); d.dialog.Show() })` that also builds the content (`widget.NewProgressBar().Bind`, `widget.NewActivity().Start` currently run on the watcher goroutine). `hide()` already runs inside `fyne.Do`, queued after construction ⇒ FIFO ordering keeps `d.dialog` non-nil when `hide` reads it. `packageUpdateHook` still fires synchronously after `showPackageUpdateDialog` returns (tests read only the plain `progress` field).
-- [ ] **Step 2: Move `LoadTags`/`LoadResourceMetadata` off the Fyne goroutine** — in `updateFromPaths`, run both on the update goroutine **before** the `fyne.Do` (still inside `packageUpdateLock` ⇒ `replacePackage` waits ⇒ no use-after-close): collect `tagsErr`/`metaErr`, then `if tagsErr != nil { a.showErrorDialog(...) }` (the helper queues itself — call it *outside* the `fyne.Do`), and the `fyne.Do` only does `defer dlg.hide()` + `a.packageUpdated.Set(...)`.
-- [ ] **Step 3: Document the lock scope** — extend the `onPackageChanged` comment: the full rescan intentionally stays under `packageUpdateLock` (updates are unpacked-only, `Close()` is a no-op for them, and an update must never wait for the Fyne goroutine while holding the lock — see AGENTS.md). This closes the "consider limiting the critical section" finding as *accepted with rationale*.
-- [ ] **Step 4: Run tests** — `go test ./internal/gui/` → PASS (package_update + watcher suites cover dialog show/hide).
-- [ ] **Step 5: Commit** — `git add internal/gui/pack.go; git commit -m "fix: build the update dialog on the Fyne goroutine and load tags off it"`
+- [x] **Step 1: Build the dialog inside `fyne.Do`** — `showPackageUpdateDialog` creates the bindings outside (safe), then one `fyne.Do(func(){ d.dialog = dialog.NewCustomWithoutButtons(...); d.dialog.Show() })` that also builds the content (`widget.NewProgressBar().Bind`, `widget.NewActivity().Start` currently run on the watcher goroutine). `hide()` already runs inside `fyne.Do`, queued after construction ⇒ FIFO ordering keeps `d.dialog` non-nil when `hide` reads it. `packageUpdateHook` still fires synchronously after `showPackageUpdateDialog` returns (tests read only the plain `progress` field).
+- [x] **Step 2: Move `LoadTags`/`LoadResourceMetadata` off the Fyne goroutine** — in `updateFromPaths`, run both on the update goroutine **before** the `fyne.Do` (still inside `packageUpdateLock` ⇒ `replacePackage` waits ⇒ no use-after-close): collect `tagsErr`/`metaErr`, then `if tagsErr != nil { a.showErrorDialog(...) }` (the helper queues itself — call it *outside* the `fyne.Do`), and the `fyne.Do` only does `defer dlg.hide()` + `a.packageUpdated.Set(...)`.
+- [x] **Step 3: Document the lock scope** — extend the `onPackageChanged` comment: the full rescan intentionally stays under `packageUpdateLock` (updates are unpacked-only, `Close()` is a no-op for them, and an update must never wait for the Fyne goroutine while holding the lock — see AGENTS.md). This closes the "consider limiting the critical section" finding as *accepted with rationale*.
+- [x] **Step 4: Run tests** — `go test ./internal/gui/` → PASS (package_update + watcher suites cover dialog show/hide).
+- [x] **Step 5: Commit** — `git add internal/gui/pack.go; git commit -m "fix: build the update dialog on the Fyne goroutine and load tags off it"`
 
 ### Task 14: serialize thumbnail generation with package updates
 
 **Files:** Modify: `internal/gui/pack.go` (`genThumbnails` ~:772-832); Test: `internal/gui/package_watcher_test.go` (`thumbnailCount` ~:553)
 
-- [ ] **Step 1: Hold `packageUpdateLock` for the generation task** — first line in the goroutine: `a.packageUpdateLock.Lock(); defer a.packageUpdateLock.Unlock()` (then `pause`/`defer resume` as today). This excludes watcher updates from `GenerateThumbnailsProgress`'s file-list writes and makes `replacePackage` wait for the generation instead of closing the package under it. Deadlock check (documented in the code comment): nothing the generation calls (`fyne.Do`, binding `Set`, `pause`, `discard`) waits for `packageUpdateLock` while holding a lock the update path needs — `packageWatcher.report` releases `pw.mu` before invoking `onUpdate`.
-- [ ] **Step 2: Lock in the test** — `thumbnailCount` takes `a.packageUpdateLock` for the whole read (`currentPackage()` + `FileList().AsSlice()` iteration).
-- [ ] **Step 3: Run tests** — `go test ./internal/gui/ -run 'TestThumbnail|TestPackageWatcher' -v` → PASS; full `go test ./internal/gui/` → PASS.
-- [ ] **Step 4: Commit** — `git add internal/gui/pack.go internal/gui/package_watcher_test.go; git commit -m "fix: serialize thumbnail generation with package updates"`
+- [x] **Step 1: Hold `packageUpdateLock` for the generation task** — first line in the goroutine: `a.packageUpdateLock.Lock(); defer a.packageUpdateLock.Unlock()` (then `pause`/`defer resume` as today). This excludes watcher updates from `GenerateThumbnailsProgress`'s file-list writes and makes `replacePackage` wait for the generation instead of closing the package under it. Deadlock check (documented in the code comment): nothing the generation calls (`fyne.Do`, binding `Set`, `pause`, `discard`) waits for `packageUpdateLock` while holding a lock the update path needs — `packageWatcher.report` releases `pw.mu` before invoking `onUpdate`.
+- [x] **Step 2: Lock in the test** — `thumbnailCount` takes `a.packageUpdateLock` for the whole read (`currentPackage()` + `FileList().AsSlice()` iteration).
+- [x] **Step 3: Run tests** — `go test ./internal/gui/ -run 'TestThumbnail|TestPackageWatcher' -v` → PASS; full `go test ./internal/gui/` → PASS.
+- [x] **Step 4: Commit** — `git add internal/gui/pack.go internal/gui/package_watcher_test.go; git commit -m "fix: serialize thumbnail generation with package updates"`
 
 **Phase 2 gate:** `. .\setcc-gcc.ps1; go build ./...; go test ./...; gofmt -l .; git diff --check` → clean. (Full `-race` runs once, in Task 32.)
 
@@ -485,21 +485,21 @@ Capture once at function top: `pkg := a.currentPackage()`; `if pkg == nil { log.
 - New fields: `parentOf map[widget.TreeNodeID]widget.TreeNodeID`, `visibleSet map[widget.TreeNodeID]bool`.
 - `ParentOf` becomes an O(1) lookup; `IsVisiblySelected` becomes `t.visibleSet[uid]` (nil-safe: missing key is false).
 
-- [ ] **Step 1: Write the failing test** — `TestSelectionAtScale`: build a package with 500 resources, each tagged with 3 tags (create in a temp dir + `BuildFileList`, tag via `pkg.Tags().Tag`), `RebuildTree()`; select every tag branch; assert `GetSelectedResources()` returns exactly 500 entries (each resource once), `IsVisiblySelected` is true for every occurrence uid, `ParentOf(child)` returns the tag branch for a sample. (Correctness at scale — deliberately **no** wall-clock assertions, per the review's flake warning.)
-- [ ] **Step 2: Run to verify it fails** — `go test ./internal/gui/resource_tree/ -run TestSelectionAtScale -v` → FAIL (undefined indexes) — actually first run proves it passes *without* indexes too; write the test first, then implement indexes, then re-run (the test guards behaviour, not speed).
-- [ ] **Step 3: Implement the indexes** — at the end of `RebuildTree` (after the node maps are complete): build `parentOf` by iterating `nodeTree` (child → parent, first wins); `updateVisibleSelection` stores its local `visibleSet` into `t.visibleSet` (and `Select`/`Unselect`/`restoreClickSelection` paths already call it). Delete `startClickSequence` (no callers — dead code).
-- [ ] **Step 4: Run tests** — `go test ./internal/gui/resource_tree/` → PASS.
-- [ ] **Step 5: Commit** — `git add internal/gui/resource_tree/resource_tree.go internal/gui/resource_tree/resource_tree_test.go; git commit -m "perf: index parents and the visible selection, drop dead click helper"`
+- [x] **Step 1: Write the failing test** — `TestSelectionAtScale`: build a package with 500 resources, each tagged with 3 tags (create in a temp dir + `BuildFileList`, tag via `pkg.Tags().Tag`), `RebuildTree()`; select every tag branch; assert `GetSelectedResources()` returns exactly 500 entries (each resource once), `IsVisiblySelected` is true for every occurrence uid, `ParentOf(child)` returns the tag branch for a sample. (Correctness at scale — deliberately **no** wall-clock assertions, per the review's flake warning.)
+- [x] **Step 2: Run to verify it fails** — `go test ./internal/gui/resource_tree/ -run TestSelectionAtScale -v` → FAIL (undefined indexes) — actually first run proves it passes *without* indexes too; write the test first, then implement indexes, then re-run (the test guards behaviour, not speed).
+- [x] **Step 3: Implement the indexes** — at the end of `RebuildTree` (after the node maps are complete): build `parentOf` by iterating `nodeTree` (child → parent, first wins); `updateVisibleSelection` stores its local `visibleSet` into `t.visibleSet` (and `Select`/`Unselect`/`restoreClickSelection` paths already call it). Delete `startClickSequence` (no callers — dead code).
+- [x] **Step 4: Run tests** — `go test ./internal/gui/resource_tree/` → PASS.
+- [x] **Step 5: Commit** — `git add internal/gui/resource_tree/resource_tree.go internal/gui/resource_tree/resource_tree_test.go; git commit -m "perf: index parents and the visible selection, drop dead click helper"`
 
 ### Task 16: `GetSelectedResources` computes `Selected` in a second pass
 
 **Files:** Modify: `internal/gui/resource_tree/resource_tree.go` (`GetSelectedResources` ~:833-864); Test: `internal/gui/resource_tree/resource_tree_test.go`
 
-- [ ] **Step 1: Write the failing test** — `TestGetSelectedResourcesReportsDirectlySelectedResources`: fixture with tag `rock` on `Rock.png`; in **path mode** `Select(resPathUID)`, then `Select(tagBranchUID)` (branch popped first by the LIFO stack ⇒ first-seen uid is the branch child) → entry for Rock must have `Selected == true` (today: false ⇒ FAIL). Second case: only the branch selected → Rock `Selected == false`, and a resource with no direct selection under another selected branch → `false`.
-- [ ] **Step 2: Run to verify it fails** — `go test ./internal/gui/resource_tree/ -run TestGetSelectedResourcesReports -v` → FAIL.
-- [ ] **Step 3: Implement** — after the collection loop (before the sort), second pass: `resources[i].Selected = t.selectedIndexOfData(resources[i].Uid) != -1` (data-based, so any occurrence uid counts as "on its own"; a roll-up branch carries different data and yields `false`).
-- [ ] **Step 4: Run tests** — `go test ./internal/gui/resource_tree/` → PASS.
-- [ ] **Step 5: Commit** — `git add internal/gui/resource_tree/resource_tree.go internal/gui/resource_tree/resource_tree_test.go; git commit -m "fix: determine direct selection of resources in a second pass"`
+- [x] **Step 1: Write the failing test** — `TestGetSelectedResourcesReportsDirectlySelectedResources`: fixture with tag `rock` on `Rock.png`; in **path mode** `Select(resPathUID)`, then `Select(tagBranchUID)` (branch popped first by the LIFO stack ⇒ first-seen uid is the branch child) → entry for Rock must have `Selected == true` (today: false ⇒ FAIL). Second case: only the branch selected → Rock `Selected == false`, and a resource with no direct selection under another selected branch → `false`.
+- [x] **Step 2: Run to verify it fails** — `go test ./internal/gui/resource_tree/ -run TestGetSelectedResourcesReports -v` → FAIL.
+- [x] **Step 3: Implement** — after the collection loop (before the sort), second pass: `resources[i].Selected = t.selectedIndexOfData(resources[i].Uid) != -1` (data-based, so any occurrence uid counts as "on its own"; a roll-up branch carries different data and yields `false`).
+- [x] **Step 4: Run tests** — `go test ./internal/gui/resource_tree/` → PASS.
+- [x] **Step 5: Commit** — `git add internal/gui/resource_tree/resource_tree.go internal/gui/resource_tree/resource_tree_test.go; git commit -m "fix: determine direct selection of resources in a second pass"`
 
 ### Task 17: context-menu *Unselect* walks to the selected ancestor
 
@@ -508,11 +508,11 @@ Capture once at function top: `pkg := a.currentPackage()`; `if pkg == nil { log.
 **Interfaces:**
 - Produces: `func (t *ResourceTree) UnselectIncludingAncestors(uid widget.TreeNodeID)` — if the node (by uid or data) is selected → `Unselect(uid)`; otherwise unselect the first selected ancestor from `AllParentsOf`.
 
-- [ ] **Step 1: Write the failing test** — `TestUnselectIncludingAncestorsUnselectsTheSelectedBranch`: `Select(tagBranchUID)` → `UnselectIncludingAncestors(childUID)` → branch no longer selected (today `Unselect(child)` silently no-ops ⇒ FAIL). Plus: `contextMenuItems()` on that roll-up-selected child returns exactly one item labelled `lang.X("tree.context.unselect", "Unselect")` (the label is asserted; the handler is a one-line delegation covered by the helper test).
-- [ ] **Step 2: Run to verify it fails** — `go test ./internal/gui/resource_tree/ -run 'TestUnselectIncludingAncestors|TestContextMenu' -v` → FAIL.
-- [ ] **Step 3: Implement** the helper; use it in the context-menu *Unselect* action and replace the body of `deselectResource` in `package.go` with a call to it (keeps the two paths in sync). Do **not** change `Unselect` itself (ctrl-unselect of a roll-up child must stay a no-op — you cannot represent "branch selected except one child").
-- [ ] **Step 4: Run tests** — `go test ./internal/gui/resource_tree/; go test ./internal/gui/` → PASS (bulk deselect spec tests included).
-- [ ] **Step 5: Commit** — `git add internal/gui/resource_tree/resource_tree.go internal/gui/resource_tree/resource_tree_test.go internal/gui/package.go; git commit -m "fix: unselect via the selected ancestor for roll-up selected nodes"`
+- [x] **Step 1: Write the failing test** — `TestUnselectIncludingAncestorsUnselectsTheSelectedBranch`: `Select(tagBranchUID)` → `UnselectIncludingAncestors(childUID)` → branch no longer selected (today `Unselect(child)` silently no-ops ⇒ FAIL). Plus: `contextMenuItems()` on that roll-up-selected child returns exactly one item labelled `lang.X("tree.context.unselect", "Unselect")` (the label is asserted; the handler is a one-line delegation covered by the helper test).
+- [x] **Step 2: Run to verify it fails** — `go test ./internal/gui/resource_tree/ -run 'TestUnselectIncludingAncestors|TestContextMenu' -v` → FAIL.
+- [x] **Step 3: Implement** the helper; use it in the context-menu *Unselect* action and replace the body of `deselectResource` in `package.go` with a call to it (keeps the two paths in sync). Do **not** change `Unselect` itself (ctrl-unselect of a roll-up child must stay a no-op — you cannot represent "branch selected except one child").
+- [x] **Step 4: Run tests** — `go test ./internal/gui/resource_tree/; go test ./internal/gui/` → PASS (bulk deselect spec tests included).
+- [x] **Step 5: Commit** — `git add internal/gui/resource_tree/resource_tree.go internal/gui/resource_tree/resource_tree_test.go internal/gui/package.go; git commit -m "fix: unselect via the selected ancestor for roll-up selected nodes"`
 
 ### Task 18: fast second click flushes the pending click instead of cancelling it
 
@@ -521,12 +521,12 @@ Capture once at function top: `pkg := a.currentPackage()`; `if pkg == nil { log.
 **Interfaces:**
 - Produces: `func (t *ResourceTree) flushPendingClick()` — if a debounced click is pending, apply it now (`selectOnly` + `endClickSequence`), else no-op.
 
-- [ ] **Step 1: Write the failing test** — `TestFastSecondClickKeepsTheFirstClick`: select node B; `MouseDown` plain on A (pending); immediately `MouseDown` ctrl on B (within `DoubleTapDelay`); after the timers settle, selection must be exactly `[A]` (first click flushed, then ctrl-unselect of B) — today the pending A is cancelled and the selection ends empty (FAIL). Use the existing `waitForPendingClick` helper from Task 0's fix for settling.
-- [ ] **Step 2: Run to verify it fails** — `go test ./internal/gui/resource_tree/ -run TestFastSecondClickKeepsTheFirstClick -v` → FAIL.
-- [ ] **Step 3: Implement `flushPendingClick`** — under `clickMu`: if `clickTimer == nil` return; capture `lastClickUID`, `cancelPendingClickLocked()`, unlock, then call `applyPendingClick(uid)` (it re-checks `lastClickUID`, which was not cleared, then `selectOnly` + `endClickSequence`).
-- [ ] **Step 4: Call it in `MouseDown`** — in the ctrl and shift branches *before* `endClickSequence()`; in the new-click-sequence branch *before* cloning `clickSelection` (so the restored double-click selection includes the flushed click).
-- [ ] **Step 5: Run tests** — `go test ./internal/gui/resource_tree/` → PASS (all existing click/double-click tests included).
-- [ ] **Step 6: Commit** — `git add internal/gui/resource_tree/resource_tree.go internal/gui/resource_tree/resource_tree_node_test.go; git commit -m "fix: apply a pending debounced click when a new click sequence starts"`
+- [x] **Step 1: Write the failing test** — `TestFastSecondClickKeepsTheFirstClick`: select node B; `MouseDown` plain on A (pending); immediately `MouseDown` ctrl on B (within `DoubleTapDelay`); after the timers settle, selection must be exactly `[A]` (first click flushed, then ctrl-unselect of B) — today the pending A is cancelled and the selection ends empty (FAIL). Use the existing `waitForPendingClick` helper from Task 0's fix for settling.
+- [x] **Step 2: Run to verify it fails** — `go test ./internal/gui/resource_tree/ -run TestFastSecondClickKeepsTheFirstClick -v` → FAIL.
+- [x] **Step 3: Implement `flushPendingClick`** — under `clickMu`: if `clickTimer == nil` return; capture `lastClickUID`, `cancelPendingClickLocked()`, unlock, then call `applyPendingClick(uid)` (it re-checks `lastClickUID`, which was not cleared, then `selectOnly` + `endClickSequence`).
+- [x] **Step 4: Call it in `MouseDown`** — in the ctrl and shift branches *before* `endClickSequence()`; in the new-click-sequence branch *before* cloning `clickSelection` (so the restored double-click selection includes the flushed click).
+- [x] **Step 5: Run tests** — `go test ./internal/gui/resource_tree/` → PASS (all existing click/double-click tests included).
+- [x] **Step 6: Commit** — `git add internal/gui/resource_tree/resource_tree.go internal/gui/resource_tree/resource_tree_node_test.go; git commit -m "fix: apply a pending debounced click when a new click sequence starts"`
 
 ### Task 19: bulk pane updates in place (pane rebuild only on kind/resource change)
 
@@ -539,12 +539,12 @@ Capture once at function top: `pkg := a.currentPackage()`; `if pkg == nil { log.
 - `updateBulkResourceNode(b *bulkPane, uid string, obj fyne.CanvasObject)` (drops the index param; resolves via `byUID`).
 - Closure state in `buildPackageTreeAndInfoPane`: `paneMode` (`none`/`single`/`bulk`), `singleInfo *structures.FileInfo`, `bulk *bulkPane`.
 
-- [ ] **Step 1: Write the failing test** — `TestBulkPaneIsRebuiltOnlyWhenTheKindChanges` (in `package_pane_test.go`): load fixture via `newSpecApp`-style helper; `tree.Select(resA)` → capture `content := a.ui.Get(nameResourcePane).(*fyne.Container).Objects[0]`; `tree.Select(resB)` (now bulk) → content changed, `a.ui.Get(nameBulkOpsPane) != nil`; `tree.Select(resC)` → content **identical pointer** (today rebuilt each time ⇒ FAIL).
-- [ ] **Step 2: Run to verify it fails** — `go test ./internal/gui/ -run TestBulkPaneIsRebuiltOnlyWhenTheKindChanges -v` → FAIL.
-- [ ] **Step 3: Restructure the bulk pane around `bulkPane`** — resource list becomes `widget.NewListWithData(b.ids, createBulkResourceNode, update)`; tag-remove button, add-tag button and `commonTags` read `b.resources` at invocation time (fixes stale captures too).
-- [ ] **Step 4: Rewrite the `OnSelectionChanged` closure** — `len(selected)==0`: rebuild `defaultPreview` only if mode ≠ none. Single `*ResourceFileInfoNode`: rebuild `buildInfoPane` unless mode == single **and** `singleInfo == data.Info` (skip; the selection only changed occurrences). Otherwise (bulk): if mode == bulk && `bulk != nil` → `bulk.setResources(tree.GetSelectedResources())` and return **without** `a.ui.Reset()`; else build the pane via `buildBulkOpsPane` and rebuild. `a.ui.Reset()` only on the rebuild branches.
-- [ ] **Step 5: Run tests** — `go test ./internal/gui/` → PASS, especially `z_spec_bulk_ops_test.go` (it selects resources incrementally, exercising `setResources`).
-- [ ] **Step 6: Commit** — `git add internal/gui/package.go internal/gui/package_pane_test.go; git commit -m "perf: update the bulk pane in place instead of rebuilding it per selection"`
+- [x] **Step 1: Write the failing test** — `TestBulkPaneIsRebuiltOnlyWhenTheKindChanges` (in `package_pane_test.go`): load fixture via `newSpecApp`-style helper; `tree.Select(resA)` → capture `content := a.ui.Get(nameResourcePane).(*fyne.Container).Objects[0]`; `tree.Select(resB)` (now bulk) → content changed, `a.ui.Get(nameBulkOpsPane) != nil`; `tree.Select(resC)` → content **identical pointer** (today rebuilt each time ⇒ FAIL).
+- [x] **Step 2: Run to verify it fails** — `go test ./internal/gui/ -run TestBulkPaneIsRebuiltOnlyWhenTheKindChanges -v` → FAIL.
+- [x] **Step 3: Restructure the bulk pane around `bulkPane`** — resource list becomes `widget.NewListWithData(b.ids, createBulkResourceNode, update)`; tag-remove button, add-tag button and `commonTags` read `b.resources` at invocation time (fixes stale captures too).
+- [x] **Step 4: Rewrite the `OnSelectionChanged` closure** — `len(selected)==0`: rebuild `defaultPreview` only if mode ≠ none. Single `*ResourceFileInfoNode`: rebuild `buildInfoPane` unless mode == single **and** `singleInfo == data.Info` (skip; the selection only changed occurrences). Otherwise (bulk): if mode == bulk && `bulk != nil` → `bulk.setResources(tree.GetSelectedResources())` and return **without** `a.ui.Reset()`; else build the pane via `buildBulkOpsPane` and rebuild. `a.ui.Reset()` only on the rebuild branches.
+- [x] **Step 5: Run tests** — `go test ./internal/gui/` → PASS, especially `z_spec_bulk_ops_test.go` (it selects resources incrementally, exercising `setResources`).
+- [x] **Step 6: Commit** — `git add internal/gui/package.go internal/gui/package_pane_test.go; git commit -m "perf: update the bulk pane in place instead of rebuilding it per selection"`
 
 ### Task 20: debounce the filter entry
 
@@ -553,10 +553,10 @@ Capture once at function top: `pkg := a.currentPackage()`; `if pkg == nil { log.
 **Interfaces:**
 - New App fields: `filterDebounce time.Duration` (set to `const defaultFilterDebounce = 200 * time.Millisecond` in `NewApp`), `filterTimer *time.Timer`, `filterMu sync.Mutex` guarding the timer (the listener runs on the Fyne goroutine, `clean`/rebuild on others).
 
-- [ ] **Step 1: Update the spec test to wait** — in `TestSpecResourceFilter`, replace each immediate `assert` after `entry.SetText(...)` with `require.Eventually` polling `shownResources(t, tree)` against the expected slice (exact for the single-result cases, `ElementsMatch` for the multi-result ones). First run against current code → PASS (baseline), then the debounce lands and the same waits keep it green.
-- [ ] **Step 2: Implement the debounce** — in `buildPackageTree`: stop any previous `filterTimer` at the top (content is being replaced). Listener body: parse/validate as today (the validator already shows the error text), then under `filterMu`: stop the old timer, `filterTimer = time.AfterFunc(a.filterDebounce, func() { fyne.Do(func() { f, err := Parse(filter); if err != nil { return }; resourceTree.SetFilter(f); resourceTree.OpenBranch(PackageTreeRootID) }) })`. The `fyne.Do` closure reads the `filter` closure variable on the Fyne goroutine — no cross-goroutine read. `clean()`: stop the timer under `filterMu`.
-- [ ] **Step 3: Run tests** — `go test ./internal/gui/ -run 'TestSpecResourceFilter|TestSpec' -v` → PASS; full package PASS.
-- [ ] **Step 4: Commit** — `git add internal/gui/gui.go internal/gui/package.go internal/gui/z_spec_resource_tree_test.go; git commit -m "perf: debounce the resource tree filter entry"`
+- [x] **Step 1: Update the spec test to wait** — in `TestSpecResourceFilter`, replace each immediate `assert` after `entry.SetText(...)` with `require.Eventually` polling `shownResources(t, tree)` against the expected slice (exact for the single-result cases, `ElementsMatch` for the multi-result ones). First run against current code → PASS (baseline), then the debounce lands and the same waits keep it green.
+- [x] **Step 2: Implement the debounce** — in `buildPackageTree`: stop any previous `filterTimer` at the top (content is being replaced). Listener body: parse/validate as today (the validator already shows the error text), then under `filterMu`: stop the old timer, `filterTimer = time.AfterFunc(a.filterDebounce, func() { fyne.Do(func() { f, err := Parse(filter); if err != nil { return }; resourceTree.SetFilter(f); resourceTree.OpenBranch(PackageTreeRootID) }) })`. The `fyne.Do` closure reads the `filter` closure variable on the Fyne goroutine — no cross-goroutine read. `clean()`: stop the timer under `filterMu`.
+- [x] **Step 3: Run tests** — `go test ./internal/gui/ -run 'TestSpecResourceFilter|TestSpec' -v` → PASS; full package PASS.
+- [x] **Step 4: Commit** — `git add internal/gui/gui.go internal/gui/package.go internal/gui/z_spec_resource_tree_test.go; git commit -m "perf: debounce the resource tree filter entry"`
 
 ### Task 21: watcher caching, symlink safety, root check
 
@@ -565,16 +565,17 @@ Capture once at function top: `pkg := a.currentPackage()`; `if pkg == nil { log.
 **Interfaces:**
 - New on `packageWatcher`: `root string`, `watched map[string]bool`, `watchMu sync.Mutex`; helper `func (pw *packageWatcher) isWatched(path string) bool`; `DiscardUnder` gains exact-path matching (`path == clean(dir)` counts as under it) so a single file can be discarded.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
   1. `TestUpdateFromPathsIgnoresPathsOutsideTheRoot` (`pkg/ddpackage/pack_test.go`): create a file outside the unpacked dir, call `UpdateFromPaths([]string{outsideFile})` → file list unchanged (FAIL today — the outside file gets indexed).
   2. `TestWatcherDoesNotWatchSymlinksLeavingThePackage`: create a symlink inside the fixture pointing to a temp dir outside it (`t.Skip` if `os.Symlink` fails — Windows needs developer mode), touch the target, `waitForWatcherIdle` → `assert.False(a.watcher().isWatched(symlinkPath))` and the outside file is not indexed (FAIL today — `os.Stat` follows the link and the dir gets watched).
   3. Keep the whole existing watcher suite green (it is the regression net for the cache).
 
-- [ ] **Step 2: Run to verify they fail** — `go test ./internal/gui/ -run TestWatcherDoesNotWatchSymlinks -v; go test ./pkg/ddpackage/ -run TestUpdateFromPathsIgnores -v` → FAIL.
-- [ ] **Step 3: Implement the watcher cache** — `Watch(dir)` stores `root` and records every added path in `watched`. `watchNewFolder`: `os.Lstat` (no follow); if symlink → `filepath.EvalSymlinks` + `utils.PathIsSub(pw.root, resolved)` or skip; if not a dir or already `watched` → return; add self + subdirs (skipping symlinks leaving root) under `watchMu`, recording in `watched`. `cleanupWatchList`: `Lstat` for existence + `watched` membership instead of `slices.Contains(WatchList(), …)`; delete from `watched` on remove. All `WatchList()` calls are gone.
-- [ ] **Step 4: Root check in `pkg/ddpackage.updateFromPaths`** — right after `filepath.Abs`: `if isSub, _ := utils.PathIsSub(p.unpackedPath, absPath); !isSub { continue }` (keeps the existing inner check at :231 harmless).
-- [ ] **Step 5: Run tests** — `go test ./internal/gui/ -run TestPackageWatcher -v` → PASS; `go test ./pkg/ddpackage/` → PASS.
-- [ ] **Step 6: Commit** — `git add internal/gui/package_watcher.go internal/gui/package_watcher_test.go pkg/ddpackage/pack.go pkg/ddpackage/pack_test.go; git commit -m "fix: cache the watch set, skip symlinks leaving the pack root, ignore outside paths"`
+- [x] **Step 2: Run to verify they fail** — `go test ./internal/gui/ -run TestWatcherDoesNotWatchSymlinks -v; go test ./pkg/ddpackage/ -run TestUpdateFromPathsIgnores -v` → FAIL.
+- [x] **Step 3: Implement the watcher cache** — `Watch(dir)` stores `root` and records every added path in `watched`. `watchNewFolder`: `os.Lstat` (no follow); if symlink → `filepath.EvalSymlinks` + `utils.PathIsSub(pw.root, resolved)` or skip; if not a dir or already `watched` → return; add self + subdirs (skipping symlinks leaving root) under `watchMu`, recording in `watched`. `cleanupWatchList`: `Lstat` for existence + `watched` membership instead of `slices.Contains(WatchList(), …)`; delete from `watched` on remove. All `WatchList()` calls are gone.
+  **Amended during execution (ruling R-T21, user-confirmed):** the cache desyncs permanently on delete-then-recreate inside the debounce window (or while paused), because the OS watch dies with the old directory while `watched[path]` stays true. Two additions, both implemented: (a) clear `watched[path]` on a `Remove`/`Rename` event **in `watch()` before `enqueue`** — i.e. before any debounce/pause gate, so it works while paused — so a recreate re-adds the OS watch; (b) `cleanupWatchList`'s `Remove` failure is logged **unless** it is `fsnotify.ErrNonExistentWatch`/`os.ErrNotExist` (fsnotify already dropped the entry when it dispatched the deletion event, so the old guard warned on every real folder deletion); genuine failures still warn. Test: `TestWatcherWatchesAFolderAgainAfterItWasDeletedAndRecreated`.
+- [x] **Step 4: Root check in `pkg/ddpackage.updateFromPaths`** — right after `filepath.Abs`: `if isSub, _ := utils.PathIsSub(p.unpackedPath, absPath); !isSub { continue }` (keeps the existing inner check at :231 harmless).
+- [x] **Step 5: Run tests** — `go test ./internal/gui/ -run TestPackageWatcher -v` → PASS; `go test ./pkg/ddpackage/` → PASS.
+- [x] **Step 6: Commit** — `git add internal/gui/package_watcher.go internal/gui/package_watcher_test.go pkg/ddpackage/pack.go pkg/ddpackage/pack_test.go; git commit -m "fix: cache the watch set, skip symlinks leaving the pack root, ignore outside paths"`
 
 ### Task 22: cap `RepeatHorizontally` allocations
 
@@ -583,12 +584,12 @@ Capture once at function top: `pkg := a.currentPackage()`; `if pkg == nil { log.
 **Interfaces:**
 - Produces: `const maxRepeatPixels int64 = 1 << 22` (≈4.19 M pixels ≈ 16 MiB of NRGBA — an order of magnitude more than any thumbnail needs).
 
-- [ ] **Step 1: Write the failing test** — `TestRepeatHorizontallySkipsAllocationsBeyondTheBudget`: 10×10 source, `RepeatHorizontally(img, maxRepeatPixels/100+1)` must return the **same** image (identity) — today it allocates width×height and returns a new image (FAIL; the allocation here is chosen to be ~16 MB, safe to run pre-fix).
-- [ ] **Step 2: Run to verify it fails** — `go test ./pkg/ddimage/ -run TestRepeatHorizontallySkips -v` → FAIL.
-- [ ] **Step 3: Implement** — first line of `RepeatHorizontally`: `if int64(width)*int64(bounds.Dy()) > maxRepeatPixels { return img }` (use `int64` math so huge widths can not overflow). In `wallPathThumbnail`, clamp `targetWidth` with `int64` math to `maxRepeatPixels / max(bounds.Dy(), 1)` before the `int` conversion, so a pathological height can not produce an overflowing/negative width.
-- [ ] **Step 4: Add the regression test for the pathological path** — `TestWallThumbnailOfVeryTallTexture`: 10×100000 image → `WallThumbnail` completes and the result width ≤ `maxThumbnailWidth` (written **after** the fix — pre-fix it would OOM).
-- [ ] **Step 5: Run tests** — `go test ./pkg/ddimage/` → PASS (all existing pixel-exact tests unchanged).
-- [ ] **Step 6: Commit** — `git add pkg/ddimage/ddimage.go pkg/ddimage/ddimage_test.go; git commit -m "fix: cap the repeat allocation for extreme texture aspect ratios"`
+- [x] **Step 1: Write the failing test** — `TestRepeatHorizontallySkipsAllocationsBeyondTheBudget`: 10×10 source, `RepeatHorizontally(img, maxRepeatPixels/100+1)` must return the **same** image (identity) — today it allocates width×height and returns a new image (FAIL; the allocation here is chosen to be ~16 MB, safe to run pre-fix).
+- [x] **Step 2: Run to verify it fails** — `go test ./pkg/ddimage/ -run TestRepeatHorizontallySkips -v` → FAIL.
+- [x] **Step 3: Implement** — first line of `RepeatHorizontally`: `if int64(width)*int64(bounds.Dy()) > maxRepeatPixels { return img }` (use `int64` math so huge widths can not overflow). In `wallPathThumbnail`, clamp `targetWidth` with `int64` math to `maxRepeatPixels / max(bounds.Dy(), 1)` before the `int` conversion, so a pathological height can not produce an overflowing/negative width.
+- [x] **Step 4: Add the regression test for the pathological path** — `TestWallThumbnailOfVeryTallTexture`: 10×100000 image → `WallThumbnail` completes and the result width ≤ `maxThumbnailWidth` (written **after** the fix — pre-fix it would OOM).
+- [x] **Step 5: Run tests** — `go test ./pkg/ddimage/` → PASS (all existing pixel-exact tests unchanged).
+- [x] **Step 6: Commit** — `git add pkg/ddimage/ddimage.go pkg/ddimage/ddimage_test.go; git commit -m "fix: cap the repeat allocation for extreme texture aspect ratios"`
 
 ### Task 23: file preview size gate
 
@@ -597,22 +598,22 @@ Capture once at function top: `pkg := a.currentPackage()`; `if pkg == nil { log.
 **Interfaces:**
 - Produces: `const maxTextPreviewBytes int64 = 4 << 20` (4 MiB).
 
-- [ ] **Step 1: Write the failing tests** — `TestFilePreviewSizeGate`: build a fixture dir (via `testutil.DefaultFixture().Write`) plus `data/long.json` (>200 lines, small) and `data/huge.json` (>4 MiB, few lines); load with `loadUnpackedSync`, then for each: `a.buildFilePreview(info)` → long file shows `nameTooLargeLabel` (line-count rule), huge file shows `nameTooLargeLabel` (size rule — today it reads 4 MiB first ⇒ FAIL on the huge case by construction: assert the gate is hit, i.e. the tooLarge branch is taken), and the fixture's small `data/default.dungeondraft_tags` shows `nameTextPreview`. Confirm `.json` is in `DefaultValidExt()` (it is) so the files are indexed.
-- [ ] **Step 2: Run to verify it fails** — `go test ./internal/gui/ -run TestFilePreviewSizeGate -v` → FAIL.
-- [ ] **Step 3: Implement** — in the non-image branch only: determine `size := info.Size`; if `size <= 0 && info.Path != ""` → `os.Stat` (unpacked files carry `Size == 0`; packed files carry the header size). If `size > maxTextPreviewBytes` → take the existing `tooLarge` branch **without** calling `LoadResource`. Otherwise read as today and replace `strings.Split(textContent, "\n")` with `bytes.Count(fileData, []byte("\n"))+1 > 200`. The image branch keeps reading unconditionally (a preview needs the bytes).
-- [ ] **Step 4: Run tests** — `go test ./internal/gui/` → PASS.
-- [ ] **Step 5: Commit** — `git add internal/gui/package.go internal/gui/package_preview_test.go; git commit -m "fix: gate the text preview on file size before reading"`
+- [x] **Step 1: Write the failing tests** — `TestFilePreviewSizeGate`: build a fixture dir (via `testutil.DefaultFixture().Write`) plus `data/long.json` (>200 lines, small) and `data/huge.json` (>4 MiB, few lines); load with `loadUnpackedSync`, then for each: `a.buildFilePreview(info)` → long file shows `nameTooLargeLabel` (line-count rule), huge file shows `nameTooLargeLabel` (size rule — today it reads 4 MiB first ⇒ FAIL on the huge case by construction: assert the gate is hit, i.e. the tooLarge branch is taken), and the fixture's small `data/default.dungeondraft_tags` shows `nameTextPreview`. Confirm `.json` is in `DefaultValidExt()` (it is) so the files are indexed.
+- [x] **Step 2: Run to verify it fails** — `go test ./internal/gui/ -run TestFilePreviewSizeGate -v` → FAIL.
+- [x] **Step 3: Implement** — in the non-image branch only: determine `size := info.Size`; if `size <= 0 && info.Path != ""` → `os.Stat` (unpacked files carry `Size == 0`; packed files carry the header size). If `size > maxTextPreviewBytes` → take the existing `tooLarge` branch **without** calling `LoadResource`. Otherwise read as today and replace `strings.Split(textContent, "\n")` with `bytes.Count(fileData, []byte("\n"))+1 > 200`. The image branch keeps reading unconditionally (a preview needs the bytes).
+- [x] **Step 4: Run tests** — `go test ./internal/gui/` → PASS.
+- [x] **Step 5: Commit** — `git add internal/gui/package.go internal/gui/package_preview_test.go; git commit -m "fix: gate the text preview on file size before reading"`
 
 ### Task 24: tag generation off the Fyne goroutine + discard its own writes
 
 **Files:** Modify: `internal/gui/tag_gen.go` (`generateTags` ~:36-46, generate button ~:460-491), `internal/gui/package_watcher.go` (`DiscardUnder` — exact-path match from Task 21); Test: `internal/gui/package_watcher_test.go` (`TestTagGenerationUpdatesTheTagsWithoutSpammingTheWatcher` ~:568)
 
-- [ ] **Step 1: Tighten the existing test** — change `assert.LessOrEqual(t, updated-count, 1, …)` to `assert.Equal(t, 0, updated-count, "the watcher must not report the tags file the generation itself wrote")` (FAIL after the discard fix is absent — it currently reports exactly that one update).
-- [ ] **Step 2: Implement the discard** — inside `generateTags`, after `pkg.GenerateTagsProgress(...)` and **before** `defer a.resumePackageWatcher()` runs: `a.discardPackageWatcherChanges(filepath.Join(pkg.UnpackedPath(), "data", "default.dungeondraft_tags"))` (requires Task 21's exact-path matching in `DiscardUnder` — if Task 21's ordering differs, do the `DiscardUnder` extension here).
-- [ ] **Step 3: Run to verify** — `go test ./internal/gui/ -run TestTagGenerationUpdatesTheTags -v` → PASS after the fix (write the tightened assertion first, watch it fail, then apply Steps 2).
-- [ ] **Step 4: Move the button handler to a goroutine** — in the generate button's `OnTapped` (currently synchronous at :463-490): keep `progressDlg.Show()` + `a.disableButtons.Set(true)` + `generateBtn.Disable()` on the Fyne goroutine, then `go func() { a.generateTags(generator, progress.Report); fyne.Do(func() { progressDlg.Hide(); a.disableButtons.Set(false); generateBtn.Enable(); doneDlg.Show() }) }()` (same shape as `genThumbnails`; the `doneDlg.SetOnClosed → genTagsDlg.Hide` wiring stays inside the `fyne.Do`).
-- [ ] **Step 5: Run tests** — `go test ./internal/gui/` → PASS.
-- [ ] **Step 6: Commit** — `git add internal/gui/tag_gen.go internal/gui/package_watcher_test.go; git commit -m "fix: generate tags off the Fyne goroutine and discard the tags file it writes"`
+- [x] **Step 1: Tighten the existing test** — change `assert.LessOrEqual(t, updated-count, 1, …)` to `assert.Equal(t, 0, updated-count, "the watcher must not report the tags file the generation itself wrote")` (FAIL after the discard fix is absent — it currently reports exactly that one update).
+- [x] **Step 2: Implement the discard** — inside `generateTags`, after `pkg.GenerateTagsProgress(...)` and **before** `defer a.resumePackageWatcher()` runs: `a.discardPackageWatcherChanges(filepath.Join(pkg.UnpackedPath(), "data", "default.dungeondraft_tags"))` (requires Task 21's exact-path matching in `DiscardUnder` — if Task 21's ordering differs, do the `DiscardUnder` extension here).
+- [x] **Step 3: Run to verify** — `go test ./internal/gui/ -run TestTagGenerationUpdatesTheTags -v` → PASS after the fix (write the tightened assertion first, watch it fail, then apply Steps 2).
+- [x] **Step 4: Move the button handler to a goroutine** — in the generate button's `OnTapped` (currently synchronous at :463-490): keep `progressDlg.Show()` + `a.disableButtons.Set(true)` + `generateBtn.Disable()` on the Fyne goroutine, then `go func() { a.generateTags(generator, progress.Report); fyne.Do(func() { progressDlg.Hide(); a.disableButtons.Set(false); generateBtn.Enable(); doneDlg.Show() }) }()` (same shape as `genThumbnails`; the `doneDlg.SetOnClosed → genTagsDlg.Hide` wiring stays inside the `fyne.Do`).
+- [x] **Step 5: Run tests** — `go test ./internal/gui/` → PASS.
+- [x] **Step 6: Commit** — `git add internal/gui/tag_gen.go internal/gui/package_watcher_test.go; git commit -m "fix: generate tags off the Fyne goroutine and discard the tags file it writes"`
 
 **Phase 3 gate:** `. .\setcc-gcc.ps1; go build ./...; go test ./...; gofmt -l .; git diff --check` → clean.
 
@@ -624,47 +625,47 @@ Capture once at function top: `pkg := a.currentPackage()`; `if pkg == nil { log.
 
 **Files:** Modify: `.github/workflows/build.yml`
 
-- [ ] **Step 1: Release waits for tests** — `release:` → `needs: [build, test]` (currently `needs: build` at :174).
-- [ ] **Step 2: Deterministic Makefile tab + verification** — replace the sed line (:117) with a shell-expanded real tab and fail the job if no tab landed:
+- [x] **Step 1: Release waits for tests** — `release:` → `needs: [build, test]` (currently `needs: build` at :174).
+- [x] **Step 2: Deterministic Makefile tab + verification** — replace the sed line (:117) with a shell-expanded real tab and fail the job if no tab landed:
   ```bash
   TAB=$'\t'
   sed -i "/^install:/a\\${TAB}install -Dm00755 usr/local/bin/\$(Exec)-cli \$(DESTDIR)\$(PREFIX)/bin/\$(Exec)-cli" ./install/dungeondraft-packager/Makefile
   grep -q $'^\tinstall -Dm00755' ./install/dungeondraft-packager/Makefile
   ```
   (Double quotes expand `${TAB}` to a literal tab; `\$` keeps `$(Exec)` literal for make; the `grep` is the hard guarantee the recipe line starts with a TAB.)
-- [ ] **Step 3: Test job extras** — after `go test ./...`:
+- [x] **Step 3: Test job extras** — after `go test ./...`:
   - exclude the scratch dir: `go list ./... | grep -v '/testing$' | xargs go test`
   - `test -z "$(gofmt -l .)"` and `go vet ./...` (fix any pre-existing vet findings in the same commit if trivial; otherwise report them before proceeding).
-- [ ] **Step 4: Add a `race` job** — same setup as `test` (Go 1.27.x, apt deps, `CGO_ENABLED: 1`) running `go test -race ./internal/gui/... ./pkg/ddpackage/...` (gcc on ubuntu supports the race runtime; this is the job that would have caught every Phase 2 finding). `release` does **not** wait for `race` (keeps tag releases fast; `test` remains the gate).
-- [ ] **Step 5: Validate YAML** — `python3 -c "import yaml,sys; yaml.safe_load(open('.github/workflows/build.yml'))"` or a careful visual check of indentation; commit and let CI confirm on push.
-- [ ] **Step 6: Commit** — `git add .github/workflows/build.yml; git commit -m "ci: gate releases on tests, verify the Makefile tab, add vet/gofmt/race jobs"`
+- [x] **Step 4: Add a `race` job** — same setup as `test` (Go 1.27.x, apt deps, `CGO_ENABLED: 1`) running `go test -race ./internal/gui/... ./pkg/ddpackage/...` (gcc on ubuntu supports the race runtime; this is the job that would have caught every Phase 2 finding). `release` does **not** wait for `race` (keeps tag releases fast; `test` remains the gate).
+- [x] **Step 5: Validate YAML** — `python3 -c "import yaml,sys; yaml.safe_load(open('.github/workflows/build.yml'))"` or a careful visual check of indentation; commit and let CI confirm on push.
+- [x] **Step 6: Commit** — `git add .github/workflows/build.yml; git commit -m "ci: gate releases on tests, verify the Makefile tab, add vet/gofmt/race jobs"`
 
 ### Task 26: pin the locale in `newTestApp`
 
 **Files:** Modify: `internal/gui/gui_test.go` (`newTestApp` ~:36)
 
-- [ ] **Step 1: Add the pin** — `a.app.Preferences().SetString("locale", "en")` between `NewAppWithFyneApp` and `a.setup()`, with the same comment as `newSpecApp` (z_spec_helpers_test.go:24-26).
-- [ ] **Step 2: Run to verify** — `go test ./internal/gui/ -run 'TestAppSetNotAPackageContent|TestAppAddTagThroughTheTagPane' -v` → PASS (they already pass on an English machine; the pin makes them locale-independent — verify by `Set-Item Env:LANG`-style reasoning or code review).
-- [ ] **Step 3: Commit** — `git add internal/gui/gui_test.go; git commit -m "test: pin the locale of newTestApp to English"`
+- [x] **Step 1: Add the pin** — `a.app.Preferences().SetString("locale", "en")` between `NewAppWithFyneApp` and `a.setup()`, with the same comment as `newSpecApp` (z_spec_helpers_test.go:24-26).
+- [x] **Step 2: Run to verify** — `go test ./internal/gui/ -run 'TestAppSetNotAPackageContent|TestAppAddTagThroughTheTagPane' -v` → PASS (they already pass on an English machine; the pin makes them locale-independent — verify by `Set-Item Env:LANG`-style reasoning or code review).
+- [x] **Step 3: Commit** — `git add internal/gui/gui_test.go; git commit -m "test: pin the locale of newTestApp to English"`
 
 ### Task 27: package test gaps (md5 round-trip, filter group collapse)
 
 **Files:** Test: `pkg/ddpackage/pack_md5_test.go` (new — unique to this task so it can run in parallel with T21's `pack_test.go`), `pkg/ddpackage/filter/filter_test.go`
 
-- [ ] **Step 1: md5 round-trip** — `TestPackWritesMd5ThatLoadReadsBack`: write fixture pack (reuse `testutil.DefaultFixture` + `PackPackageProgress` to a temp file), `LoadFromPackedPath` → for a sample resource assert `fi.Md5.IsValid()` and it equals `hex(md5(fileBytes))` read from the unpacked source; also assert `readPackedFileFromPackage` accepts it (md5 verification path).
-- [ ] **Step 2: filter group collapse** — in `filter_test.go`, read the new logic at `filter.go:585` ("filter out empty filters before deciding whether the group collapses") and assert: `"(rock)"` behaves identically to `"rock"`; a group whose filters are all empty parses without error and matches nothing extra; nested `((a))` collapses; `"(rock tree)"` keeps OR semantics. Run: `go test ./pkg/ddpackage/filter/ -v`.
-- [ ] **Step 3: Run tests** — `go test ./pkg/ddpackage/...` → PASS.
-- [ ] **Step 4: Commit** — `git add pkg/ddpackage/pack_md5_test.go pkg/ddpackage/filter/filter_test.go; git commit -m "test: md5 round-trip through the pack header and filter group collapse"`
+- [x] **Step 1: md5 round-trip** — `TestPackWritesMd5ThatLoadReadsBack`: write fixture pack (reuse `testutil.DefaultFixture` + `PackPackageProgress` to a temp file), `LoadFromPackedPath` → for a sample resource assert `fi.Md5.IsValid()` and it equals `hex(md5(fileBytes))` read from the unpacked source; also assert `readPackedFileFromPackage` accepts it (md5 verification path).
+- [x] **Step 2: filter group collapse** — in `filter_test.go`, read the new logic at `filter.go:585` ("filter out empty filters before deciding whether the group collapses") and assert: `"(rock)"` behaves identically to `"rock"`; a group whose filters are all empty parses without error and matches nothing extra; nested `((a))` collapses; `"(rock tree)"` keeps OR semantics. Run: `go test ./pkg/ddpackage/filter/ -v`.
+- [x] **Step 3: Run tests** — `go test ./pkg/ddpackage/...` → PASS.
+- [x] **Step 4: Commit** — `git add pkg/ddpackage/pack_md5_test.go pkg/ddpackage/filter/filter_test.go; git commit -m "test: md5 round-trip through the pack header and filter group collapse"`
 
 ### Task 28: gui test gaps (pack.json ID rescan, report throttle, layouts)
 
 **Files:** Test: `internal/gui/package_watcher_test.go`, `internal/gui/package_update_test.go`, `internal/gui/layouts/layouts_test.go` (new)
 
-- [ ] **Step 1: pack.json ID change forces a full rescan** — `TestPackageWatcherRescansWhenPackIDChanges`: like `TestPackageWatcherDetectsEditedPackJSONInPackageRoot` but change `"id": "testpack"` to a new id; via `packageUpdateHook` assert `dlg.progress == true` (rescan), and after `waitForPackageUpdate` assert every resource now lives under `res://packs/<newid>/…` and `pkg.ID()` is the new id. (Covers `reloadPackInfo`'s `oldID != pkg.ID()` return, previously untested.)
-- [ ] **Step 2: report throttle** — `TestPackageUpdateDialogReportThrottles`: build `packageUpdateDialog{progress: true, activityStr: binding.NewString(), activityProgress: binding.NewFloat()}`, attach a counting listener to `activityProgress`, call `d.report(0.5, "x", 0)` 100× → exactly 1 notification; `d.report(0.51, …)` → a second. Mirrors `progress_test.go`.
-- [ ] **Step 3: layouts unit tests** — `layouts_test.go` with `test.NewApp()` in `TestMain`: for `paddedLayout`, `leadingCenterLayout`, `stackedLayout`, `fixedSizeLayout` assert child positions/sizes from `Layout(objs, size)` and `MinSize` (including the invisible-child and empty-object cases). Run: `go test ./internal/gui/layouts/ -v`.
-- [ ] **Step 4: Run tests** — `go test ./internal/gui/` → PASS.
-- [ ] **Step 5: Commit** — `git add internal/gui/package_watcher_test.go internal/gui/package_update_test.go internal/gui/layouts/layouts_test.go; git commit -m "test: pack id rescan, update report throttle, layout units"`
+- [x] **Step 1: pack.json ID change forces a full rescan** — `TestPackageWatcherRescansWhenPackIDChanges`: like `TestPackageWatcherDetectsEditedPackJSONInPackageRoot` but change `"id": "testpack"` to a new id; via `packageUpdateHook` assert `dlg.progress == true` (rescan), and after `waitForPackageUpdate` assert every resource now lives under `res://packs/<newid>/…` and `pkg.ID()` is the new id. (Covers `reloadPackInfo`'s `oldID != pkg.ID()` return, previously untested.)
+- [x] **Step 2: report throttle** — `TestPackageUpdateDialogReportThrottles`: build `packageUpdateDialog{progress: true, activityStr: binding.NewString(), activityProgress: binding.NewFloat()}`, attach a counting listener to `activityProgress`, call `d.report(0.5, "x", 0)` 100× → exactly 1 notification; `d.report(0.51, …)` → a second. Mirrors `progress_test.go`.
+- [x] **Step 3: layouts unit tests** — `layouts_test.go` with `test.NewApp()` in `TestMain`: for `paddedLayout`, `leadingCenterLayout`, `stackedLayout`, `fixedSizeLayout` assert child positions/sizes from `Layout(objs, size)` and `MinSize` (including the invisible-child and empty-object cases). Run: `go test ./internal/gui/layouts/ -v`.
+- [x] **Step 4: Run tests** — `go test ./internal/gui/` → PASS.
+- [x] **Step 5: Commit** — `git add internal/gui/package_watcher_test.go internal/gui/package_update_test.go internal/gui/layouts/layouts_test.go; git commit -m "test: pack id rescan, update report throttle, layout units"`
 
 **Phase 4 gate:** `. .\setcc-gcc.ps1; go test ./...; gofmt -l .; git diff --check` → clean.
 
@@ -676,31 +677,31 @@ Capture once at function top: `pkg := a.currentPackage()`; `if pkg == nil { log.
 
 **Files:** Modify: `docs/design/named_ui.md`, `internal/gui/resource_tree/resource_tree.go` (doc comment on `GetSelectionAndChildData` ~:795)
 
-- [ ] **Step 1: Rewrite "The problem" as history** — the section (:6-20) describes `uiRegions` (`internal/gui/regions.go`, which no longer exists) in present tense: convert to past tense ("The parts of the interface **were** addressed by name. They **were** kept in `uiRegions`, a struct …", "…therefore **meant** three edits"), keeping the code sample as a historical illustration. Fix any other present-tense references to `uiRegions` in the file (the "trade-offs" section mentions "the race on `uiRegions` disappears" — that one is already fine).
-- [ ] **Step 2: Names-table note** — add a line under the names table: `filterHelpSectionList` and `filterHelpScroll` live in the filter-help dialog overlay and are **not** resolvable through `a.ui`; the spec tests build a second `named.Cache` rooted at `popup.Content` (`z_spec_filter_help_test.go:43-52`).
-- [ ] **Step 3: Fix the Go doc comment** — `GetSelectionAndChildData`: state that it returns the data of the selected resources **and the tag branches** they are shown under (it appends `ResourceTagBranch` data too).
-- [ ] **Step 4: Verify** — re-read for consistent tense; no code changes → `go build ./...` still green (comment-only edit).
-- [ ] **Step 5: Commit** — `git add docs/design/named_ui.md internal/gui/resource_tree/resource_tree.go; git commit -m "docs: describe uiRegions as history, note filter-help name resolution"`
+- [x] **Step 1: Rewrite "The problem" as history** — the section (:6-20) describes `uiRegions` (`internal/gui/regions.go`, which no longer exists) in present tense: convert to past tense ("The parts of the interface **were** addressed by name. They **were** kept in `uiRegions`, a struct …", "…therefore **meant** three edits"), keeping the code sample as a historical illustration. Fix any other present-tense references to `uiRegions` in the file (the "trade-offs" section mentions "the race on `uiRegions` disappears" — that one is already fine).
+- [x] **Step 2: Names-table note** — add a line under the names table: `filterHelpSectionList` and `filterHelpScroll` live in the filter-help dialog overlay and are **not** resolvable through `a.ui`; the spec tests build a second `named.Cache` rooted at `popup.Content` (`z_spec_filter_help_test.go:43-52`).
+- [x] **Step 3: Fix the Go doc comment** — `GetSelectionAndChildData`: state that it returns the data of the selected resources **and the tag branches** they are shown under (it appends `ResourceTagBranch` data too).
+- [x] **Step 4: Verify** — re-read for consistent tense; no code changes → `go build ./...` still green (comment-only edit).
+- [x] **Step 5: Commit** — `git add docs/design/named_ui.md internal/gui/resource_tree/resource_tree.go; git commit -m "docs: describe uiRegions as history, note filter-help name resolution"`
 
 ### Task 30: spec wording + translation typo
 
 **Files:** Modify: `docs/design/ui_spec.md`, `internal/gui/translation/en-US.json` (:133)
 
-- [ ] **Step 1: `ui_spec.md`** — `:11` `with a "about" ion button` → `with an "about" icon button`; then sweep the whole file for missing/wrong articles (`a info` → `an info`, `a output` → `an output`, `a Open Pack` → `an Open Pack`, `a edit …` → `an edit …`, insert missing articles where a noun phrase has none). Wording only — the tests assert `lang.X` strings, not this file.
-- [ ] **Step 2: `en-US.json`** — `"task.updatePackage.text": "Updating pack recources ..."` → `"Updating pack resources ..."`. Only the English catalog (Crowdin syncs the rest).
-- [ ] **Step 3: Verify** — `go test ./internal/gui/ -run TestSpec -v` → PASS (spec wording is not asserted anywhere).
-- [ ] **Step 4: Commit** — `git add docs/design/ui_spec.md internal/gui/translation/en-US.json; git commit -m "docs: fix icon-button wording and the pack resources typo"`
+- [x] **Step 1: `ui_spec.md`** — `:11` `with a "about" ion button` → `with an "about" icon button`; then sweep the whole file for missing/wrong articles (`a info` → `an info`, `a output` → `an output`, `a Open Pack` → `an Open Pack`, `a edit …` → `an edit …`, insert missing articles where a noun phrase has none). Wording only — the tests assert `lang.X` strings, not this file.
+- [x] **Step 2: `en-US.json`** — `"task.updatePackage.text": "Updating pack recources ..."` → `"Updating pack resources ..."`. Only the English catalog (Crowdin syncs the rest).
+- [x] **Step 3: Verify** — `go test ./internal/gui/ -run TestSpec -v` → PASS (spec wording is not asserted anywhere).
+- [x] **Step 4: Commit** — `git add docs/design/ui_spec.md internal/gui/translation/en-US.json; git commit -m "docs: fix icon-button wording and the pack resources typo"`
 
 ### Task 31: CHANGELOG corrections + entries for this fix round
 
 **Files:** Modify: `CHANGELOG.md`
 
-- [ ] **Step 1: Fix the two wrong existing lines** —
+- [x] **Step 1: Fix the two wrong existing lines** —
   - v2.1.0 feature bullet (:33-35): the filter entry shows the syntax **in its placeholder** only (`tree.filter.toolTip` is plain text) — drop "and in its tool tip".
   - v2.0.4 heading (:104): link target `releases/tag/v2.0.3` → `releases/tag/v2.0.4`.
-- [ ] **Step 2: Add an `## [Unreleased]` section at the `<!-- insertion marker -->`** (above v2.1.0 — v2.1.0 has no tag yet, but its heading carries a date, so new work gets its own section) with a `### Bug Fixes` list covering the user-visible items of this plan: zip-slip / hostile-pack bounds, pack-name sanitisation, stuck progress dialogs + buttons after load errors, tag generation off the UI thread with no redundant reload, debounced filter, roll-up deselect/context-menu/fast-click fixes, save flush on package replace, md5 single-flight + unknown-state error, preview size gate, repeat-allocation cap, `IsEmpty` fix (`pkg/structures/stack.go` — the only public-API bug fix of the range, previously undocumented). Keep the existing house style (lowercase, wrapped at ~90 cols).
-- [ ] **Step 3: Verify** — re-read against Keep-a-Changelog structure; no code changes.
-- [ ] **Step 4: Commit** — `git add CHANGELOG.md; git commit -m "docs: correct filter tooltip and v2.0.4 links, log the review fixes"`
+- [x] **Step 2: Add an `## [Unreleased]` section at the `<!-- insertion marker -->`** (above v2.1.0 — v2.1.0 has no tag yet, but its heading carries a date, so new work gets its own section) with a `### Bug Fixes` list covering the user-visible items of this plan: zip-slip / hostile-pack bounds, pack-name sanitisation, stuck progress dialogs + buttons after load errors, tag generation off the UI thread with no redundant reload, debounced filter, roll-up deselect/context-menu/fast-click fixes, save flush on package replace, md5 single-flight + unknown-state error, preview size gate, repeat-allocation cap, `IsEmpty` fix (`pkg/structures/stack.go` — the only public-API bug fix of the range, previously undocumented). Keep the existing house style (lowercase, wrapped at ~90 cols).
+- [x] **Step 3: Verify** — re-read against Keep-a-Changelog structure; no code changes.
+- [x] **Step 4: Commit** — `git add CHANGELOG.md; git commit -m "docs: correct filter tooltip and v2.0.4 links, log the review fixes"`
 
 ---
 
@@ -711,3 +712,27 @@ Capture once at function top: `pkg := a.currentPackage()`; `if pkg == nil { log.
 - [ ] **Step 3: Single race run** — `. .\setcc-gcc.ps1; go test -race ./internal/gui/... ./pkg/ddpackage/...` → PASS (minutes; gcc required). Any race reported → fix in the owning task's area, re-run once.
 - [ ] **Step 4: Plan document** — the plan was committed in Task 0; if any schedule amendment was made during execution, commit it now (`git add docs/plans/2026-11-08-review-fixes.md; git commit -m "docs: sync the review-fixes plan with execution"`).
 - [ ] **Step 5: Report** — list commits per phase and paste the final test/race/gofmt outputs for the user.
+
+---
+
+## Execution amendments (recorded during the run — committed with Step 4)
+
+Every change below was confirmed with the human before it was applied; each
+supersedes the corresponding task text above. The full ledger (including
+deferred Minor findings for the final review) lives in
+`docs/sdd/2026-11-08-review-fixes/progress.md`.
+
+| Ruling | What changed |
+|---|---|
+| **R-T10** | The brief's `computeMd5` publish-under-`flLock` **deadlocked** `UpdateResources(Md5:true)` (it holds `flLock` across `innerWg.Wait()`). `UpdateResources` now snapshots the file list under `flLock` and releases it before spawning workers; added `TestUpdateResourcesMd5DoesNotDeadlock` (no existing test called `UpdateResources`). |
+| **R-T11** | `backgroundTracker.Done()` gained a **panic on a mis-paired call** (`sync: negative backgroundTracker counter…`), restoring WaitGroup's fail-fast that the mandated body dropped. |
+| **R-T16** | The brief's test scenario was **unsatisfiable** (path mode has no `tag://` branches; its case 1 already passed and the fix was a no-op there). Test rewritten in **tag mode** with a resource under ≥2 tags — RED at HEAD, GREEN with the fix. |
+| **R-T20** | The brief's debounce design **crashed the test suite** (`concurrent map read and map write`: under the test driver `fyne.Do` runs the rebuild on the timer goroutine). Added a `filterMu` fence around the rebuild and the test's polling conditions; `require.EventuallyWithT` replaces `require.Eventually`. |
+| **R-T22** | The absolute `maxRepeatPixels` budget was **rejected** in favour of an input ratio: `maxRepeatRatio = 64`, and an over-limit request is **clamped to `63 × srcWidth`** (one source-repeat below the limit) rather than returning unchanged — "thumbnails might not be perfect but they are still closer". `wallPathThumbnail` unchanged. Tall-texture test uses 10×10000 (not 10×100000) to keep the suite light. |
+| **R-T24** | The plan's strict-zero watcher assertion is **accepted as non-deterministic by construction** (the discard races fsnotify delivery): stress it at Task 32 with `-count=10`; the optional product fix is deferred. |
+| **R-T12** | `stopSaveTimersFor`'s lock-free map iteration was a **crash-class race** (reproduced: `fatal error: concurrent map iteration and map write`). Added `saveTimerLock` guarding every access to `tagSaveTimer`/`resSaveTimers`, saves performed outside the lock. |
+| **R-T13** | Tags/metadata now load off the Fyne goroutine while UI readers of `pkg.Tags()` hold no lock — **accepted with a recorded rationale** (plan/AGENTS.md document lock-free UI reads as an accepted invariant; window bounded by the modal dialog; same class pre-exists for pack info). Flagged to the `-race` run and the final review. |
+| **R-T21** | The `watched` cache desynced permanently on delete-recreate inside the debounce (or while paused). Amended Step 3 (see above): clear the entry on `Remove`/`Rename` in `watch()` before `enqueue`, and stop warning for already-gone watches. |
+| **R-T28** | `leadingCenterLayout.MinSize` omits `l.padding` while `Layout` adds it — a real bug the new tests pin. **Reported, not fixed** (test-only task): recorded in the task report and in the test comment; production fix deferred to the final review. |
+| **R-FLAKE** | Two watcher-test flakes were investigated (`investigation-watcher-double-report.md`): verdict **PRE-EXISTING** (deferred NTFS directory metadata → spurious fsnotify `Write` on directories), no task in this round caused it. **Ad-hoc task FL1 added** (not in the original 33): test-harness hardening only — `sync.Once` around `close(running)` and the rescan hook scoped inside the `packageUpdateLock` closure. The optional product fix (skipping bare `Write`-on-directory events) is deferred. |
+| **R-LADDER** | After calibration the human approved the first tier upgrade: reviewers of **concurrency/security diffs** run on `opencode-go/mimo-v2.6-pro` (T10, T14, T20, T24 and their re-reviews); everything else stayed on `opencode-go/mimo-v2.6-flash`. |
