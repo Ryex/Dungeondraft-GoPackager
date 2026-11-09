@@ -229,6 +229,70 @@ func TestResourceTreeEmptyPackage(t *testing.T) {
 	assert.Contains(t, tree.ChildUIDs(PackageTreeRootID), widget.TreeNodeID("res://packs/testpack.json"))
 }
 
+// TestGetSelectedResourcesReportsDirectlySelectedResources guards the
+// Selected flag of GetSelectedResources: a resource is selected on its
+// own when one of the nodes that show it is selected, not only when the
+// uid of the reported entry is selected.
+//
+// The tree is in tag mode and the resource carries two tags, so it is
+// shown under both branches: the walk sees the branch that is selected
+// for roll-up before it sees the node that was selected directly, and the
+// entry is therefore created from an occurrence that is not the selected
+// one.
+func TestGetSelectedResourcesReportsDirectlySelectedResources(t *testing.T) {
+	pkg, _ := loadFixtureWith(t, twoTagFixture())
+	tree := newTree(t, pkg)
+	tree.SetMode(ResourceTreeTagMode)
+
+	// Rock.png carries the "nature" and the "rock" tag, so it is shown
+	// under both branches
+	natureRockUID := tagResourceUID("tag://nature", rockResPath)
+	rockBranchUID := widget.TreeNodeID("tag://rock")
+	natureBranchUID := widget.TreeNodeID("tag://nature")
+
+	entryFor := func(resources []SelectedResource, resPath string) SelectedResource {
+		for _, res := range resources {
+			if res.Info != nil && res.Info.ResPath == resPath {
+				return res
+			}
+		}
+		require.FailNowf(t, "resource not reported", "%s must be reported", resPath)
+		return SelectedResource{}
+	}
+
+	// Rock is selected on its own under one tag while the branch of the
+	// other tag is selected for roll-up: the branch is popped first by the
+	// LIFO stack, so the uid that is seen first is the branch child and
+	// not the selected one
+	tree.Select(natureRockUID)
+	tree.Select(rockBranchUID)
+
+	resources := tree.GetSelectedResources()
+	rock := entryFor(resources, string(rockResPath))
+	assert.True(t, rock.Selected, "Rock.png is selected on its own")
+
+	// only the branch is selected: Rock.png is part of the selection
+	// through its branch, but not selected on its own
+	tree.UnselectAll()
+	tree.Select(rockBranchUID)
+
+	resources = tree.GetSelectedResources()
+	rock = entryFor(resources, string(rockResPath))
+	assert.False(t, rock.Selected, "Rock.png must not be selected on its own")
+
+	// a resource with no selection of its own under another selected
+	// branch must not be reported as selected either
+	tree.UnselectAll()
+	tree.Select(rockBranchUID)
+	tree.Select(natureBranchUID)
+
+	resources = tree.GetSelectedResources()
+	rock = entryFor(resources, string(rockResPath))
+	assert.False(t, rock.Selected, "Rock.png must not be selected on its own")
+	treeRes := entryFor(resources, "res://packs/testpack/textures/objects/Tree.png")
+	assert.False(t, treeRes.Selected, "Tree.png must not be selected on its own")
+}
+
 // TestSelectionAtScale guards the selection bookkeeping at the scale of a
 // real pack: every resource is shown under every one of its tags, so the
 // tree holds far more nodes than there are resources.
