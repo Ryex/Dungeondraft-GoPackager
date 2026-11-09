@@ -3,6 +3,7 @@ package gui
 import (
 	"image/color"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -73,12 +74,29 @@ func TestPackageUpdateShowsDialogAndHidesIt(t *testing.T) {
 	}
 	t.Cleanup(releaseUpdate)
 
-	// the hook is set before the package is loaded, so that the watcher
-	// does not read it while the test writes it
+	// The hook is set before the package is loaded, so that the watcher
+	// does not read it while the test writes it.
+	//
+	// The watcher can report a second, spurious update: a pending NTFS
+	// directory-entry update of the fixture write is delivered as a Write
+	// event on a directory when the watch is armed, and the watcher
+	// enqueues it like any other change (see
+	// docs/sdd/2026-11-08-review-fixes/
+	// investigation-watcher-double-report.md). Such a report is a paths
+	// update too, so its dialog has no progress — but closing running must
+	// happen exactly once, or the second report would panic. The wait for
+	// release stays outside the Once, so that every invocation honours it;
+	// it cannot deadlock on a later invocation, because the reports are
+	// serialized by packageUpdateLock: a second report only runs after the
+	// first update finished, and that update can only finish after release
+	// was closed.
+	var first sync.Once
 	a.packageUpdateHook = func(dlg *packageUpdateDialog) {
 		assert.False(t, dlg.progress,
 			"the update of a few changed paths does not report progress")
-		close(running)
+		first.Do(func() {
+			close(running)
+		})
 		<-release
 	}
 
@@ -101,21 +119,35 @@ func TestPackageUpdateShowsDialogAndHidesIt(t *testing.T) {
 func TestPackageUpdateRescanReportsProgress(t *testing.T) {
 	a := newWatcherApp(t)
 
-	reports := 0
-	a.packageUpdateHook = func(dlg *packageUpdateDialog) {
-		reports++
-		assert.True(t, dlg.progress,
-			"a scan of the whole package reports its progress")
-	}
-
 	_, _ = loadWatchedPackage(t, a)
 
-	// the update is serialized the same way as the updates of the watcher
+	// The hook is installed for the manual rescan only. It is read under
+	// packageUpdateLock (pack.go), and this closure runs under that lock
+	// — the same lock the updates of the filesystem watcher hold — so a
+	// concurrent report cannot invoke it: it waits for the lock, and the
+	// hook is cleared again before the lock is released. A spurious
+	// non-rescan report of the watcher (a pending NTFS directory-entry
+	// update of the fixture write, see
+	// docs/sdd/2026-11-08-review-fixes/
+	// investigation-watcher-double-report.md) is therefore neither
+	// counted nor asserted here, while the update under test still is.
+	reports := 0
+	var scanned *packageUpdateDialog
 	inspectPackage(t, a, func(pkg *ddpackage.Package) {
+		a.packageUpdateHook = func(dlg *packageUpdateDialog) {
+			reports++
+			scanned = dlg
+		}
+		// cleared while the lock is still held, so that a report of the
+		// watcher can never see the hook
+		defer func() { a.packageUpdateHook = nil }()
 		a.updateFromPaths(pkg, nil, true)
 	})
 
 	assert.Equal(t, 1, reports, "the update must show its dialog once")
+	require.NotNil(t, scanned, "the update must show its dialog")
+	assert.True(t, scanned.progress,
+		"a scan of the whole package reports its progress")
 	waitForUpdateDialogHidden(t, a)
 }
 
