@@ -1,6 +1,7 @@
 package resource_tree
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -226,4 +227,99 @@ func TestResourceTreeEmptyPackage(t *testing.T) {
 	// always shown even when the package holds no resources
 	assert.Equal(t, []widget.TreeNodeID{PackageTreeRootID}, tree.ChildUIDs(binding.DataTreeRootID))
 	assert.Contains(t, tree.ChildUIDs(PackageTreeRootID), widget.TreeNodeID("res://packs/testpack.json"))
+}
+
+// TestSelectionAtScale guards the selection bookkeeping at the scale of a
+// real pack: every resource is shown under every one of its tags, so the
+// tree holds far more nodes than there are resources.
+//
+// It deliberately makes no assertion about how long anything takes - the
+// review warned that wall-clock assertions flake.
+func TestSelectionAtScale(t *testing.T) {
+	const (
+		resourceCount = 500
+		tagCount      = 3
+	)
+
+	// build a package with resourceCount objects in a temporary directory
+	names := make([]string, resourceCount)
+	for i := range names {
+		names[i] = fmt.Sprintf("Res%04d", i)
+	}
+	fixture := &testutil.Fixture{
+		ID:      "scalepack",
+		Name:    "Scale Pack",
+		Objects: names,
+	}
+	dir := fixture.Write(t)
+
+	pkg := ddpackage.NewPackage(log.WithField("test", t.Name()))
+	require.NoError(t, pkg.LoadUnpackedFromFolder(dir))
+	require.Empty(t, pkg.BuildFileList())
+	require.NoError(t, pkg.LoadTags())
+	t.Cleanup(pkg.Close)
+
+	// objects are the only taggable resources, so these are all of them
+	var relPaths []string
+	var resPaths []string
+	for _, fi := range pkg.FileList().AsSlice() {
+		if fi.IsObject() {
+			relPaths = append(relPaths, fi.RelPath)
+			resPaths = append(resPaths, fi.ResPath)
+		}
+	}
+	require.Len(t, relPaths, resourceCount)
+
+	// tag every resource with every tag
+	tags := make([]string, tagCount)
+	for i := range tags {
+		tags[i] = fmt.Sprintf("tag%d", i)
+		pkg.Tags().Tag(tags[i], relPaths...)
+	}
+
+	tree := newTree(t, pkg)
+	tree.SetMode(ResourceTreeTagMode)
+	tree.RebuildTree()
+
+	// select every tag branch
+	for _, tag := range tags {
+		tree.Select(widget.TreeNodeID("tag://" + tag))
+	}
+
+	// every resource is reported exactly once, no matter how often it is
+	// shown
+	resources := tree.GetSelectedResources()
+	require.Len(t, resources, resourceCount,
+		"every resource must be reported exactly once")
+	seen := make(map[string]bool, resourceCount)
+	for _, res := range resources {
+		require.NotNil(t, res.Info)
+		require.Falsef(t, seen[res.Info.ResPath],
+			"resource %s must be reported once", res.Info.ResPath)
+		seen[res.Info.ResPath] = true
+	}
+
+	// every occurrence of every resource is shown as selected
+	for _, tag := range tags {
+		for i, resPath := range resPaths {
+			uid := tagResourceUID("tag://"+tag, resPath)
+			require.Truef(t, tree.IsVisiblySelected(uid),
+				"occurrence %s of %s must be shown as selected", uid, relPaths[i])
+		}
+	}
+
+	// an occurrence resolves to the tag branch it is shown under
+	sample := tagResourceUID("tag://"+tags[0], resPaths[0])
+	parent := tree.ParentOf(sample)
+	require.NotNilf(t, parent, "occurrence %s must have a parent", sample)
+	assert.Equal(t, widget.TreeNodeID("tag://"+tags[0]), *parent,
+		"the occurrence must be parented by its tag branch")
+
+	// the indexes hold the same answers as the lookups above
+	require.NotNil(t, tree.parentOf, "the parent index must be built")
+	require.NotNil(t, tree.visibleSet, "the visible selection index must be built")
+	assert.Equal(t, widget.TreeNodeID("tag://"+tags[0]), tree.parentOf[sample],
+		"the parent index must hold the tag branch of the occurrence")
+	assert.True(t, tree.visibleSet[sample],
+		"the visible selection index must hold the occurrence")
 }
