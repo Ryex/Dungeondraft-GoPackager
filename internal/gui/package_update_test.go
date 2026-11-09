@@ -77,12 +77,11 @@ func TestPackageUpdateShowsDialogAndHidesIt(t *testing.T) {
 	// The hook is set before the package is loaded, so that the watcher
 	// does not read it while the test writes it.
 	//
-	// The watcher can report a second, spurious update: a pending NTFS
-	// directory-entry update of the fixture write is delivered as a Write
-	// event on a directory when the watch is armed, and the watcher
-	// enqueues it like any other change (see
-	// docs/sdd/2026-11-08-review-fixes/
-	// investigation-watcher-double-report.md). Such a report is a paths
+	// The watcher can report a second, spurious update: NTFS defers the
+	// directory-entry update of the fixture write and delivers it as a
+	// Write event on a directory when the watch is armed, which the
+	// watcher enqueues like any other change, so a second, non-rescanning
+	// update of the package runs. Such a report is a paths
 	// update too, so its dialog has no progress — but closing running must
 	// happen exactly once, or the second report would panic. The wait for
 	// release stays outside the Once, so that every invocation honours it;
@@ -126,10 +125,10 @@ func TestPackageUpdateRescanReportsProgress(t *testing.T) {
 	// — the same lock the updates of the filesystem watcher hold — so a
 	// concurrent report cannot invoke it: it waits for the lock, and the
 	// hook is cleared again before the lock is released. A spurious
-	// non-rescan report of the watcher (a pending NTFS directory-entry
-	// update of the fixture write, see
-	// docs/sdd/2026-11-08-review-fixes/
-	// investigation-watcher-double-report.md) is therefore neither
+	// non-rescan report of the watcher (the deferred NTFS directory-entry
+	// update of the fixture write, which is delivered as a Write event on
+	// a directory when the watch is armed and makes the watcher run a
+	// second, non-rescanning update of the package) is therefore neither
 	// counted nor asserted here, while the update under test still is.
 	reports := 0
 	var scanned *packageUpdateDialog
