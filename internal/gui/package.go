@@ -252,15 +252,36 @@ func (a *App) buildPackageTree(editable bool) (*resource_tree.ResourceTree, bind
 		resourceTree.OpenBranch(resource_tree.PackageTreeRootID)
 	}
 
+	// lastAppliedFilter is the filter the tree shows. The debounce skips
+	// the rebuild when the parsed filter is the one already applied: an
+	// unchanged filter must not touch the tree on the timer goroutine at
+	// all (under the test driver fyne.Do runs inline there, so a pointless
+	// rebuild races with readers of the tree). It starts at the filter a
+	// new tree is created with and is guarded by filterMu, like the
+	// pending timer.
+	var lastAppliedFilter ddresource_filter.ResourceFilter = ddresource_filter.ResourceFilterEmpty{}
+
 	boundFilter.AddListener(binding.NewDataListener(func() {
 		// parse right away to reject a bad filter: the validator of the
 		// entry shows the error text, the debounce only schedules a
 		// filter that parses
-		if _, err := ddresource_filter.ParseResourceFilter(filter); err != nil {
+		f, err := ddresource_filter.ParseResourceFilter(filter)
+		if err != nil {
 			return
 		}
 		a.filterMu.Lock()
 		defer a.filterMu.Unlock()
+		if lastAppliedFilter.Eq(f) {
+			// the tree already shows this filter, so nothing has to be
+			// applied: no timer is scheduled and a pending timer can not
+			// apply anything new either, because it re-reads this same
+			// text when it fires
+			if a.filterTimer != nil {
+				a.filterTimer.Stop()
+				a.filterTimer = nil
+			}
+			return
+		}
 		if a.filterTimer != nil {
 			a.filterTimer.Stop()
 		}
@@ -280,8 +301,14 @@ func (a *App) buildPackageTree(editable bool) (*resource_tree.ResourceTree, bind
 				// take the same lock for the pending timer.
 				a.filterMu.Lock()
 				defer a.filterMu.Unlock()
+				if lastAppliedFilter.Eq(f) {
+					// the text changed back while the timer was pending:
+					// the tree already shows this filter
+					return
+				}
 				resourceTree.SetFilter(f)
 				resourceTree.OpenBranch(resource_tree.PackageTreeRootID)
+				lastAppliedFilter = f
 			})
 		})
 	}))
