@@ -383,6 +383,23 @@ func doubleClickWith(node *ResourceTreeNode, modifier fyne.KeyModifier) {
 	clickWith(node, modifier)
 }
 
+// waitForPendingClick waits until the debounced single click that the last
+// click scheduled has been applied.
+//
+// The click is applied on the goroutine of the timer that the click
+// schedules, so a test must not read the selection before it ran. The click
+// bookkeeping is guarded by clickMu, which orders the reads of this helper
+// after the writes of the timer goroutine.
+func waitForPendingClick(t *testing.T, tree *ResourceTree) {
+	t.Helper()
+
+	require.Eventually(t, func() bool {
+		tree.clickMu.Lock()
+		defer tree.clickMu.Unlock()
+		return tree.clickTimer == nil && tree.lastClickUID == ""
+	}, 10*time.Second, time.Millisecond, "the pending click must be applied")
+}
+
 func TestResourceTreeDoubleClickSelectsAnUnselectedResource(t *testing.T) {
 	pkg, _ := loadFixture(t)
 	tree := newTree(t, pkg)
@@ -444,9 +461,9 @@ func TestResourceTreeClickAfterAPauseIsNoDoubleClick(t *testing.T) {
 	require.True(t, ok, "the tree must hold a node for the resource")
 
 	click(node)
-	time.Sleep(fyne.CurrentApp().Driver().DoubleTapDelay() + 50*time.Millisecond)
+	waitForPendingClick(t, tree)
 	click(node)
-	time.Sleep(fyne.CurrentApp().Driver().DoubleTapDelay() + 50*time.Millisecond)
+	waitForPendingClick(t, tree)
 
 	assert.True(t, tree.IsVisiblySelected(rockResPath),
 		"two clicks that are too far apart must not toggle the selection")
@@ -535,7 +552,7 @@ func TestResourceTreeModifiedClickEndsTheClickSequence(t *testing.T) {
 	require.True(t, ok, "the tree must hold a node for the resource")
 
 	click(node)
-	time.Sleep(fyne.CurrentApp().Driver().DoubleTapDelay() + 50*time.Millisecond)
+	waitForPendingClick(t, tree)
 	require.True(t, tree.IsVisiblySelected(rockResPath))
 
 	// the control key removes the node from the selection, it must not be
@@ -547,7 +564,7 @@ func TestResourceTreeModifiedClickEndsTheClickSequence(t *testing.T) {
 	// the modified click ended the click sequence, so this click is not the
 	// second click of a double click
 	click(node)
-	time.Sleep(fyne.CurrentApp().Driver().DoubleTapDelay() + 50*time.Millisecond)
+	waitForPendingClick(t, tree)
 	assert.True(t, tree.IsVisiblySelected(rockResPath),
 		"a modified click must end the click sequence")
 }

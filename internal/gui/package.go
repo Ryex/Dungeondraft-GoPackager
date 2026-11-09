@@ -296,7 +296,7 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 	// known yet, so the update of the entry is tracked as background work
 	// that touches the interface
 	a.bgWG.Add(1)
-	a.pkg.GetOrUpdateResourceMd5(info, func(md5 string, err error) {
+	a.currentPackage().GetOrUpdateResourceMd5(info, func(md5 string, err error) {
 		defer a.bgWG.Done()
 
 		if err != nil {
@@ -438,7 +438,7 @@ func (a *App) buildTagInfo(info *structures.FileInfo, editable bool) fyne.Canvas
 	var tags []string
 	boundTags := binding.BindStringList(&tags)
 	updateTags := func() {
-		tags = a.pkg.Tags().TagsFor(info.RelPath).AsSlice()
+		tags = a.currentPackage().Tags().TagsFor(info.RelPath).AsSlice()
 		slices.Sort(tags)
 		boundTags.Reload()
 		log.Infof("tags for %s: %s", info.ResPath, spew.Sdump(tags))
@@ -464,7 +464,7 @@ func (a *App) buildTagInfo(info *structures.FileInfo, editable bool) fyne.Canvas
 					log.WithError(err).Errorf("failed to get tag in del tag btn for %s", info.RelPath)
 				} else {
 					btn.OnTapped = func() {
-						a.pkg.Tags().Untag(tag, info.RelPath)
+						a.currentPackage().Tags().Untag(tag, info.RelPath)
 						updateTags()
 						a.saveUnpackedTags()
 					}
@@ -516,7 +516,7 @@ func (a *App) buildTagInfo(info *structures.FileInfo, editable bool) fyne.Canvas
 	)
 
 	if editable {
-		tagSelector := widget.NewSelectEntry(a.pkg.Tags().AllTags())
+		tagSelector := widget.NewSelectEntry(a.currentPackage().Tags().AllTags())
 		addBtn := widget.NewButtonWithIcon(
 			lang.X("tags.addBtn.text", "Add"),
 			theme.ContentAddIcon(),
@@ -524,7 +524,7 @@ func (a *App) buildTagInfo(info *structures.FileInfo, editable bool) fyne.Canvas
 				if tagSelector.Text == "" {
 					return
 				}
-				a.pkg.Tags().Tag(tagSelector.Text, info.RelPath)
+				a.currentPackage().Tags().Tag(tagSelector.Text, info.RelPath)
 				updateTags()
 				a.saveUnpackedTags()
 				tagSelector.SetText("")
@@ -544,7 +544,7 @@ func (a *App) saveUnpackedTags() {
 	}
 	// the package is captured, because it may be closed before the timer
 	// fires
-	pkg := a.pkg
+	pkg := a.currentPackage()
 	a.tagSaveTimer = time.AfterFunc(500*time.Millisecond, func() {
 		if pkg == nil {
 			return
@@ -748,7 +748,7 @@ func (a *App) saveWallMetadata(metaPath string) {
 	}
 	// the package is captured, because it may be closed before the timer
 	// fires
-	pkg := a.pkg
+	pkg := a.currentPackage()
 	a.resSaveTimers[metaPath] = time.AfterFunc(500*time.Millisecond, func() {
 		if pkg == nil {
 			return
@@ -770,7 +770,7 @@ func (a *App) saveTilesetMetadata(metaPath string) {
 	}
 	// the package is captured, because it may be closed before the timer
 	// fires
-	pkg := a.pkg
+	pkg := a.currentPackage()
 	a.resSaveTimers[metaPath] = time.AfterFunc(500*time.Millisecond, func() {
 		if pkg == nil {
 			return
@@ -857,7 +857,7 @@ func (a *App) buildBulkTagsPane(
 			}
 			btn.OnTapped = func() {
 				for _, res := range resources {
-					a.pkg.Tags().Untag(tag, res.Info.RelPath)
+					a.currentPackage().Tags().Untag(tag, res.Info.RelPath)
 				}
 				updateTags()
 				a.saveUnpackedTags()
@@ -990,7 +990,7 @@ func (a *App) updateBulkResourceNode(
 	pathLbl.Text.Text = resourceDirPath(relPath)
 	pathLbl.Refresh()
 	icon.SetURI(storage.NewFileURI(
-		filepath.Join(a.pkg.UnpackedPath(), utils.NormalizeResourcePath(res.Info.ResPath)),
+		filepath.Join(a.currentPackage().UnpackedPath(), utils.NormalizeResourcePath(res.Info.ResPath)),
 	))
 	deselectBtn.OnTapped = func() {
 		deselectResource(tree, res)
@@ -1030,7 +1030,7 @@ func (a *App) buildBulkTagAddRow(
 		return nil
 	}
 
-	tagSelector := widget.NewSelectEntry(a.pkg.Tags().AllTags())
+	tagSelector := widget.NewSelectEntry(a.currentPackage().Tags().AllTags())
 	addBtn := widget.NewButtonWithIcon(
 		lang.X("tags.addBtn.text", "Add"),
 		theme.ContentAddIcon(),
@@ -1039,7 +1039,7 @@ func (a *App) buildBulkTagAddRow(
 				return
 			}
 			for _, res := range resources {
-				a.pkg.Tags().Tag(tagSelector.Text, res.Info.RelPath)
+				a.currentPackage().Tags().Tag(tagSelector.Text, res.Info.RelPath)
 			}
 			updateTags()
 			a.saveUnpackedTags()
@@ -1059,7 +1059,7 @@ func (a *App) commonTags(resources []resource_tree.SelectedResource) *structures
 	relPaths := slices.Collect(utils.Map(slices.Values(resources), func(res resource_tree.SelectedResource) string {
 		return res.Info.RelPath
 	}))
-	return a.pkg.Tags().TagsFor(relPaths...)
+	return a.currentPackage().Tags().TagsFor(relPaths...)
 }
 
 // bulkPathTextSize is the size of the path that is shown below the file name
