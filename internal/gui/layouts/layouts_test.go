@@ -106,6 +106,8 @@ func TestLeadingCenterLayout(t *testing.T) {
 
 		min := l.MinSize([]fyne.CanvasObject{leading, trailing})
 
+		// Pins the current behaviour: MinSize omits l.padding although Layout
+		// gives the leading child min+padding — known bug, ledgered, update on fix.
 		assert.Equal(t, fyne.NewSize(140, 50), min)
 	})
 
