@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -106,7 +107,9 @@ type App struct {
 	resSaveTimers map[string]*time.Timer
 
 	// packageWatcher watches the unpacked folder of the package for changes.
-	packageWatcher *packageWatcher
+	// It is atomic, because it is replaced when a package is loaded, while
+	// it may be read from the goroutine of the watcher and from the UI.
+	packageWatcher atomic.Pointer[packageWatcher]
 
 	// packageWatcherDebounce is the time the watcher waits for further
 	// events, before it reports the changed paths. It is zero in the app,
@@ -137,7 +140,7 @@ type App struct {
 
 	// loadPacked loads a packed resource pack file. It is a field so that
 	// tests can control the timing of the load.
-	loadPacked func(path string, progress func(p float64, curRes string)) (*ddpackage.Package, error)
+	loadPacked func(path string, progress func(p float64, curRes string)) (packedLoadResult, error)
 
 	// packageUpdateHook is called while an update of the package runs in
 	// the background, with the dialog of the update showing. It is a field
@@ -724,6 +727,9 @@ func (a *App) setErrContent(msg string, errs ...error) {
 		layout.NewSpacer(),
 	)
 
+	// the error content replaces the content of a failed load, which has
+	// disabled the controls of the interface, so they are enabled again
+	a.disableButtons.Set(false)
 	a.setMainContent(msgContent)
 }
 

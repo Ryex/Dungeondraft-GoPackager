@@ -561,7 +561,9 @@ func (p *Package) GetOrUpdateResourceMd5(fi *structures.FileInfo, callback func(
 					return
 				}
 			} else {
-				p.log.Error("Can not update hash for file info, unknown package state")
+				p.log.WithField("resPath", fi.ResPath).Error("Can not update hash for file info, unknown package state")
+				callback("", dderrors.CausedBy(ErrPackageNotLoaded, errors.New("unknown package state")))
+				return
 			}
 			hashBytes := hash.Sum(nil)
 			fi.Md5.UpdateWith(hashBytes)

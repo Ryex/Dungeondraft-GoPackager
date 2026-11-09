@@ -78,7 +78,7 @@ func blockPackedLoad(a *App) (release func()) {
 	a.loadPacked = func(
 		path string,
 		progress func(p float64, curRes string),
-	) (*ddpackage.Package, error) {
+	) (packedLoadResult, error) {
 		<-releaseCh
 		return a.loadPackSync(path, progress)
 	}
