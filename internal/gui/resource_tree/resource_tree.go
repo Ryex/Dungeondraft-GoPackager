@@ -803,8 +803,11 @@ func (t *ResourceTree) GetSelection() []widget.TreeNodeID {
 	return dest
 }
 
-// GetSelectionAndChildData returns the data of the selected resources. A
-// resource that is shown under more than one tag is only reported once.
+// GetSelectionAndChildData returns the data of the selected resources and
+// the tag branches they are shown under, when those branches are part of
+// the selection: their *ResourceTagBranch data is appended together with
+// the data of everything below them. A resource that is shown under more
+// than one tag is only reported once.
 func (t *ResourceTree) GetSelectionAndChildData() []ResourceTreeNodeData {
 	results := []ResourceTreeNodeData{}
 	seen := map[ResourceTreeNodeData]bool{}
