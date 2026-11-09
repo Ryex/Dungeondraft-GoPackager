@@ -26,19 +26,23 @@ func MapKeys[K comparable, V any](m map[K]V) []K {
 	return keys
 }
 
-// FileExists tests if a file  exists and is not a Directory
+// FileExists tests if a file exists and is not a Directory.
+// It returns false when stat fails for any reason (e.g. the path does not
+// exist, or a parent of it is a file rather than a directory).
 func FileExists(filename string) bool {
 	info, err := os.Stat(filename)
-	if errors.Is(err, os.ErrNotExist) {
+	if err != nil {
 		return false
 	}
 	return !info.IsDir()
 }
 
-// DirExists tests if a Directyory exists and is a Directory
+// DirExists tests if a Directory exists and is a Directory.
+// It returns false when stat fails for any reason (e.g. the path does not
+// exist, or a parent of it is a file rather than a directory).
 func DirExists(filename string) bool {
 	info, err := os.Stat(filename)
-	if os.IsNotExist(err) {
+	if err != nil {
 		return false
 	}
 	return info.IsDir()
