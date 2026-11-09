@@ -95,6 +95,14 @@ type App struct {
 	// objects they belong to.
 	ui *named.Cache
 
+	// saveTimerLock guards tagSaveTimer and resSaveTimers. The save
+	// callbacks create the timers on the Fyne goroutine, while the flush
+	// of a replaced package runs on the load goroutine (replacePackage)
+	// and the cleanup runs on the main goroutine. Flushing the timer map
+	// while a save callback writes it would crash the process
+	// (concurrent map writes), not just race the race detector.
+	saveTimerLock sync.Mutex
+
 	tagSaveTimer  *time.Timer
 	resSaveTimers map[string]*time.Timer
 
@@ -345,6 +353,9 @@ func (a *App) replacePackage(pkg *ddpackage.Package) {
 	old := a.currentPackage()
 	a.setCurrentPackage(pkg)
 	if old != nil && old != pkg {
+		// flush the saves that are still pending for the old package
+		// before it is closed
+		a.stopSaveTimersFor(old)
 		old.Close()
 	}
 }
@@ -368,6 +379,7 @@ func (a *App) setCurrentPackage(pkg *ddpackage.Package) {
 
 func (a *App) clean() {
 	a.resetPkg()
+	a.saveTimerLock.Lock()
 	if a.tagSaveTimer != nil {
 		a.tagSaveTimer.Stop()
 		a.tagSaveTimer = nil
@@ -376,6 +388,7 @@ func (a *App) clean() {
 		timer.Stop()
 	}
 	a.resSaveTimers = map[string]*time.Timer{}
+	a.saveTimerLock.Unlock()
 	if a.prefLocaleListener != nil && a.prefLocale != nil {
 		a.prefLocale.RemoveListener(a.prefLocaleListener)
 		a.prefLocaleListener = nil
