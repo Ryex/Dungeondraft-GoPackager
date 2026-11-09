@@ -313,36 +313,42 @@ func (a *App) extractPackage(path string, options ddpackage.UnpackOptions) {
 		err := pkg.ExtractPackageProgress(targetPath, options, func(p float64) {
 			progressVal.Set(p)
 		})
-		progressDlg.Hide()
+		fyne.Do(func() {
+			progressDlg.Hide()
+		})
 		packPath, _ := a.operatingPath.Get()
 		if err != nil {
-			errDlg := dialog.NewError(
-				dderrors.CausedBy(errors.New(lang.X(
+			fyne.Do(func() {
+				errDlg := dialog.NewError(
+					dderrors.CausedBy(errors.New(lang.X(
 
-					"unpack.extract.error.text",
-					"Error extracting {{.Pack}} to {{.Path}}",
+						"unpack.extract.error.text",
+						"Error extracting {{.Pack}} to {{.Path}}",
+						map[string]any{
+							"Pack": packPath,
+							"Path": targetPath,
+						},
+					)), err),
+					a.window,
+				)
+				errDlg.Show()
+			})
+			return
+		}
+		fyne.Do(func() {
+			infoDlg := dialog.NewInformation(
+				lang.X("unpack.success.dlg.title", "Extraction successful"),
+				lang.X(
+					"unpack.success.dlg.text",
+					"{{.Pack}} extracted to {{.Path}} successfully",
 					map[string]any{
 						"Pack": packPath,
 						"Path": targetPath,
-					},
-				)), err),
+					}),
 				a.window,
 			)
-			errDlg.Show()
-			return
-		}
-		infoDlg := dialog.NewInformation(
-			lang.X("unpack.success.dlg.title", "Extraction successful"),
-			lang.X(
-				"unpack.success.dlg.text",
-				"{{.Pack}} extracted to {{.Path}} successfully",
-				map[string]any{
-					"Pack": packPath,
-					"Path": targetPath,
-				}),
-			a.window,
-		)
-		infoDlg.Show()
+			infoDlg.Show()
+		})
 		a.disableButtons.Set(false)
 	}()
 }
