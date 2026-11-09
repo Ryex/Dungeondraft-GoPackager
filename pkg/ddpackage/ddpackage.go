@@ -67,8 +67,11 @@ type Package struct {
 	// callbacks.
 	md5Mu       sync.Mutex
 	md5Inflight map[string][]func(string, error)
-	// pkgFileMu serializes the seek+read of the shared packed file between
-	// concurrent md5 computations (see readPackedFileFromPackage).
+	// pkgFileMu serializes the seek+read of the shared packed file, which
+	// moves its position, between the concurrent readers of it (the
+	// preview, the extraction and the md5 computation). It is taken inside
+	// readPackedFileFromPackage and is never held while another lock of
+	// the package is acquired.
 	pkgFileMu sync.Mutex
 
 	info *structures.PackageInfo
@@ -541,16 +544,22 @@ func (p *Package) NewFileInfo(options NewFileInfoOptions) (*structures.FileInfo,
 func (p *Package) GetOrUpdateResourceMd5(fi *structures.FileInfo, callback func(string, error)) {
 	key := fi.ResPath
 
+	// flLock guards fi.Md5, which the pack write stores as well, so the read
+	// of it takes flLock; md5Mu guards the single-flight. Both are taken in
+	// the order computeMd5 publishes, flLock -> md5Mu.
+	p.flLock.RLock()
 	p.md5Mu.Lock()
 	if fi.Md5.IsValid() {
 		hash := fi.Md5.String()
 		p.md5Mu.Unlock()
+		p.flLock.RUnlock()
 		callback(hash, nil)
 		return
 	}
 	if inflight, ok := p.md5Inflight[key]; ok {
 		p.md5Inflight[key] = append(inflight, callback)
 		p.md5Mu.Unlock()
+		p.flLock.RUnlock()
 		return
 	}
 	if p.md5Inflight == nil {
@@ -558,6 +567,7 @@ func (p *Package) GetOrUpdateResourceMd5(fi *structures.FileInfo, callback func(
 	}
 	p.md5Inflight[key] = []func(string, error){callback}
 	p.md5Mu.Unlock()
+	p.flLock.RUnlock()
 
 	go p.computeMd5(fi, key)
 }
@@ -586,11 +596,10 @@ func (p *Package) computeMd5(fi *structures.FileInfo, key string) {
 		}
 	case p.mode == PackageModePacked && p.pkgFile != nil:
 		l := p.log.WithField("resPath", fi.ResPath)
-		// the seek+read of readPackedFileFromPackage moves the position of
-		// the shared file, so concurrent computations must not interleave
-		p.pkgFileMu.Lock()
+		// readPackedFileFromPackage takes pkgFileMu around the seek+read
+		// itself, so every reader of the shared file is serialised with
+		// this computation
 		data, readErr := p.readPackedFileFromPackage(p.pkgFile, fi)
-		p.pkgFileMu.Unlock()
 		if readErr != nil {
 			l.WithError(readErr).Errorf("failed to read packed file")
 			err = dderrors.CausedBy(errors.New("failed to read packed file"), readErr)

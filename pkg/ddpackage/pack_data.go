@@ -68,8 +68,7 @@ func (p *Package) resetTags() {
 		p.tags = structures.NewPackageTags()
 		return
 	}
-	clear(p.tags.Tags)
-	clear(p.tags.Sets)
+	p.tags.Reset()
 }
 
 func (p *Package) loadPackedResourceMetadata(r io.ReadSeeker) error {

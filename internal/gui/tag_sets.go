@@ -206,12 +206,13 @@ func (a *App) createTagSetsDialog(editable bool) dialog.Dialog {
 					log.WithError(err).Error("failed to get set in add tag to set btn")
 					return
 				}
-				a.currentPackage().Tags().AddTag(tagSelector.Text)
-				a.currentPackage().Tags().AddTagToSet(set, tagSelector.Text)
+				pkg := a.currentPackage()
+				pkg.Tags().AddTag(tagSelector.Text)
+				pkg.Tags().AddTagToSet(set, tagSelector.Text)
 				updateTags()
 				a.saveUnpackedTags()
 				tagSelector.SetText("")
-				tagSelector.SetOptions(a.currentPackage().Tags().AllTags())
+				tagSelector.SetOptions(pkg.Tags().AllTags())
 			},
 		)
 		tagsSide.Add(layouts.NewLeftExpandHBox(tagSelector, tagAddBtn))

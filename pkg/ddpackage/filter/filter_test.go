@@ -11,6 +11,28 @@ import (
 func AssertGroup(t *testing.T, filter ResourceFilter, groupType ResourceFilterGroupType, filters []ResourceFilter) {
 }
 
+// TestResourceFilterEmptyEq pins that a collapsed empty filter compares equal
+// whether the parser built it as a value or as a pointer, so an empty filter
+// text does not rebuild the tree on every trigger.
+func TestResourceFilterEmptyEq(t *testing.T) {
+	empty := ResourceFilterEmpty{}
+	assert.True(t, empty.Eq(ResourceFilterEmpty{}))
+	assert.True(t, empty.Eq(&ResourceFilterEmpty{}))
+	assert.False(t, empty.Eq(&ResourceFilterName{Name: "bird"}))
+}
+
+// TestResourceFilterNotEq pins that a negated filter compares its inner
+// filter, so two Nots around the same filter are equal and two around
+// different filters are not.
+func TestResourceFilterNotEq(t *testing.T) {
+	bird := ResourceFilterName{Name: "bird", MatchCase: FilterMatchCaseInsensitive, MatchType: FilterMatchFuzzy}
+	rock := ResourceFilterName{Name: "rock", MatchCase: FilterMatchCaseInsensitive, MatchType: FilterMatchFuzzy}
+
+	assert.True(t, ResourceFilterNot{Filter: bird}.Eq(ResourceFilterNot{Filter: bird}))
+	assert.False(t, ResourceFilterNot{Filter: bird}.Eq(ResourceFilterNot{Filter: rock}))
+	assert.False(t, ResourceFilterNot{Filter: bird}.Eq(bird))
+}
+
 func TestParseFilterSingleNameFuzzy(t *testing.T) {
 	str := "bird"
 	filter, err := ParseResourceFilter(str)

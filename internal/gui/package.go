@@ -679,11 +679,12 @@ func (a *App) buildTagInfo(info *structures.FileInfo, editable bool) fyne.Canvas
 				if tagSelector.Text == "" {
 					return
 				}
-				a.currentPackage().Tags().Tag(tagSelector.Text, info.RelPath)
+				pkg := a.currentPackage()
+				pkg.Tags().Tag(tagSelector.Text, info.RelPath)
 				updateTags()
 				a.saveUnpackedTags()
 				tagSelector.SetText("")
-				tagSelector.SetOptions(a.currentPackage().Tags().AllTags())
+				tagSelector.SetOptions(pkg.Tags().AllTags())
 			},
 		)
 		content.Add(layouts.NewLeftExpandHBox(tagSelector, addBtn))
@@ -1291,15 +1292,16 @@ func (a *App) buildBulkTagAddRow(b *bulkPane) fyne.CanvasObject {
 			if tagSelector.Text == "" {
 				return
 			}
+			pkg := a.currentPackage()
 			// the resources are read when the button is tapped, so that
 			// they are never the ones of a selection that is gone already
 			for _, res := range b.resources {
-				a.currentPackage().Tags().Tag(tagSelector.Text, res.Info.RelPath)
+				pkg.Tags().Tag(tagSelector.Text, res.Info.RelPath)
 			}
 			b.updateTags()
 			a.saveUnpackedTags()
 			tagSelector.SetText("")
-			tagSelector.SetOptions(a.currentPackage().Tags().AllTags())
+			tagSelector.SetOptions(pkg.Tags().AllTags())
 		},
 	)
 

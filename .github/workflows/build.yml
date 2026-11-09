@@ -118,7 +118,7 @@ jobs:
           # literal for make; grep fails the job if no tab landed.
           TAB=$'\t'
           sed -i "/^install:/a\\${TAB}install -Dm00755 usr/local/bin/\$(Exec)-cli \$(DESTDIR)\$(PREFIX)/bin/\$(Exec)-cli" ./install/dungeondraft-packager/Makefile
-          grep -q $'^\tinstall -Dm00755' ./install/dungeondraft-packager/Makefile
+          grep -qF $'\tinstall -Dm00755 usr/local/bin/$(Exec)-cli $(DESTDIR)$(PREFIX)/bin/$(Exec)-cli' ./install/dungeondraft-packager/Makefile
           cp *.md ./install/dungeondraft-packager
           ls -r ./install
           ldd ./install/dungeondraft-packager/usr/local/bin/dungeondraft-packager
@@ -171,15 +171,17 @@ jobs:
           sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev
 
 
-      - name: Run tests
-        run: go test ./...
-
       # the scratch programs under ./testing are not part of the product
       - name: Run tests (excluding scratch dir)
         run: go list ./... | grep -v '/testing$' | xargs go test
 
       - name: Check formatting
-        run: test -z "$(gofmt -l .)"
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "$unformatted"
+            exit 1
+          fi
 
       - name: Vet
         run: go vet ./...
@@ -210,7 +212,7 @@ jobs:
           sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev
 
       - name: Run tests with race detector
-        run: go test -race ./internal/gui/... ./pkg/ddpackage/...
+        run: go test -race ./internal/gui/... ./pkg/ddpackage/... ./pkg/structures/...
 
   release:
     needs: [build, test]
