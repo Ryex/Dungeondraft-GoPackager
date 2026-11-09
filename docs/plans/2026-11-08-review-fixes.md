@@ -707,11 +707,11 @@ Capture once at function top: `pkg := a.currentPackage()`; `if pkg == nil { log.
 
 ### Task 32: final verification & plan commit
 
-- [ ] **Step 1: Full build + suite** — `. .\setcc-gcc.ps1; go build ./...; go test ./...` → PASS.
-- [ ] **Step 2: gofmt + whitespace + LF** — `gofmt -l .` (empty), `git diff --check` (clean). LF is enforced by `.gitattributes`; if `git diff --check` reports `CR` at EOL anywhere, fix the file to LF before committing.
-- [ ] **Step 3: Single race run** — `. .\setcc-gcc.ps1; go test -race ./internal/gui/... ./pkg/ddpackage/...` → PASS (minutes; gcc required). Any race reported → fix in the owning task's area, re-run once.
-- [ ] **Step 4: Plan document** — the plan was committed in Task 0; if any schedule amendment was made during execution, commit it now (`git add docs/plans/2026-11-08-review-fixes.md; git commit -m "docs: sync the review-fixes plan with execution"`).
-- [ ] **Step 5: Report** — list commits per phase and paste the final test/race/gofmt outputs for the user.
+- [x] **Step 1: Full build + suite** — `. .\setcc-gcc.ps1; go build ./...; go test ./...` → PASS.
+- [x] **Step 2: gofmt + whitespace + LF** — `gofmt -l .` (empty), `git diff --check` (clean). LF is enforced by `.gitattributes`; if `git diff --check` reports `CR` at EOL anywhere, fix the file to LF before committing.
+- [x] **Step 3: Single race run** — `. .\setcc-gcc.ps1; go test -race ./internal/gui/... ./pkg/ddpackage/...` → PASS (minutes; gcc required). Any race reported → fix in the owning task's area, re-run once.
+- [x] **Step 4: Plan document** — the plan was committed in Task 0; if any schedule amendment was made during execution, commit it now (`git add docs/plans/2026-11-08-review-fixes.md; git commit -m "docs: sync the review-fixes plan with execution"`).
+- [x] **Step 5: Report** — list commits per phase and paste the final test/race/gofmt outputs for the user.
 
 ---
 
