@@ -239,5 +239,5 @@ func TestAppPackageWatcherIsNotStartedWhenDisabled(t *testing.T) {
 
 	a.setupPackageWatcher()
 
-	assert.Nil(t, a.packageWatcher, "the watcher must not be started when it is disabled")
+	assert.Nil(t, a.watcher(), "the watcher must not be started when it is disabled")
 }
