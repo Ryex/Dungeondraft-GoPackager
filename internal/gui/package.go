@@ -1,9 +1,11 @@
 package gui
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"image/color"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -261,14 +263,12 @@ func (a *App) buildInfoPane(info *structures.FileInfo, editable bool) fyne.Canva
 	)
 }
 
+// maxTextPreviewBytes is the size above which the preview of a text file does
+// not read the file at all: the "too large" label is shown instead.
+const maxTextPreviewBytes int64 = 4 << 20
+
 func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 	pkg := a.currentPackage()
-
-	fileData, err := pkg.LoadResource(info.ResPath)
-	if err != nil {
-		log.WithError(err).Errorf("failed to read image data for %s", info.ResPath)
-		return widget.NewLabel(fmt.Sprintf("Failed to read image data for %s", info.ResPath))
-	}
 
 	showThumbnail := binding.BindPreferenceBool("showThumbnails", a.app.Preferences())
 	thumbnailToggle := widgets.NewToggleWithData(showThumbnail)
@@ -318,18 +318,41 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 
 	bg := widgets.NewThemedRect(theme.ColorNameInputBackground, 4)
 
-	if !ddimage.PathIsSupportedImage(info.RelPath) {
-		textContent := string(fileData)
-		if len(strings.Split(textContent, "\n")) > 200 {
-			return container.NewPadded(
-				layouts.NewBottomExpandVBox(
-					infoCont,
-					container.NewStack(
-						bg, tooLarge,
-					),
+	tooLargeContent := func() fyne.CanvasObject {
+		return container.NewPadded(
+			layouts.NewBottomExpandVBox(
+				infoCont,
+				container.NewStack(
+					bg, tooLarge,
 				),
-			)
+			),
+		)
+	}
+
+	if !ddimage.PathIsSupportedImage(info.RelPath) {
+		// a text file above the size gate is not read at all: its size
+		// alone decides that the preview is too large. Unpacked resources
+		// carry no size, packed ones carry the size from their header.
+		size := info.Size
+		if size <= 0 && info.Path != "" {
+			if stat, statErr := os.Stat(info.Path); statErr == nil {
+				size = stat.Size()
+			}
 		}
+		if size > maxTextPreviewBytes {
+			return tooLargeContent()
+		}
+
+		fileData, err := pkg.LoadResource(info.ResPath)
+		if err != nil {
+			log.WithError(err).Errorf("failed to read image data for %s", info.ResPath)
+			return widget.NewLabel(fmt.Sprintf("Failed to read image data for %s", info.ResPath))
+		}
+
+		if bytes.Count(fileData, []byte("\n"))+1 > 200 {
+			return tooLargeContent()
+		}
+		textContent := string(fileData)
 		textEntry := widget.NewMultiLineEntry()
 		textEntry.Text = textContent
 		copyBtn := widget.NewButtonWithIcon("", theme.ContentCopyIcon(), func() {
@@ -351,6 +374,14 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 			),
 		)
 		return content
+	}
+
+	// the preview of an image needs its bytes, so the file is read
+	// unconditionally here
+	fileData, err := pkg.LoadResource(info.ResPath)
+	if err != nil {
+		log.WithError(err).Errorf("failed to read image data for %s", info.ResPath)
+		return widget.NewLabel(fmt.Sprintf("Failed to read image data for %s", info.ResPath))
 	}
 
 	img, _, err := ddimage.BytesToImage(fileData)
