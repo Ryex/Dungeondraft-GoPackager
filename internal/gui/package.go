@@ -299,9 +299,9 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 	// the md5 of the resource is computed in the background when it is not
 	// known yet, so the update of the entry is tracked as background work
 	// that touches the interface
-	a.bgWG.Add(1)
+	a.bgWork.Start()
 	a.currentPackage().GetOrUpdateResourceMd5(info, func(md5 string, err error) {
-		defer a.bgWG.Done()
+		defer a.bgWork.Done()
 
 		if err != nil {
 			log.WithError(err).Errorf("Failed to update hash for %s", info.ResPath)
