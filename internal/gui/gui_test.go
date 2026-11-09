@@ -33,10 +33,15 @@ func TestMain(m *testing.M) {
 }
 
 // newTestApp creates an App backed by a software rendered Fyne application.
+//
+// The locale is pinned to English before the app is set up: the app otherwise
+// uses the locale of the machine the tests run on, which would make the
+// assertions on the texts of the interface fail on non English systems.
 func newTestApp(t *testing.T) *App {
 	t.Helper()
 
 	a := NewAppWithFyneApp(test.NewApp())
+	a.app.Preferences().SetString("locale", "en")
 	// the filesystem watcher would keep running past the end of the test
 	a.packageWatcherDisabled = true
 	a.setup()
