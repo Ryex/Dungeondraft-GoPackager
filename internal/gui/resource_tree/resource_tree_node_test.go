@@ -568,3 +568,31 @@ func TestResourceTreeModifiedClickEndsTheClickSequence(t *testing.T) {
 	assert.True(t, tree.IsVisiblySelected(rockResPath),
 		"a modified click must end the click sequence")
 }
+
+func TestFastSecondClickKeepsTheFirstClick(t *testing.T) {
+	pkg, _ := loadFixture(t)
+	tree := newTree(t, pkg)
+
+	nodes := treeNodes(t, tree, "dir://textures", "dir://textures/objects")
+	nodeA, ok := nodes[rockResPath]
+	require.True(t, ok, "the tree must hold a node for the resource")
+	treeResPath := widget.TreeNodeID("res://packs/testpack/textures/objects/Tree.png")
+	nodeB, ok := nodes[treeResPath]
+	require.True(t, ok, "the tree must hold a node for the resource")
+
+	tree.Select(treeResPath)
+	require.True(t, tree.IsVisiblySelected(treeResPath))
+
+	// the plain click on A is still pending when the control click on B
+	// arrives - it must be applied, not cancelled by the second click
+	click(nodeA)
+	clickWith(nodeB, fyne.KeyModifierControl)
+	waitForPendingClick(t, tree)
+
+	assert.Equal(t, []widget.TreeNodeID{rockResPath}, tree.selected,
+		"a fast second click must keep the first click")
+	assert.True(t, tree.IsVisiblySelected(rockResPath),
+		"the flushed click must select its node")
+	assert.False(t, tree.IsVisiblySelected(treeResPath),
+		"the control click must unselect its node")
+}
