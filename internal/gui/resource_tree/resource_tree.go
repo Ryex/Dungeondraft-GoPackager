@@ -861,10 +861,16 @@ func (t *ResourceTree) GetSelectedResources() []SelectedResource {
 			continue
 		}
 		resources = append(resources, SelectedResource{
-			Uid:      uid,
-			Info:     node.Info,
-			Selected: t.IsSelected(uid),
+			Uid:  uid,
+			Info: node.Info,
 		})
+	}
+	// the resource of an entry can be selected through another node that
+	// shows it than the one the walk has seen first, so Selected cannot be
+	// decided from the uid of the entry: it is computed in a second pass
+	// over the collected resources, based on their data
+	for i := range resources {
+		resources[i].Selected = t.selectedIndexOfData(resources[i].Uid) != -1
 	}
 	// the map of the nodes is unordered, so the resources are sorted to
 	// keep the order of the selection stable
