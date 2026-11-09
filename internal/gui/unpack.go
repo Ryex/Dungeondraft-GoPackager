@@ -56,15 +56,15 @@ func (a *App) loadPack(path string) {
 	// package that is not loaded anymore.
 	a.teardownPackageWatcher()
 
-	a.bgWG.Add(1)
+	a.bgWork.Start()
 	go func() {
-		defer a.bgWG.Done()
+		defer a.bgWork.Done()
 
 		loader := a.loadPacked
 		if loader == nil {
 			loader = a.loadPackSync
 		}
-		pkg, err := loader(path, func(p float64, curRes string) {
+		result, err := loader(path, func(p float64, curRes string) {
 			activityProgress.Set(p)
 			activityStr.Set(
 				"res://" + utils.TruncatePathHumanFriendly(
@@ -80,19 +80,44 @@ func (a *App) loadPack(path string) {
 			)
 			return
 		}
-		a.setPackContent(pkg)
+		if result.TagsErr != nil {
+			a.showErrorDialog(
+				dderrors.CausedBy(errors.New(lang.X("package.tags.error", "Failed to read tags")), result.TagsErr),
+			)
+		}
+		if result.MetadataErr != nil {
+			a.showErrorDialog(
+				dderrors.CausedBy(errors.New(lang.X("package.metadata.error", "Failed to read metadata")), result.MetadataErr),
+			)
+		}
+		a.setPackContent(result.Pkg)
 	}()
 }
 
-// loadPackSync loads a packed resource pack file and its metadata. It does
-// not change the main content, so it can be driven directly from tests.
+// packedLoadResult is the outcome of loading a packed resource pack file.
+type packedLoadResult struct {
+	// Pkg is the loaded package. It is nil when the load failed.
+	Pkg *ddpackage.Package
+	// TagsErr is set when the optional tags could not be read.
+	// The package is still usable.
+	TagsErr error
+	// MetadataErr is set when the optional resource metadata could not be read.
+	// The package is still usable.
+	MetadataErr error
+}
+
+// loadPackSync loads a packed resource pack file and its tags and metadata.
+// It performs no user interface updates so it can be driven directly from
+// tests.
 func (a *App) loadPackSync(
 	path string,
 	progress func(p float64, curRes string),
-) (*ddpackage.Package, error) {
+) (packedLoadResult, error) {
 	l := log.WithFields(log.Fields{
 		"path": path,
 	})
+
+	res := packedLoadResult{}
 
 	pkg := ddpackage.NewPackage(l)
 
@@ -101,21 +126,14 @@ func (a *App) loadPackSync(
 	})
 	if err != nil {
 		l.WithError(err).Error("could not load path")
-		return nil, err
+		return res, err
 	}
 
-	err = pkg.LoadTags()
-	if err != nil {
-		a.showErrorDialog(dderrors.CausedBy(errors.New(lang.X("package.tags.error", "Failed to read tags")), err))
-		err = nil
-	}
-	err = pkg.LoadResourceMetadata()
-	if err != nil {
-		a.showErrorDialog(dderrors.CausedBy(errors.New(lang.X("package.metadata.error", "Failed to read metadata")), err))
-		err = nil
-	}
+	res.Pkg = pkg
+	res.TagsErr = pkg.LoadTags()
+	res.MetadataErr = pkg.LoadResourceMetadata()
 
-	return pkg, nil
+	return res, nil
 }
 
 func (a *App) setPackContent(pkg *ddpackage.Package) {
@@ -193,7 +211,7 @@ func (a *App) setPackContent(pkg *ddpackage.Package) {
 		lang.X("unpack.infoBtn.text", "Package Information"),
 		theme.DocumentIcon(),
 		func() {
-			dlg := NewPackJSONDialogPkg(a.pkg, false, nil, a.window)
+			dlg := NewPackJSONDialogPkg(a.currentPackage(), false, nil, a.window)
 			dlg.Show()
 		},
 	)
@@ -251,7 +269,27 @@ func (a *App) setPackContent(pkg *ddpackage.Package) {
 	a.disableButtons.Set(false)
 }
 
+// unpackTargetPath returns the directory under base that a package with the
+// given name is extracted to.
+//
+// The name is reduced to a single path segment, so that it can not nest the
+// extraction deeper than base or escape it: a name that contains path
+// separators becomes one segment, and a name that cleans to no usable
+// segment at all (".", "..", empty, a bare separator) falls back to "pack".
+func unpackTargetPath(base, packName string) string {
+	seg := filepath.Base(filepath.Clean(strings.TrimSpace(packName)))
+	if seg == "." || seg == ".." || seg == "" || seg == "/" || seg == "\\" {
+		seg = "pack"
+	}
+	return filepath.Join(base, seg)
+}
+
 func (a *App) extractPackage(path string, options ddpackage.UnpackOptions) {
+	pkg := a.currentPackage()
+	if pkg == nil {
+		log.WithError(ddpackage.ErrPackageNotLoaded).Warn("cannot extract without a loaded package")
+		return
+	}
 	if path == "" {
 		dialog.ShowInformation(
 			lang.X("needOutPathDialog.title", "Please Provide an Output Path"),
@@ -264,7 +302,7 @@ func (a *App) extractPackage(path string, options ddpackage.UnpackOptions) {
 	progressVal := binding.NewFloat()
 	progressBar := widget.NewProgressBarWithData(progressVal)
 
-	targetPath := filepath.Join(path, a.pkg.Name())
+	targetPath := unpackTargetPath(path, pkg.Name())
 	progressDlg := dialog.NewCustomWithoutButtons(
 		lang.X("unpack.extractProgressDlg.title", "Extracting to {{.Path}}", map[string]any{"Path": targetPath}),
 		progressBar,
@@ -272,39 +310,45 @@ func (a *App) extractPackage(path string, options ddpackage.UnpackOptions) {
 	)
 	progressDlg.Show()
 	go func() {
-		err := a.pkg.ExtractPackageProgress(targetPath, options, func(p float64) {
+		err := pkg.ExtractPackageProgress(targetPath, options, func(p float64) {
 			progressVal.Set(p)
 		})
-		progressDlg.Hide()
+		fyne.Do(func() {
+			progressDlg.Hide()
+		})
 		packPath, _ := a.operatingPath.Get()
 		if err != nil {
-			errDlg := dialog.NewError(
-				dderrors.CausedBy(errors.New(lang.X(
+			fyne.Do(func() {
+				errDlg := dialog.NewError(
+					dderrors.CausedBy(errors.New(lang.X(
 
-					"unpack.extract.error.text",
-					"Error extracting {{.Pack}} to {{.Path}}",
+						"unpack.extract.error.text",
+						"Error extracting {{.Pack}} to {{.Path}}",
+						map[string]any{
+							"Pack": packPath,
+							"Path": targetPath,
+						},
+					)), err),
+					a.window,
+				)
+				errDlg.Show()
+			})
+			return
+		}
+		fyne.Do(func() {
+			infoDlg := dialog.NewInformation(
+				lang.X("unpack.success.dlg.title", "Extraction successful"),
+				lang.X(
+					"unpack.success.dlg.text",
+					"{{.Pack}} extracted to {{.Path}} successfully",
 					map[string]any{
 						"Pack": packPath,
 						"Path": targetPath,
-					},
-				)), err),
+					}),
 				a.window,
 			)
-			errDlg.Show()
-			return
-		}
-		infoDlg := dialog.NewInformation(
-			lang.X("unpack.success.dlg.title", "Extraction successful"),
-			lang.X(
-				"unpack.success.dlg.text",
-				"{{.Pack}} extracted to {{.Path}} successfully",
-				map[string]any{
-					"Pack": packPath,
-					"Path": targetPath,
-				}),
-			a.window,
-		)
-		infoDlg.Show()
+			infoDlg.Show()
+		})
 		a.disableButtons.Set(false)
 	}()
 }

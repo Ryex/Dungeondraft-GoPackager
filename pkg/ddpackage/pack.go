@@ -226,12 +226,19 @@ func (p *Package) updateFromPaths(paths []string, progressCallback func(p float6
 			errs = append(errs, err)
 			continue
 		}
+		if isSub, _ := utils.PathIsSub(p.unpackedPath, absPath); !isSub {
+			// the path is outside of the package, so it is not a change
+			// of the package
+			continue
+		}
 		statInfo, err := os.Stat(absPath)
 		if err != nil {
 			if isSub, _ := utils.PathIsSub(p.unpackedPath, absPath); isSub {
+				p.flLock.RLock()
 				fi := p.fileList.Find(func(fi *structures.FileInfo) bool {
 					return fi.Path == absPath
 				})
+				p.flLock.RUnlock()
 				if fi != nil {
 					// the file of the resource was removed, so the resource
 					// is removed from the package

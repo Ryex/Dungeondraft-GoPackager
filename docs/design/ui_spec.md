@@ -1,6 +1,6 @@
 # UI Spec
 
-list of declarative conditions to translate into tests.
+A list of declarative conditions to translate into tests.
 sub lists represent conditions that should be read as: when <parent arm> then <all children>
 
 - when the main window is shown
@@ -8,13 +8,13 @@ sub lists represent conditions that should be read as: when <parent arm> then <a
     - with a theme toggle on the left
       - with a language select dropdown to the right of the theme toggle
     - with a title and subtitle in the center
-    - with a "about" ion button to the right
+    - with an "about" icon button to the right
       - with a github icon button to the right of "about"
-        - with a "info" icon button to the right of "github"
+        - with an "info" icon button to the right of "github"
   - with a path input section below the welcome header
     - with a path input entry to the left
-    - with a "Open Pack" button to the right of the path entry
-    - with a "Open Folder" button to the right of the "Open Pack" button
+    - with an "Open Pack" button to the right of the path entry
+    - with an "Open Folder" button to the right of the "Open Pack" button
   - with a content section on the bottom
 
 - when the app has just started and no pack has been opened yet
@@ -25,12 +25,12 @@ sub lists represent conditions that should be read as: when <parent arm> then <a
   - when the pack is loaded
     - the main content shows pack content
       - with a button panel on top
-        - with a output path entry
+        - with an output path entry
         - with a browse button
         - with a thumbnail generate button
-        - with a edit pack info button
+        - with an edit pack info button
         - with a generate tags button
-        - with a edit tag sets button
+        - with an edit tag sets button
         - with an overwrite check box
         - with a package button
       - with a split pane below the button pane
@@ -42,7 +42,7 @@ sub lists represent conditions that should be read as: when <parent arm> then <a
   - when the pack is loaded
     - the main content shows pack content
       - with a button panel on top
-        - with a output path entry
+        - with an output path entry
         - with a browse button
         - with a package information button
         - with a view tag sets button
