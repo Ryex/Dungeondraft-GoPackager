@@ -166,6 +166,15 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) *named.Named {
 }
 
 func (a *App) buildPackageTree(editable bool) (*resource_tree.ResourceTree, binding.String, binding.Bool) {
+	// the content is replaced, so a filter that is still pending must not
+	// be applied anymore
+	a.filterMu.Lock()
+	if a.filterTimer != nil {
+		a.filterTimer.Stop()
+		a.filterTimer = nil
+	}
+	a.filterMu.Unlock()
+
 	pkg := a.currentPackage()
 
 	filter := ""
@@ -182,13 +191,37 @@ func (a *App) buildPackageTree(editable bool) (*resource_tree.ResourceTree, bind
 	}
 
 	boundFilter.AddListener(binding.NewDataListener(func() {
-		f, err := ddresource_filter.ParseResourceFilter(filter)
-		if err != nil {
+		// parse right away to reject a bad filter: the validator of the
+		// entry shows the error text, the debounce only schedules a
+		// filter that parses
+		if _, err := ddresource_filter.ParseResourceFilter(filter); err != nil {
 			return
 		}
-		log.Debugf("Using filter: %s", f)
-		resourceTree.SetFilter(f)
-		resourceTree.OpenBranch(resource_tree.PackageTreeRootID)
+		a.filterMu.Lock()
+		defer a.filterMu.Unlock()
+		if a.filterTimer != nil {
+			a.filterTimer.Stop()
+		}
+		// the filter is read again when the timer fires, so the latest
+		// text of the entry is the one that is applied
+		a.filterTimer = time.AfterFunc(a.filterDebounce, func() {
+			fyne.Do(func() {
+				f, err := ddresource_filter.ParseResourceFilter(filter)
+				if err != nil {
+					return
+				}
+				log.Debugf("Using filter: %s", f)
+				// The fence: under the test driver fyne.Do runs inline on
+				// the goroutine of the debounce timer, so this rebuild has
+				// to be serialised against readers that poll the state of
+				// the tree (the filter spec test). The listener and clean
+				// take the same lock for the pending timer.
+				a.filterMu.Lock()
+				defer a.filterMu.Unlock()
+				resourceTree.SetFilter(f)
+				resourceTree.OpenBranch(resource_tree.PackageTreeRootID)
+			})
+		})
 	}))
 
 	boundByTag.AddListener(binding.NewDataListener(func() {
