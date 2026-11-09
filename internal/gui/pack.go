@@ -192,11 +192,14 @@ func (a *App) loadUnpackedPath(path string) {
 //
 // The scan runs on the goroutine of the caller, so that the interface stays
 // usable while it runs: it only writes the resource index of the package,
-// which is guarded by its own lock. The parts of the update that the
-// interface reads without a lock — the pack info, the tags and the resource
-// metadata — run on the Fyne goroutine as the last step of the update. The
-// dialog of the update is hidden with them, so that it disappears as soon
-// as the package can be used again.
+// which is guarded by its own lock. The pack info, the tags and the
+// resource metadata — which the interface reads without a lock — are read
+// on that goroutine as well: they read files from disk, which must not
+// block the Fyne goroutine, and the update holds packageUpdateLock while it
+// runs, so the package cannot be replaced (and closed) while it is read.
+// Only the parts of the update that touch the interface run on the Fyne
+// goroutine as its last step. The dialog of the update is hidden with them,
+// so that it disappears as soon as the package can be used again.
 //
 // The update never waits for the Fyne goroutine: the Fyne goroutine can
 // wait for the update, when a package is replaced (see replacePackage).
@@ -228,19 +231,30 @@ func (a *App) updateFromPaths(pkg *ddpackage.Package, paths []string, full bool)
 		log.WithError(err).Error("could not update the package from the changed paths")
 	}
 
+	// The tags and the resource metadata are read here, on the goroutine
+	// of the update, before the interface is touched: they read files from
+	// disk, which must not block the Fyne goroutine. The update runs under
+	// packageUpdateLock, so the package cannot be replaced (and closed)
+	// while it is read.
+	tagsErr := pkg.LoadTags()
+	metaErr := pkg.LoadResourceMetadata()
+
+	// showErrorDialog queues its own dialog on the Fyne goroutine, so it is
+	// called here, outside of the fyne.Do below: the fyne.Do only hides the
+	// dialog of the update and reports that the package was updated.
+	if tagsErr != nil {
+		a.showErrorDialog(
+			dderrors.CausedBy(errors.New(lang.X("package.tags.error", "Failed to read tags")), tagsErr),
+		)
+	}
+	if metaErr != nil {
+		a.showErrorDialog(
+			dderrors.CausedBy(errors.New(lang.X("package.metadata.error", "Failed to read metadata")), metaErr),
+		)
+	}
+
 	fyne.Do(func() {
 		defer dlg.hide()
-
-		if err := pkg.LoadTags(); err != nil {
-			a.showErrorDialog(
-				dderrors.CausedBy(errors.New(lang.X("package.tags.error", "Failed to read tags")), err),
-			)
-		}
-		if err := pkg.LoadResourceMetadata(); err != nil {
-			a.showErrorDialog(
-				dderrors.CausedBy(errors.New(lang.X("package.metadata.error", "Failed to read metadata")), err),
-			)
-		}
 
 		a.packageUpdated.Set(a.pkgUpdateCounter + 1)
 	})
@@ -273,8 +287,9 @@ type packageUpdateDialog struct {
 // showPackageUpdateDialog shows the dialog that informs about an update of
 // the package of the app.
 //
-// It must be called on the goroutine of the update; only the dialog itself
-// is shown on the Fyne goroutine.
+// It must be called on the goroutine of the update; the dialog and its
+// content are built and shown on the Fyne goroutine, because they are
+// widgets.
 func (a *App) showPackageUpdateDialog(
 	pkg *ddpackage.Package,
 	progress bool,
@@ -287,23 +302,32 @@ func (a *App) showPackageUpdateDialog(
 		},
 	)
 
+	// The bindings are created here, outside of the fyne.Do, so that the
+	// update can report what it does while the dialog is still built.
 	activityStr := binding.NewString()
 	activityProgress := binding.NewFloat()
-	content, activity := packageUpdateContent(msg, progress, activityStr, activityProgress)
 
 	d := &packageUpdateDialog{
-		activity:         activity,
 		progress:         progress,
 		activityStr:      activityStr,
 		activityProgress: activityProgress,
 	}
-	d.dialog = dialog.NewCustomWithoutButtons(
-		lang.X("task.updatePackage.text", "Updating pack resources ..."),
-		content,
-		a.window,
-	)
 
-	fyne.Do(d.dialog.Show)
+	// The dialog and its content are widgets, so they are built on the Fyne
+	// goroutine and not on the goroutine of the update. This runs before
+	// the hide of the dialog (which also runs on the Fyne goroutine and is
+	// queued after this), so the FIFO order of the queue keeps d.dialog
+	// non-nil when hide reads it.
+	fyne.Do(func() {
+		content, activity := packageUpdateContent(msg, progress, activityStr, activityProgress)
+		d.activity = activity
+		d.dialog = dialog.NewCustomWithoutButtons(
+			lang.X("task.updatePackage.text", "Updating pack resources ..."),
+			content,
+			a.window,
+		)
+		d.dialog.Show()
+	})
 
 	return d
 }
@@ -428,6 +452,16 @@ func samePath(a string, b string) bool {
 //
 // It is called by the filesystem watcher, when the debounce time passed
 // without further events, on the goroutine of the watcher.
+//
+// The whole update — including the full rescan that a lost event of the
+// watcher triggers — intentionally runs under packageUpdateLock. Updates
+// only ever run against unpacked packages, where Close() is a no-op, so a
+// long hold of the lock only makes a replacement of the package wait for
+// the update, which is what it is for: the package must not be closed while
+// it is updated. The critical section is deliberately not shrunk, because
+// an update must never wait for the Fyne goroutine while it holds the lock:
+// the Fyne goroutine can wait for the lock itself, when a package is
+// replaced (see replacePackage), so waiting for it here would deadlock.
 func (a *App) onPackageChanged(paths []string, full bool) {
 	// the updates are serialized, so that the package is not updated while
 	// it is read
