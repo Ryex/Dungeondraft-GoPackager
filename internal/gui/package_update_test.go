@@ -118,3 +118,37 @@ func TestPackageUpdateRescanReportsProgress(t *testing.T) {
 	assert.Equal(t, 1, reports, "the update must show its dialog once")
 	waitForUpdateDialogHidden(t, a)
 }
+
+// TestPackageUpdateDialogReportThrottles verifies that the dialog of an
+// update only forwards a progress that changed by at least a percent.
+//
+// The scan of a package reports its progress for every file of it, and every
+// report queues a function on the Fyne goroutine. Without the throttle, the
+// queue would hold a function for every file of the package, which slows the
+// interface down (and blocks it) for a package with many files.
+func TestPackageUpdateDialogReportThrottles(t *testing.T) {
+	d := packageUpdateDialog{
+		progress:         true,
+		activityStr:      binding.NewString(),
+		activityProgress: binding.NewFloat(),
+	}
+
+	notifications := 0
+	d.activityProgress.AddListener(binding.NewDataListener(func() {
+		notifications++
+	}))
+	// a listener is notified when it is connected, to give it the value
+	// the binding has; the notifications of the reports are counted from
+	// the first one of them
+	notifications = 0
+
+	for range 100 {
+		d.report(0.5, "x", 0)
+	}
+	assert.Equal(t, 1, notifications,
+		"the progress must only be reported when it changed by at least a percent")
+
+	d.report(0.51, "x", 0)
+	assert.Equal(t, 2, notifications,
+		"a progress that changed by a percent must be reported again")
+}
