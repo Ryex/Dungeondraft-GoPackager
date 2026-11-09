@@ -538,6 +538,9 @@ func (a *App) buildTagInfo(info *structures.FileInfo, editable bool) fyne.Canvas
 }
 
 func (a *App) saveUnpackedTags() {
+	a.saveTimerLock.Lock()
+	defer a.saveTimerLock.Unlock()
+
 	if a.tagSaveTimer != nil {
 		a.tagSaveTimer.Stop()
 		a.tagSaveTimer = nil
@@ -561,6 +564,10 @@ func (a *App) saveUnpackedTags() {
 // scheduled before the package was replaced is neither lost nor written
 // after the package was closed.
 //
+// The timers are stopped under saveTimerLock, because the save callbacks
+// create them on the Fyne goroutine; the saves themselves run after the
+// lock is released, so no file I/O is serialised against them.
+//
 // A timer that already fired is left alone: its callback holds the same
 // package and the write to the unpacked folder of a replaced package is
 // harmless.
@@ -568,17 +575,32 @@ func (a *App) stopSaveTimersFor(old *ddpackage.Package) {
 	if old == nil {
 		return
 	}
+
+	// what is saved is collected under the lock, the saves run outside
+	// of it (file I/O, and no lock may be held across them)
+	var flushTags bool
+	var flushMeta []string
+
+	a.saveTimerLock.Lock()
 	if t := a.tagSaveTimer; t != nil && t.Stop() {
-		if err := old.SaveUnpackedTags(); err != nil {
-			log.WithError(err).Error("failed to flush the pending tag save")
-		}
+		flushTags = true
 	}
 	a.tagSaveTimer = nil
 
 	for key, timer := range a.resSaveTimers {
-		if !timer.Stop() {
-			continue
+		if timer.Stop() {
+			flushMeta = append(flushMeta, key)
 		}
+	}
+	a.resSaveTimers = map[string]*time.Timer{}
+	a.saveTimerLock.Unlock()
+
+	if flushTags {
+		if err := old.SaveUnpackedTags(); err != nil {
+			log.WithError(err).Error("failed to flush the pending tag save")
+		}
+	}
+	for _, key := range flushMeta {
 		var err error
 		if strings.HasSuffix(key, ".dungeondraft_wall") {
 			err = old.SaveUnpackedWall(key)
@@ -590,7 +612,6 @@ func (a *App) stopSaveTimersFor(old *ddpackage.Package) {
 				Error("failed to flush the pending metadata save")
 		}
 	}
-	a.resSaveTimers = map[string]*time.Timer{}
 }
 
 func (a *App) buildMetadataPane(info *structures.FileInfo, editable bool) fyne.CanvasObject {
@@ -777,6 +798,9 @@ func (a *App) buildMetadataPane(info *structures.FileInfo, editable bool) fyne.C
 }
 
 func (a *App) saveWallMetadata(metaPath string) {
+	a.saveTimerLock.Lock()
+	defer a.saveTimerLock.Unlock()
+
 	timer := a.resSaveTimers[metaPath]
 	if timer != nil {
 		timer.Stop()
@@ -797,6 +821,9 @@ func (a *App) saveWallMetadata(metaPath string) {
 }
 
 func (a *App) saveTilesetMetadata(metaPath string) {
+	a.saveTimerLock.Lock()
+	defer a.saveTimerLock.Unlock()
+
 	timer := a.resSaveTimers[metaPath]
 	if timer != nil {
 		timer.Stop()
