@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -94,11 +95,21 @@ type App struct {
 	// objects they belong to.
 	ui *named.Cache
 
+	// saveTimerLock guards tagSaveTimer and resSaveTimers. The save
+	// callbacks create the timers on the Fyne goroutine, while the flush
+	// of a replaced package runs on the load goroutine (replacePackage)
+	// and the cleanup runs on the main goroutine. Flushing the timer map
+	// while a save callback writes it would crash the process
+	// (concurrent map writes), not just race the race detector.
+	saveTimerLock sync.Mutex
+
 	tagSaveTimer  *time.Timer
 	resSaveTimers map[string]*time.Timer
 
 	// packageWatcher watches the unpacked folder of the package for changes.
-	packageWatcher *packageWatcher
+	// It is atomic, because it is replaced when a package is loaded, while
+	// it may be read from the goroutine of the watcher and from the UI.
+	packageWatcher atomic.Pointer[packageWatcher]
 
 	// packageWatcherDebounce is the time the watcher waits for further
 	// events, before it reports the changed paths. It is zero in the app,
@@ -129,7 +140,7 @@ type App struct {
 
 	// loadPacked loads a packed resource pack file. It is a field so that
 	// tests can control the timing of the load.
-	loadPacked func(path string, progress func(p float64, curRes string)) (*ddpackage.Package, error)
+	loadPacked func(path string, progress func(p float64, curRes string)) (packedLoadResult, error)
 
 	// packageUpdateHook is called while an update of the package runs in
 	// the background, with the dialog of the update showing. It is a field
@@ -294,6 +305,9 @@ func (a *App) replacePackage(pkg *ddpackage.Package) {
 	old := a.currentPackage()
 	a.setCurrentPackage(pkg)
 	if old != nil && old != pkg {
+		// flush the saves that are still pending for the old package
+		// before it is closed
+		a.stopSaveTimersFor(old)
 		old.Close()
 	}
 }
@@ -317,6 +331,7 @@ func (a *App) setCurrentPackage(pkg *ddpackage.Package) {
 
 func (a *App) clean() {
 	a.resetPkg()
+	a.saveTimerLock.Lock()
 	if a.tagSaveTimer != nil {
 		a.tagSaveTimer.Stop()
 		a.tagSaveTimer = nil
@@ -325,6 +340,7 @@ func (a *App) clean() {
 		timer.Stop()
 	}
 	a.resSaveTimers = map[string]*time.Timer{}
+	a.saveTimerLock.Unlock()
 	if a.prefLocaleListener != nil && a.prefLocale != nil {
 		a.prefLocale.RemoveListener(a.prefLocaleListener)
 		a.prefLocaleListener = nil
@@ -711,6 +727,9 @@ func (a *App) setErrContent(msg string, errs ...error) {
 		layout.NewSpacer(),
 	)
 
+	// the error content replaces the content of a failed load, which has
+	// disabled the controls of the interface, so they are enabled again
+	a.disableButtons.Set(false)
 	a.setMainContent(msgContent)
 }
 

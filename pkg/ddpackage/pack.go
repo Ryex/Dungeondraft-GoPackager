@@ -229,9 +229,11 @@ func (p *Package) updateFromPaths(paths []string, progressCallback func(p float6
 		statInfo, err := os.Stat(absPath)
 		if err != nil {
 			if isSub, _ := utils.PathIsSub(p.unpackedPath, absPath); isSub {
+				p.flLock.RLock()
 				fi := p.fileList.Find(func(fi *structures.FileInfo) bool {
 					return fi.Path == absPath
 				})
+				p.flLock.RUnlock()
 				if fi != nil {
 					// the file of the resource was removed, so the resource
 					// is removed from the package
