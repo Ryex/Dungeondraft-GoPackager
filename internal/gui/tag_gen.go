@@ -124,7 +124,7 @@ func (a *App) createTagGenDialog() dialog.Dialog {
 
 	var (
 		buildGlobalTagSet     = false
-		globalTagSet          = a.pkg.Name()
+		globalTagSet          = a.currentPackage().Name()
 		buildTagSetFrpmPrefix = true
 		prefixSplitMode       = false
 		prefixSplitSeparator  = "|"
