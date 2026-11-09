@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2/test"
+	"github.com/fsnotify/fsnotify"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -701,6 +702,59 @@ func TestWatcherWatchesAFolderAgainAfterItWasDeletedAndRecreated(t *testing.T) {
 		assert.NoError(t, err,
 			"the texture in the recreated folder must be part of the package")
 	})
+}
+
+// TestPackageWatcherForgetsWatchedOnCoalescedRemoveChmod verifies that an
+// event that reports the removal of a path together with a mode change —
+// how kqueue on macOS coalesces a deletion — still clears the cache of the
+// watched paths and is queued as a change, while a mode change on its own
+// stays skipped.
+func TestPackageWatcherForgetsWatchedOnCoalescedRemoveChmod(t *testing.T) {
+	// a debounce of an hour keeps the queued paths from being reported, so
+	// the queue of the watcher can be read directly
+	pw, err := newPackageWatcher(time.Hour, func([]string, bool) {}, nil)
+	require.NoError(t, err)
+	t.Cleanup(pw.Close)
+
+	// a path whose watch died with it: it is in the cache, but it does not
+	// exist on disk anymore, so the event can not watch it again while it
+	// is processed
+	gone := filepath.Join(t.TempDir(), "gone-folder")
+	pw.watchMu.Lock()
+	pw.watched[filepath.Clean(gone)] = true
+	pw.watchMu.Unlock()
+	require.True(t, pw.isWatched(gone))
+
+	// the coalesced event of a deletion on kqueue (macOS)
+	pw.watcher.Events <- fsnotify.Event{Name: gone, Op: fsnotify.Remove | fsnotify.Chmod}
+
+	require.Eventually(t, func() bool {
+		return !pw.isWatched(gone)
+	}, 10*time.Second, 10*time.Millisecond,
+		"a Remove|Chmod event must clear the cache of the watched path")
+	require.Contains(t, pw.Pending(), gone,
+		"the removal of the path must be queued as a change of the package")
+
+	// a mode change on its own is not a change of the content and stays
+	// unqueued; the event behind it is processed after it, so the queue
+	// can be read once that one arrived
+	modeOnly := filepath.Join(t.TempDir(), "mode-only")
+	pw.watcher.Events <- fsnotify.Event{Name: modeOnly, Op: fsnotify.Chmod}
+
+	marker := filepath.Join(t.TempDir(), "marker-folder")
+	pw.watchMu.Lock()
+	pw.watched[filepath.Clean(marker)] = true
+	pw.watchMu.Unlock()
+	pw.watcher.Events <- fsnotify.Event{Name: marker, Op: fsnotify.Remove | fsnotify.Chmod}
+
+	require.Eventually(t, func() bool {
+		return !pw.isWatched(marker)
+	}, 10*time.Second, 10*time.Millisecond,
+		"the event behind the mode change must be processed")
+	assert.NotContains(t, pw.Pending(), modeOnly,
+		"a mode change on its own must not be queued as a change")
+	assert.Contains(t, pw.Pending(), gone,
+		"the queued removal must still be pending")
 }
 
 // TestPackageWatcherRescansWhenPackIDChanges verifies that a change of the

@@ -100,15 +100,17 @@ func TestLeadingCenterLayout(t *testing.T) {
 		assert.Equal(t, fyne.NewSize(152, 60), trailing.Size())
 	})
 
-	t.Run("min size is the widths added and the highest object", func(t *testing.T) {
+	t.Run("min size is the widths, the leading padding and the highest object", func(t *testing.T) {
 		leading := newTestObject(fyne.NewSize(40, 30))
 		trailing := newTestObject(fyne.NewSize(100, 50))
 
 		min := l.MinSize([]fyne.CanvasObject{leading, trailing})
 
-		// Pins the current behaviour: MinSize omits l.padding although Layout
-		// gives the leading child min+padding — known bug, ledgered, update on fix.
-		assert.Equal(t, fyne.NewSize(140, 50), min)
+		// Layout gives the leading child its minimum size plus the
+		// padding, so the minimum size of the container has to add the
+		// padding too, or the trailing child would get less than its own
+		// minimum at the reported size
+		assert.Equal(t, fyne.NewSize(148, 50), min)
 	})
 
 	t.Run("layout does not skip hidden objects", func(t *testing.T) {
@@ -123,8 +125,8 @@ func TestLeadingCenterLayout(t *testing.T) {
 		assert.Equal(t, fyne.NewPos(48, 0), trailing.Position())
 		assert.Equal(t, fyne.NewSize(152, 60), trailing.Size())
 
-		// and the min size counts it as well
-		assert.Equal(t, fyne.NewSize(140, 50), l.MinSize([]fyne.CanvasObject{leading, trailing}))
+		// and the min size counts it as well, padding included
+		assert.Equal(t, fyne.NewSize(148, 50), l.MinSize([]fyne.CanvasObject{leading, trailing}))
 	})
 
 	t.Run("no objects", func(t *testing.T) {
