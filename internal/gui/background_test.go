@@ -2,6 +2,7 @@ package gui
 
 import (
 	"runtime"
+	"sync"
 	"testing"
 	"time"
 
@@ -65,4 +66,32 @@ func TestBackgroundTrackerConcurrentStartAndWait(t *testing.T) {
 	defer a.bgWork.mu.Unlock()
 	require.Zero(t, a.bgWork.count,
 		"no background work may be counted after Wait returned")
+}
+
+// TestBackgroundTrackerMispairedDonePanics asserts the fail-fast of a unit
+// of work that is finished without being started: like the negative counter
+// panic of the sync.WaitGroup it replaced, an extra Done panics instead of
+// silently driving the counter negative — a negative counter would let Wait
+// return while background work is still running.
+func TestBackgroundTrackerMispairedDonePanics(t *testing.T) {
+	// a fresh tracker, so that the panic of the extra Done can not affect
+	// the other test cases
+	tracker := backgroundTracker{}
+	tracker.cond = sync.NewCond(&tracker.mu)
+
+	require.Panics(t, tracker.Done,
+		"a Done without a matching Start must panic")
+
+	// the panic must not leave the mutex locked: a balanced Start/Done
+	// pair and a Wait still work on the tracker
+	require.NotPanics(t, func() {
+		tracker.Start()
+		tracker.Done()
+		tracker.Wait()
+	}, "the tracker must stay usable after the panic")
+
+	tracker.mu.Lock()
+	defer tracker.mu.Unlock()
+	require.Zero(t, tracker.count,
+		"a balanced Start/Done pair leaves no work counted")
 }
