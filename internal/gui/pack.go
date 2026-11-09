@@ -784,6 +784,25 @@ func (a *App) genThumbnails() {
 	)
 	progressDlg.Show()
 	go func() {
+		// The generation reads the file list of the package and updates
+		// it with the generated thumbnails, so it runs as an update of
+		// the package: it holds packageUpdateLock for its whole run.
+		// This excludes the updates of the watcher from the file-list
+		// work of GenerateThumbnailsProgress and UpdateFromPaths, and
+		// makes replacePackage wait for the generation instead of
+		// closing the package under it.
+		//
+		// Deadlock check: nothing the generation calls while it holds
+		// the lock waits for packageUpdateLock while holding a lock the
+		// update path needs. fyne.Do and the Set of a binding do not
+		// wait for the Fyne goroutine, and their callbacks never take
+		// packageUpdateLock; pause, discard and resume only take the
+		// lock of the watcher; and packageWatcher.report releases
+		// pw.mu before it invokes onUpdate — the callback that waits
+		// for packageUpdateLock.
+		a.packageUpdateLock.Lock()
+		defer a.packageUpdateLock.Unlock()
+
 		// the generation writes a lot of files, so the watcher is paused,
 		// to not be flooded with the events of the generated thumbnails
 		a.pausePackageWatcher()
