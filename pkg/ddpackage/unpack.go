@@ -266,7 +266,20 @@ func checkPackedReadBounds(offset, size, fileSize int64) error {
 	return nil
 }
 
+// readPackedFileFromPackage reads the bytes of the resource described by
+// info out of the packed file r.
+//
+// The seek+read moves the position of the shared packed file, so pkgFileMu
+// is held across both: the readers that overlap in the application — the
+// preview of a resource (LoadResource), the extraction (ExtractFile) and
+// the md5 computation — must not interleave, or they serve each other's
+// bytes. The lock is taken here, so no caller can forget it; no caller
+// holds it already (it is not reentrant), and no other lock of the package
+// is acquired while it is held.
 func (p *Package) readPackedFileFromPackage(r io.ReadSeeker, info *structures.FileInfo) ([]byte, error) {
+	p.pkgFileMu.Lock()
+	defer p.pkgFileMu.Unlock()
+
 	l := p.log.
 		WithField("packedPath", info.ResPath).
 		WithField("offset", info.Offset)

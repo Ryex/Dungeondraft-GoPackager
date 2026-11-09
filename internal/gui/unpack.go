@@ -333,6 +333,10 @@ func (a *App) extractPackage(path string, options ddpackage.UnpackOptions) {
 				)
 				errDlg.Show()
 			})
+			// the buttons are the recovery controls (Open Pack, Open
+			// Folder), so they are enabled again on every path out of the
+			// task, like the success path does
+			a.disableButtons.Set(false)
 			return
 		}
 		fyne.Do(func() {

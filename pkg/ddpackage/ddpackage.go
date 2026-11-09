@@ -67,8 +67,11 @@ type Package struct {
 	// callbacks.
 	md5Mu       sync.Mutex
 	md5Inflight map[string][]func(string, error)
-	// pkgFileMu serializes the seek+read of the shared packed file between
-	// concurrent md5 computations (see readPackedFileFromPackage).
+	// pkgFileMu serializes the seek+read of the shared packed file, which
+	// moves its position, between the concurrent readers of it (the
+	// preview, the extraction and the md5 computation). It is taken inside
+	// readPackedFileFromPackage and is never held while another lock of
+	// the package is acquired.
 	pkgFileMu sync.Mutex
 
 	info *structures.PackageInfo
@@ -586,11 +589,10 @@ func (p *Package) computeMd5(fi *structures.FileInfo, key string) {
 		}
 	case p.mode == PackageModePacked && p.pkgFile != nil:
 		l := p.log.WithField("resPath", fi.ResPath)
-		// the seek+read of readPackedFileFromPackage moves the position of
-		// the shared file, so concurrent computations must not interleave
-		p.pkgFileMu.Lock()
+		// readPackedFileFromPackage takes pkgFileMu around the seek+read
+		// itself, so every reader of the shared file is serialised with
+		// this computation
 		data, readErr := p.readPackedFileFromPackage(p.pkgFile, fi)
-		p.pkgFileMu.Unlock()
 		if readErr != nil {
 			l.WithError(readErr).Errorf("failed to read packed file")
 			err = dderrors.CausedBy(errors.New("failed to read packed file"), readErr)

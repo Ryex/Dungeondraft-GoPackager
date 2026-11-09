@@ -945,6 +945,10 @@ func (a *App) packPackage(path string, options ddpackage.PackOptions) {
 				)
 				errDlg.Show()
 			})
+			// the buttons are the recovery controls (Open Pack, Open
+			// Folder), so they are enabled again on every path out of the
+			// task, like the success path and the thumbnail generation do
+			a.disableButtons.Set(false)
 			return
 		}
 

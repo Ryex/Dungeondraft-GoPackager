@@ -1,10 +1,14 @@
 package gui
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/ryex/dungeondraft-gopackager/pkg/ddpackage"
 )
 
 // TestGenThumbnailsWithoutPackageHidesProgressDialog verifies that the
@@ -31,4 +35,27 @@ func TestGenThumbnailsWithoutPackageHidesProgressDialog(t *testing.T) {
 
 	require.Nil(t, a.window.Canvas().Overlays().Top(),
 		"the progress dialog must be hidden when there is no package to generate thumbnails for")
+}
+
+// TestPackPackageFailureReenablesButtons verifies that the buttons of the
+// window are enabled again when packing fails. They drive Open Pack and
+// Open Folder — the controls a user needs to recover from the failure — so
+// the error path of the task has to re-enable them like the success path
+// does.
+func TestPackPackageFailureReenablesButtons(t *testing.T) {
+	a := newTestApp(t)
+	_, pkg := loadFixturePackage(t, a)
+	a.setUnpackedContent(pkg)
+
+	// packing into a path that exists as a file fails
+	blocker := filepath.Join(t.TempDir(), "blocker")
+	require.NoError(t, os.WriteFile(blocker, []byte("not a folder"), 0o644))
+
+	a.packPackage(blocker, ddpackage.PackOptions{})
+
+	require.Eventually(t, func() bool {
+		disabled, err := a.disableButtons.Get()
+		return err == nil && !disabled
+	}, 10*time.Second, 20*time.Millisecond,
+		"the buttons must be enabled again after a failed pack")
 }

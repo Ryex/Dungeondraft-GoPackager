@@ -1,11 +1,15 @@
 package gui
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/ryex/dungeondraft-gopackager/pkg/ddpackage"
 )
 
 // TestUnpackTargetPath checks that the name of a pack can not steer the
@@ -55,4 +59,34 @@ func TestUnpackTargetPath(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestExtractPackageFailureReenablesButtons verifies that the buttons of the
+// window are enabled again when the extraction fails. They drive Open Pack
+// and Open Folder — the controls a user needs to recover from the failure —
+// so the error path of the task has to re-enable them like the success path
+// does.
+func TestExtractPackageFailureReenablesButtons(t *testing.T) {
+	// the pack file is created before the app, so that the package is
+	// closed before the temporary directory of the fixture is removed
+	packFile := packedFixtureFile(t)
+
+	a := newTestApp(t)
+
+	result, err := a.loadPackSync(packFile, func(float64, string) {})
+	require.NoError(t, err)
+	require.NotNil(t, result.Pkg)
+	a.setPackContent(result.Pkg)
+
+	// extracting into a path that exists as a file fails
+	blocker := filepath.Join(t.TempDir(), "blocker")
+	require.NoError(t, os.WriteFile(blocker, []byte("not a folder"), 0o644))
+
+	a.extractPackage(blocker, ddpackage.UnpackOptions{})
+
+	require.Eventually(t, func() bool {
+		disabled, err := a.disableButtons.Get()
+		return err == nil && !disabled
+	}, 10*time.Second, 20*time.Millisecond,
+		"the buttons must be enabled again after a failed extraction")
 }
