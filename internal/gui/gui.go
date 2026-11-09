@@ -714,6 +714,9 @@ func (a *App) setErrContent(msg string, errs ...error) {
 		layout.NewSpacer(),
 	)
 
+	// the error content replaces the content of a failed load, which has
+	// disabled the controls of the interface, so they are enabled again
+	a.disableButtons.Set(false)
 	a.setMainContent(msgContent)
 }
 
