@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"fyne.io/fyne/v2"
@@ -98,7 +99,9 @@ type App struct {
 	resSaveTimers map[string]*time.Timer
 
 	// packageWatcher watches the unpacked folder of the package for changes.
-	packageWatcher *packageWatcher
+	// It is atomic, because it is replaced when a package is loaded, while
+	// it may be read from the goroutine of the watcher and from the UI.
+	packageWatcher atomic.Pointer[packageWatcher]
 
 	// packageWatcherDebounce is the time the watcher waits for further
 	// events, before it reports the changed paths. It is zero in the app,
