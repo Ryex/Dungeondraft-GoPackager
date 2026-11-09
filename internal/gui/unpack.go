@@ -64,7 +64,7 @@ func (a *App) loadPack(path string) {
 		if loader == nil {
 			loader = a.loadPackSync
 		}
-		pkg, err := loader(path, func(p float64, curRes string) {
+		result, err := loader(path, func(p float64, curRes string) {
 			activityProgress.Set(p)
 			activityStr.Set(
 				"res://" + utils.TruncatePathHumanFriendly(
@@ -80,19 +80,44 @@ func (a *App) loadPack(path string) {
 			)
 			return
 		}
-		a.setPackContent(pkg)
+		if result.TagsErr != nil {
+			a.showErrorDialog(
+				dderrors.CausedBy(errors.New(lang.X("package.tags.error", "Failed to read tags")), result.TagsErr),
+			)
+		}
+		if result.MetadataErr != nil {
+			a.showErrorDialog(
+				dderrors.CausedBy(errors.New(lang.X("package.metadata.error", "Failed to read metadata")), result.MetadataErr),
+			)
+		}
+		a.setPackContent(result.Pkg)
 	}()
 }
 
-// loadPackSync loads a packed resource pack file and its metadata. It does
-// not change the main content, so it can be driven directly from tests.
+// packedLoadResult is the outcome of loading a packed resource pack file.
+type packedLoadResult struct {
+	// Pkg is the loaded package. It is nil when the load failed.
+	Pkg *ddpackage.Package
+	// TagsErr is set when the optional tags could not be read.
+	// The package is still usable.
+	TagsErr error
+	// MetadataErr is set when the optional resource metadata could not be read.
+	// The package is still usable.
+	MetadataErr error
+}
+
+// loadPackSync loads a packed resource pack file and its tags and metadata.
+// It performs no user interface updates so it can be driven directly from
+// tests.
 func (a *App) loadPackSync(
 	path string,
 	progress func(p float64, curRes string),
-) (*ddpackage.Package, error) {
+) (packedLoadResult, error) {
 	l := log.WithFields(log.Fields{
 		"path": path,
 	})
+
+	res := packedLoadResult{}
 
 	pkg := ddpackage.NewPackage(l)
 
@@ -101,21 +126,14 @@ func (a *App) loadPackSync(
 	})
 	if err != nil {
 		l.WithError(err).Error("could not load path")
-		return nil, err
+		return res, err
 	}
 
-	err = pkg.LoadTags()
-	if err != nil {
-		a.showErrorDialog(dderrors.CausedBy(errors.New(lang.X("package.tags.error", "Failed to read tags")), err))
-		err = nil
-	}
-	err = pkg.LoadResourceMetadata()
-	if err != nil {
-		a.showErrorDialog(dderrors.CausedBy(errors.New(lang.X("package.metadata.error", "Failed to read metadata")), err))
-		err = nil
-	}
+	res.Pkg = pkg
+	res.TagsErr = pkg.LoadTags()
+	res.MetadataErr = pkg.LoadResourceMetadata()
 
-	return pkg, nil
+	return res, nil
 }
 
 func (a *App) setPackContent(pkg *ddpackage.Package) {
