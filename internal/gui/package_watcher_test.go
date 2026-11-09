@@ -641,3 +641,56 @@ func TestWatcherDoesNotWatchSymlinksLeavingThePackage(t *testing.T) {
 			"the file outside of the package must not be indexed")
 	})
 }
+
+// TestWatcherWatchesAFolderAgainAfterItWasDeletedAndRecreated verifies that
+// a watched folder that is deleted and recreated before the debounced
+// cleanup runs is watched again.
+//
+// The watch of a folder dies with the folder itself, so the watch set
+// cache has to forget the folder when the deletion is noticed —
+// independent of the debounce and of a paused watcher — or the recreated
+// folder would be treated as watched and its changes would never be
+// reported.
+func TestWatcherWatchesAFolderAgainAfterItWasDeletedAndRecreated(t *testing.T) {
+	a := newWatcherApp(t)
+	dir, _ := loadWatchedPackage(t, a)
+
+	waitForWatcherIdle(t, a)
+
+	// a new folder in the package, watched after its creation event
+	folder := filepath.Join(dir, "textures", "objects", "stones")
+	require.NoError(t, os.MkdirAll(folder, 0o755))
+	waitForWatcherIdle(t, a)
+	require.True(t, a.watcher().isWatched(folder),
+		"the new folder must be watched")
+
+	// the folder is deleted and recreated while the watcher is paused, so
+	// that both happen before the debounced cleanup runs
+	a.pausePackageWatcher()
+	require.NoError(t, os.RemoveAll(folder))
+
+	// the deletion is noticed at once, even while the reporting is paused
+	assert.Eventually(t, func() bool {
+		return !a.watcher().isWatched(folder)
+	}, 10*time.Second, 20*time.Millisecond,
+		"the deleted folder must be dropped from the watch set")
+
+	require.NoError(t, os.MkdirAll(folder, 0o755))
+	require.Eventually(t, func() bool {
+		return a.watcher().isWatched(folder)
+	}, 10*time.Second, 20*time.Millisecond,
+		"the recreated folder must be watched again")
+
+	a.resumePackageWatcher()
+	count := waitForWatcherIdle(t, a)
+
+	// the changes in the recreated folder have to be reported
+	writeTestTexture(t, filepath.Join(folder, "Granite.png"), color.NRGBA{R: 10, G: 20, B: 30, A: 255})
+	waitForPackageUpdate(t, a, count)
+
+	inspectPackage(t, a, func(pkg *ddpackage.Package) {
+		_, err := pkg.GetResourceInfo("res://packs/testpack/textures/objects/stones/Granite.png")
+		assert.NoError(t, err,
+			"the texture in the recreated folder must be part of the package")
+	})
+}
