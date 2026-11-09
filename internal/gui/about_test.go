@@ -1,6 +1,7 @@
 package gui
 
 import (
+	"image/color"
 	"testing"
 
 	"fyne.io/fyne/v2"
@@ -146,4 +147,11 @@ func TestAboutContentShowsTheLinks(t *testing.T) {
 
 	require.Len(t, links, 1, "the about dialog must show the links it is given")
 	assert.Equal(t, "Website", links[0].Text)
+}
+
+func TestWithAlphaKeepsRGBOfSemiTransparentColors(t *testing.T) {
+	got := withAlpha(color.NRGBA{200, 100, 50, 128}, 200)
+
+	assert.Equal(t, color.NRGBA{200, 100, 50, 200}, got,
+		"withAlpha must only replace the opacity, not premultiply the color channels")
 }

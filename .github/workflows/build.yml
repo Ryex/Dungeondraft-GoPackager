@@ -113,8 +113,12 @@ jobs:
           # archive also extracts into one directory.
           tar -xJf "./Dungeondraft GoPackager.tar.xz" -C ./install
           cp ./dungeondraft-packager-cli ./install/dungeondraft-packager/usr/local/bin
-          # add the CLI to the install target of the generated Makefile
-          sed -i '/^install:/a\\tinstall -Dm00755 usr/local/bin/$(Exec)-cli $(DESTDIR)$(PREFIX)/bin/$(Exec)-cli' ./install/dungeondraft-packager/Makefile
+          # add the CLI to the install target of the generated Makefile.
+          # Double quotes expand ${TAB} to a literal tab, \$ keeps $(Exec)
+          # literal for make; grep fails the job if no tab landed.
+          TAB=$'\t'
+          sed -i "/^install:/a\\${TAB}install -Dm00755 usr/local/bin/\$(Exec)-cli \$(DESTDIR)\$(PREFIX)/bin/\$(Exec)-cli" ./install/dungeondraft-packager/Makefile
+          grep -q $'^\tinstall -Dm00755' ./install/dungeondraft-packager/Makefile
           cp *.md ./install/dungeondraft-packager
           ls -r ./install
           ldd ./install/dungeondraft-packager/usr/local/bin/dungeondraft-packager
@@ -170,8 +174,46 @@ jobs:
       - name: Run tests
         run: go test ./...
 
+      # the scratch programs under ./testing are not part of the product
+      - name: Run tests (excluding scratch dir)
+        run: go list ./... | grep -v '/testing$' | xargs go test
+
+      - name: Check formatting
+        run: test -z "$(gofmt -l .)"
+
+      - name: Vet
+        run: go vet ./...
+
+  race:
+    name: Race
+    runs-on: ubuntu-latest
+    env:
+      GO111MODULE: on
+      CGO_ENABLED: 1
+    steps:
+      - name: Setup Go environment
+        id: setup-go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.27.x"
+
+      - name: Force "autocrlf"
+        run: git config --global core.autocrlf input
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Build Deps
+        # same deps as the test job: the GUI packages link against OpenGL,
+        # gcc on ubuntu supports the race runtime.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev
+
+      - name: Run tests with race detector
+        run: go test -race ./internal/gui/... ./pkg/ddpackage/...
+
   release:
-    needs: build
+    needs: [build, test]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     steps:

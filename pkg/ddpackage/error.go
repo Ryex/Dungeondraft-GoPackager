@@ -27,4 +27,5 @@ var (
 	ErrReadUnpacked       = errors.New("unpacked resource read error")
 	ErrReadPacked         = errors.New("packed resource read error")
 	ErrJSONStandardize    = errors.New("error standardizing json, while trailing commas are supported the file must otherwise be valid json")
+	ErrPathEscape         = errors.New("resource path escapes the target directory")
 )
