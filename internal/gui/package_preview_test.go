@@ -85,15 +85,21 @@ func TestFilePreviewSizeGate(t *testing.T) {
 	require.NoError(t, result.MetadataErr)
 	a.setCurrentPackage(result.Pkg)
 
+	// every preview computes the md5 of its file in the background and
+	// touches the interface while doing so, and building a preview measures
+	// text as well: the background work of a preview has to be finished
+	// before the next preview is built, or it races with the measurement
+	// of the text of the new preview in the font cache of Fyne
 	// long.json: over the line count rule, far below the size gate
 	longPreview := a.buildFilePreview(previewInfo(t, result.Pkg, "data/long.json"))
+	waitForBackgroundWork(t, a)
 	// huge.json: only a few lines, above the size gate
 	hugePreview := a.buildFilePreview(previewInfo(t, result.Pkg, "data/huge.json"))
+	waitForBackgroundWork(t, a)
 	// the tags file of the fixture: small and short enough to be shown
 	tagsPreview := a.buildFilePreview(previewInfo(t, result.Pkg, "data/default.dungeondraft_tags"))
-
-	// the previews compute the md5 of the files in the background and touch
-	// the interface while doing so
+	// the assertions below measure the text of the previews, which may only
+	// happen while no background work touches the interface
 	waitForBackgroundWork(t, a)
 
 	uitest.Expect(t, uitest.In(longPreview),
