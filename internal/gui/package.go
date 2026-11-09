@@ -1,9 +1,11 @@
 package gui
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"image/color"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -226,6 +228,15 @@ func (a *App) buildPackageTreeAndInfoPane(editable bool) *named.Named {
 }
 
 func (a *App) buildPackageTree(editable bool) (*resource_tree.ResourceTree, binding.String, binding.Bool) {
+	// the content is replaced, so a filter that is still pending must not
+	// be applied anymore
+	a.filterMu.Lock()
+	if a.filterTimer != nil {
+		a.filterTimer.Stop()
+		a.filterTimer = nil
+	}
+	a.filterMu.Unlock()
+
 	pkg := a.currentPackage()
 
 	filter := ""
@@ -242,13 +253,37 @@ func (a *App) buildPackageTree(editable bool) (*resource_tree.ResourceTree, bind
 	}
 
 	boundFilter.AddListener(binding.NewDataListener(func() {
-		f, err := ddresource_filter.ParseResourceFilter(filter)
-		if err != nil {
+		// parse right away to reject a bad filter: the validator of the
+		// entry shows the error text, the debounce only schedules a
+		// filter that parses
+		if _, err := ddresource_filter.ParseResourceFilter(filter); err != nil {
 			return
 		}
-		log.Debugf("Using filter: %s", f)
-		resourceTree.SetFilter(f)
-		resourceTree.OpenBranch(resource_tree.PackageTreeRootID)
+		a.filterMu.Lock()
+		defer a.filterMu.Unlock()
+		if a.filterTimer != nil {
+			a.filterTimer.Stop()
+		}
+		// the filter is read again when the timer fires, so the latest
+		// text of the entry is the one that is applied
+		a.filterTimer = time.AfterFunc(a.filterDebounce, func() {
+			fyne.Do(func() {
+				f, err := ddresource_filter.ParseResourceFilter(filter)
+				if err != nil {
+					return
+				}
+				log.Debugf("Using filter: %s", f)
+				// The fence: under the test driver fyne.Do runs inline on
+				// the goroutine of the debounce timer, so this rebuild has
+				// to be serialised against readers that poll the state of
+				// the tree (the filter spec test). The listener and clean
+				// take the same lock for the pending timer.
+				a.filterMu.Lock()
+				defer a.filterMu.Unlock()
+				resourceTree.SetFilter(f)
+				resourceTree.OpenBranch(resource_tree.PackageTreeRootID)
+			})
+		})
 	}))
 
 	boundByTag.AddListener(binding.NewDataListener(func() {
@@ -321,14 +356,12 @@ func (a *App) buildInfoPane(info *structures.FileInfo, editable bool) fyne.Canva
 	)
 }
 
+// maxTextPreviewBytes is the size above which the preview of a text file does
+// not read the file at all: the "too large" label is shown instead.
+const maxTextPreviewBytes int64 = 4 << 20
+
 func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 	pkg := a.currentPackage()
-
-	fileData, err := pkg.LoadResource(info.ResPath)
-	if err != nil {
-		log.WithError(err).Errorf("failed to read image data for %s", info.ResPath)
-		return widget.NewLabel(fmt.Sprintf("Failed to read image data for %s", info.ResPath))
-	}
 
 	showThumbnail := binding.BindPreferenceBool("showThumbnails", a.app.Preferences())
 	thumbnailToggle := widgets.NewToggleWithData(showThumbnail)
@@ -359,9 +392,9 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 	// the md5 of the resource is computed in the background when it is not
 	// known yet, so the update of the entry is tracked as background work
 	// that touches the interface
-	a.bgWG.Add(1)
+	a.bgWork.Start()
 	a.currentPackage().GetOrUpdateResourceMd5(info, func(md5 string, err error) {
-		defer a.bgWG.Done()
+		defer a.bgWork.Done()
 
 		if err != nil {
 			log.WithError(err).Errorf("Failed to update hash for %s", info.ResPath)
@@ -378,18 +411,41 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 
 	bg := widgets.NewThemedRect(theme.ColorNameInputBackground, 4)
 
-	if !ddimage.PathIsSupportedImage(info.RelPath) {
-		textContent := string(fileData)
-		if len(strings.Split(textContent, "\n")) > 200 {
-			return container.NewPadded(
-				layouts.NewBottomExpandVBox(
-					infoCont,
-					container.NewStack(
-						bg, tooLarge,
-					),
+	tooLargeContent := func() fyne.CanvasObject {
+		return container.NewPadded(
+			layouts.NewBottomExpandVBox(
+				infoCont,
+				container.NewStack(
+					bg, tooLarge,
 				),
-			)
+			),
+		)
+	}
+
+	if !ddimage.PathIsSupportedImage(info.RelPath) {
+		// a text file above the size gate is not read at all: its size
+		// alone decides that the preview is too large. Unpacked resources
+		// carry no size, packed ones carry the size from their header.
+		size := info.Size
+		if size <= 0 && info.Path != "" {
+			if stat, statErr := os.Stat(info.Path); statErr == nil {
+				size = stat.Size()
+			}
 		}
+		if size > maxTextPreviewBytes {
+			return tooLargeContent()
+		}
+
+		fileData, err := pkg.LoadResource(info.ResPath)
+		if err != nil {
+			log.WithError(err).Errorf("failed to read image data for %s", info.ResPath)
+			return widget.NewLabel(fmt.Sprintf("Failed to read image data for %s", info.ResPath))
+		}
+
+		if bytes.Count(fileData, []byte("\n"))+1 > 200 {
+			return tooLargeContent()
+		}
+		textContent := string(fileData)
 		textEntry := widget.NewMultiLineEntry()
 		textEntry.Text = textContent
 		copyBtn := widget.NewButtonWithIcon("", theme.ContentCopyIcon(), func() {
@@ -411,6 +467,14 @@ func (a *App) buildFilePreview(info *structures.FileInfo) fyne.CanvasObject {
 			),
 		)
 		return content
+	}
+
+	// the preview of an image needs its bytes, so the file is read
+	// unconditionally here
+	fileData, err := pkg.LoadResource(info.ResPath)
+	if err != nil {
+		log.WithError(err).Errorf("failed to read image data for %s", info.ResPath)
+		return widget.NewLabel(fmt.Sprintf("Failed to read image data for %s", info.ResPath))
 	}
 
 	img, _, err := ddimage.BytesToImage(fileData)
