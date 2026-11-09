@@ -772,6 +772,27 @@ func (t *ResourceTree) Unselect(uid widget.TreeNodeID) {
 	}
 }
 
+// UnselectIncludingAncestors unselects the given node when it is selected -
+// by its own id or through the resource it shows - and the first selected
+// ancestor of it otherwise.
+//
+// A node below a branch that is selected for roll-up is shown as selected
+// without being selected itself, and the selection can not hold "the branch
+// selected except this one child" - so the branch that holds it is
+// unselected instead.
+func (t *ResourceTree) UnselectIncludingAncestors(uid widget.TreeNodeID) {
+	if t.IsSelected(uid) || t.selectedIndexOfData(uid) != -1 {
+		t.Unselect(uid)
+		return
+	}
+	for _, parent := range t.AllParentsOf(uid) {
+		if t.IsSelected(parent) {
+			t.Unselect(parent)
+			return
+		}
+	}
+}
+
 func (t *ResourceTree) UnselectAll() {
 	if len(t.selected) == 0 {
 		return
@@ -803,8 +824,11 @@ func (t *ResourceTree) GetSelection() []widget.TreeNodeID {
 	return dest
 }
 
-// GetSelectionAndChildData returns the data of the selected resources. A
-// resource that is shown under more than one tag is only reported once.
+// GetSelectionAndChildData returns the data of the selected resources and
+// the tag branches they are shown under, when those branches are part of
+// the selection: their *ResourceTagBranch data is appended together with
+// the data of everything below them. A resource that is shown under more
+// than one tag is only reported once.
 func (t *ResourceTree) GetSelectionAndChildData() []ResourceTreeNodeData {
 	results := []ResourceTreeNodeData{}
 	seen := map[ResourceTreeNodeData]bool{}
@@ -861,10 +885,16 @@ func (t *ResourceTree) GetSelectedResources() []SelectedResource {
 			continue
 		}
 		resources = append(resources, SelectedResource{
-			Uid:      uid,
-			Info:     node.Info,
-			Selected: t.IsSelected(uid),
+			Uid:  uid,
+			Info: node.Info,
 		})
+	}
+	// the resource of an entry can be selected through another node that
+	// shows it than the one the walk has seen first, so Selected cannot be
+	// decided from the uid of the entry: it is computed in a second pass
+	// over the collected resources, based on their data
+	for i := range resources {
+		resources[i].Selected = t.selectedIndexOfData(resources[i].Uid) != -1
 	}
 	// the map of the nodes is unordered, so the resources are sorted to
 	// keep the order of the selection stable
@@ -996,7 +1026,7 @@ func (n *ResourceTreeNode) MouseDown(e *desktop.MouseEvent) {
 func (n *ResourceTreeNode) contextMenuItems() []*fyne.MenuItem {
 	if n.tree.IsVisiblySelected(n.uid) {
 		return []*fyne.MenuItem{fyne.NewMenuItem(lang.X("tree.context.unselect", "Unselect"), func() {
-			n.tree.Unselect(n.uid)
+			n.tree.UnselectIncludingAncestors(n.uid)
 		})}
 	}
 	return []*fyne.MenuItem{fyne.NewMenuItem(lang.X("tree.context.select", "Select"), func() {
