@@ -36,7 +36,7 @@ func (a *App) createTagSetsDialog(editable bool) dialog.Dialog {
 			log.WithError(err).Error("error getting bound set value")
 			return
 		}
-		ts := a.pkg.Tags().Set(set)
+		ts := a.currentPackage().Tags().Set(set)
 		var updated []string
 		if ts != nil {
 			updated = ts.AsSlice()
@@ -47,7 +47,7 @@ func (a *App) createTagSetsDialog(editable bool) dialog.Dialog {
 	}
 
 	updateSets := func() {
-		tagSets = a.pkg.Tags().AllSets()
+		tagSets = a.currentPackage().Tags().AllSets()
 		slices.Sort(tagSets)
 		boundTagSets.Reload()
 	}
@@ -75,7 +75,7 @@ func (a *App) createTagSetsDialog(editable bool) dialog.Dialog {
 						log.WithError(err).Errorf("failed to get set in del set btn")
 						return
 					}
-					a.pkg.Tags().DeleteSet(set)
+					a.currentPackage().Tags().DeleteSet(set)
 					updateSets()
 					a.saveUnpackedTags()
 				}
@@ -115,7 +115,7 @@ func (a *App) createTagSetsDialog(editable bool) dialog.Dialog {
 						log.WithError(err).Errorf("failed to get set in rm tag from set btn for tag %s", tag)
 						return
 					}
-					a.pkg.Tags().RemoveTagFromSet(set, tag)
+					a.currentPackage().Tags().RemoveTagFromSet(set, tag)
 					updateTags()
 					a.saveUnpackedTags()
 				}
@@ -185,7 +185,7 @@ func (a *App) createTagSetsDialog(editable bool) dialog.Dialog {
 				if setNameEntry.Text == "" {
 					return
 				}
-				a.pkg.Tags().AddSet(setNameEntry.Text)
+				a.currentPackage().Tags().AddSet(setNameEntry.Text)
 				updateSets()
 				a.saveUnpackedTags()
 				setNameEntry.SetText("")
@@ -193,7 +193,7 @@ func (a *App) createTagSetsDialog(editable bool) dialog.Dialog {
 		)
 		setSide.Add(layouts.NewLeftExpandHBox(setNameEntry, setAddBtn))
 
-		tagSelector := widget.NewSelectEntry(a.pkg.Tags().AllTags())
+		tagSelector := widget.NewSelectEntry(a.currentPackage().Tags().AllTags())
 		tagAddBtn := widget.NewButtonWithIcon(
 			lang.X("tagSets.tagAddBtn.text", "Add"),
 			theme.ContentAddIcon(),
@@ -206,12 +206,12 @@ func (a *App) createTagSetsDialog(editable bool) dialog.Dialog {
 					log.WithError(err).Error("failed to get set in add tag to set btn")
 					return
 				}
-				a.pkg.Tags().AddTag(tagSelector.Text)
-				a.pkg.Tags().AddTagToSet(set, tagSelector.Text)
+				a.currentPackage().Tags().AddTag(tagSelector.Text)
+				a.currentPackage().Tags().AddTagToSet(set, tagSelector.Text)
 				updateTags()
 				a.saveUnpackedTags()
 				tagSelector.SetText("")
-				tagSelector.SetOptions(a.pkg.Tags().AllTags())
+				tagSelector.SetOptions(a.currentPackage().Tags().AllTags())
 			},
 		)
 		tagsSide.Add(layouts.NewLeftExpandHBox(tagSelector, tagAddBtn))

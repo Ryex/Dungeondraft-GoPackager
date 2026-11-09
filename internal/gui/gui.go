@@ -132,7 +132,7 @@ type App struct {
 
 	// loadPacked loads a packed resource pack file. It is a field so that
 	// tests can control the timing of the load.
-	loadPacked func(path string, progress func(p float64, curRes string)) (*ddpackage.Package, error)
+	loadPacked func(path string, progress func(p float64, curRes string)) (packedLoadResult, error)
 
 	// packageUpdateHook is called while an update of the package runs in
 	// the background, with the dialog of the update showing. It is a field
