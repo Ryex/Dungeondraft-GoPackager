@@ -178,9 +178,17 @@ func (b *backgroundTracker) Start() {
 
 // Done counts a unit of background work as finished and wakes the waiters
 // when no work is left.
+//
+// A Done without a matching Start panics, fail-fast like the sync.WaitGroup
+// it replaced: an extra Done would drive the counter negative, so that a
+// later Start brings it back to zero while work is still running and Wait
+// returns too early.
 func (b *backgroundTracker) Done() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if b.count <= 0 {
+		panic("sync: negative backgroundTracker counter: Done called without a matching Start")
+	}
 	b.count--
 	if b.count == 0 {
 		b.cond.Broadcast()
