@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -51,6 +50,17 @@ type packageWatcher struct {
 
 	watcher *fsnotify.Watcher
 
+	// root is the folder of the package that is watched. The symlinks
+	// that leave it are not followed, so that the files outside of the
+	// package are not watched through them.
+	root string
+	// watched caches the paths that were added to the watcher, so that
+	// the watch list of the watcher does not have to be read to know
+	// whether a path is watched already.
+	watched map[string]bool
+	// watchMu guards root and watched.
+	watchMu sync.Mutex
+
 	mu sync.Mutex
 	// queue holds the paths that changed and are not reported yet.
 	queue *structures.Set[string]
@@ -89,6 +99,7 @@ func newPackageWatcher(
 		onError:  onError,
 		watcher:  watcher,
 		queue:    structures.NewSet[string](),
+		watched:  make(map[string]bool),
 	}
 
 	go pw.watch()
@@ -108,6 +119,16 @@ func (pw *packageWatcher) watch() {
 			// watcher reports it for every file it sees
 			if event.Has(fsnotify.Chmod) {
 				continue
+			}
+			// The watch of a path dies with the path itself: the OS
+			// drops it when the directory is deleted or moved and
+			// fsnotify drops its internal entry when it dispatches the
+			// event. The cache is cleared here, where the events are
+			// first seen — independent of the debounce and of a paused
+			// watcher — so that a folder that is created again at the
+			// same place is watched again.
+			if event.Has(fsnotify.Remove) || event.Has(fsnotify.Rename) {
+				pw.forgetWatched(event.Name)
 			}
 			pw.enqueue(event.Name)
 		case err, ok := <-pw.watcher.Errors:
@@ -214,13 +235,29 @@ func (pw *packageWatcher) report(generation uint64) {
 // watch list.
 func (pw *packageWatcher) cleanupWatchList(paths []string) {
 	for _, path := range paths {
-		if _, err := os.Stat(path); err == nil {
+		if _, err := os.Lstat(path); err == nil {
 			continue
 		}
-		if !slices.Contains(pw.watcher.WatchList(), path) {
+		clean := filepath.Clean(path)
+		pw.watchMu.Lock()
+		watched := pw.watched[clean]
+		if watched {
+			delete(pw.watched, clean)
+		}
+		pw.watchMu.Unlock()
+		if !watched {
 			continue
 		}
-		if err := pw.watcher.Remove(path); err != nil {
+		// fsnotify drops its internal entry when it dispatches the
+		// deletion of a watch (inotify IN_IGNORED/IN_DELETE_SELF, the
+		// handle of a removed directory on windows), and Remove of a
+		// path that is gone fails with ErrNonExistentWatch or with a
+		// not existent path error before it even looks the watch up:
+		// both mean "already gone" and are not logged, so that only
+		// genuine failures stay visible.
+		if err := pw.watcher.Remove(path); err != nil &&
+			!errors.Is(err, fsnotify.ErrNonExistentWatch) &&
+			!errors.Is(err, os.ErrNotExist) {
 			log.WithError(err).
 				WithField("path", path).
 				Warn("could not remove the deleted folder from the watch list")
@@ -232,12 +269,48 @@ func (pw *packageWatcher) cleanupWatchList(paths []string) {
 //
 // The subfolders of a new folder are watched too, because they can be
 // created before the folder itself is watched.
+//
+// Symlinks are only followed when they stay inside the root of the
+// package, so that the files outside of the package are not watched
+// through them.
 func (pw *packageWatcher) watchNewFolder(path string) {
-	info, err := os.Stat(path)
-	if err != nil || !info.IsDir() {
+	info, err := os.Lstat(path)
+	if err != nil {
 		return
 	}
-	if slices.Contains(pw.watcher.WatchList(), path) {
+
+	if info.Mode()&os.ModeSymlink != 0 {
+		pw.watchMu.Lock()
+		root := pw.root
+		pw.watchMu.Unlock()
+		if !symlinkInRoot(root, path) {
+			return
+		}
+		// the link stays inside the package, so the folder it points to
+		// is watched through it
+		info, err = os.Stat(path)
+		if err != nil {
+			return
+		}
+	}
+	if !info.IsDir() {
+		return
+	}
+
+	clean := filepath.Clean(path)
+	pw.watchMu.Lock()
+	alreadyWatched := pw.watched[clean]
+	pw.watchMu.Unlock()
+	if alreadyWatched {
+		return
+	}
+
+	_, dirs, _ := utils.ListDir(path)
+
+	pw.watchMu.Lock()
+	defer pw.watchMu.Unlock()
+
+	if pw.watched[clean] {
 		return
 	}
 	if err := pw.watcher.Add(path); err != nil {
@@ -246,21 +319,63 @@ func (pw *packageWatcher) watchNewFolder(path string) {
 			Warn("could not watch the new folder")
 		return
 	}
+	pw.watched[clean] = true
 
-	_, dirs, _ := utils.ListDir(path)
 	for _, sub := range dirs {
-		if slices.Contains(pw.watcher.WatchList(), sub) {
+		// symlinks that leave the root of the package are not followed
+		if subInfo, err := os.Lstat(sub); err == nil &&
+			subInfo.Mode()&os.ModeSymlink != 0 && !symlinkInRoot(pw.root, sub) {
+			continue
+		}
+		if pw.watched[filepath.Clean(sub)] {
 			continue
 		}
 		if err := pw.watcher.Add(sub); err != nil {
 			log.WithError(err).
 				WithField("path", sub).
 				Warn("could not watch the new folder")
+			continue
 		}
+		pw.watched[filepath.Clean(sub)] = true
 	}
 }
 
+// symlinkInRoot reports whether the symlink at the given path resolves to
+// a target inside the root of the package.
+//
+// The caller has to make sure that the path is a symlink.
+func symlinkInRoot(root string, path string) bool {
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return false
+	}
+	isSub, _ := utils.PathIsSub(root, resolved)
+	return isSub
+}
+
+// isWatched reports whether the given path is in the watch list.
+func (pw *packageWatcher) isWatched(path string) bool {
+	pw.watchMu.Lock()
+	defer pw.watchMu.Unlock()
+	return pw.watched[filepath.Clean(path)]
+}
+
+// forgetWatched removes the given path from the cache of the watched
+// paths.
+//
+// It is called when the removal of the path is noticed: the watch of a
+// path dies with the path itself, so a path that is created again at the
+// same place has to be watched again.
+func (pw *packageWatcher) forgetWatched(path string) {
+	pw.watchMu.Lock()
+	defer pw.watchMu.Unlock()
+	delete(pw.watched, filepath.Clean(path))
+}
+
 // Watch adds the given folder and all of its subfolders to the watch list.
+//
+// The root of the package is remembered, so that the symlinks that leave
+// it are not followed when new folders are watched.
 func (pw *packageWatcher) Watch(dir string) error {
 	if dir == "" {
 		return nil
@@ -270,18 +385,35 @@ func (pw *packageWatcher) Watch(dir string) error {
 		return err
 	}
 
+	pw.watchMu.Lock()
+	pw.root = filepath.Clean(dir)
+	pw.watched[filepath.Clean(dir)] = true
+	pw.watchMu.Unlock()
+
 	_, dirs, errs := utils.ListDir(dir)
 	for _, err := range errs {
 		log.WithError(err).
 			WithField("dir", dir).
 			Warn("could not list the folder to watch")
 	}
+	pw.watchMu.Lock()
+	defer pw.watchMu.Unlock()
 	for _, sub := range dirs {
+		// symlinks that leave the root of the package are not followed
+		if subInfo, err := os.Lstat(sub); err == nil &&
+			subInfo.Mode()&os.ModeSymlink != 0 && !symlinkInRoot(pw.root, sub) {
+			continue
+		}
+		if pw.watched[filepath.Clean(sub)] {
+			continue
+		}
 		if err := pw.watcher.Add(sub); err != nil {
 			log.WithError(err).
 				WithField("path", sub).
 				Warn("could not watch the folder")
+			continue
 		}
+		pw.watched[filepath.Clean(sub)] = true
 	}
 
 	return nil
@@ -314,6 +446,9 @@ func (pw *packageWatcher) Resume() {
 // changes are not reported a second time.
 //
 // An empty folder discards all the queued changes.
+//
+// The given path itself counts as under itself, so that a single file can
+// be discarded too.
 func (pw *packageWatcher) DiscardUnder(dir string) {
 	pw.mu.Lock()
 	defer pw.mu.Unlock()
@@ -323,9 +458,10 @@ func (pw *packageWatcher) DiscardUnder(dir string) {
 		return
 	}
 
-	prefix := filepath.Clean(dir) + string(filepath.Separator)
+	clean := filepath.Clean(dir)
+	prefix := clean + string(filepath.Separator)
 	for _, path := range pw.queue.AsSlice() {
-		if strings.HasPrefix(path, prefix) {
+		if path == clean || strings.HasPrefix(path, prefix) {
 			pw.queue.Remove(path)
 		}
 	}

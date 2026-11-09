@@ -680,6 +680,21 @@ func (t *ResourceTree) cancelPendingClick() {
 	t.cancelPendingClickLocked()
 }
 
+// flushPendingClick applies a debounced single click that is still pending
+// right away instead of dropping it, so that a fast second click keeps the
+// first one. It does nothing when no click is pending.
+func (t *ResourceTree) flushPendingClick() {
+	t.clickMu.Lock()
+	if t.clickTimer == nil {
+		t.clickMu.Unlock()
+		return
+	}
+	uid := t.lastClickUID
+	t.cancelPendingClickLocked()
+	t.clickMu.Unlock()
+	t.applyPendingClick(uid)
+}
+
 // endClickSequence ends the current click sequence, so that the next click
 // starts a new one.
 func (t *ResourceTree) endClickSequence() {
@@ -972,12 +987,14 @@ func (n *ResourceTreeNode) MouseDown(e *desktop.MouseEvent) {
 			// it
 			if e.Modifier&fyne.KeyModifierControl != 0 {
 				// unselect
+				n.tree.flushPendingClick()
 				n.tree.endClickSequence()
 				n.tree.Unselect(n.uid)
 				return
 			}
 			if e.Modifier&fyne.KeyModifierShift != 0 {
 				// add select
+				n.tree.flushPendingClick()
 				n.tree.endClickSequence()
 				n.tree.Select(n.uid)
 				return
@@ -998,6 +1015,9 @@ func (n *ResourceTreeNode) MouseDown(e *desktop.MouseEvent) {
 			// click, so that a possible double click does not make the
 			// selection flicker
 			clickUID := n.uid
+			// a click that is still pending is applied first, so that the
+			// selection the new sequence restores later holds it
+			n.tree.flushPendingClick()
 			n.tree.clickMu.Lock()
 			n.tree.cancelPendingClickLocked()
 			n.tree.clickSelection = slices.Clone(n.tree.selected)
