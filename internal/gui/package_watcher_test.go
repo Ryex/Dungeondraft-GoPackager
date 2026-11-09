@@ -550,7 +550,14 @@ func TestThumbnailGenerationUpdatesThePackageWithoutSpammingTheWatcher(t *testin
 }
 
 // thumbnailCount returns the number of the thumbnails the package knows.
+//
+// The whole read runs under packageUpdateLock, so that it cannot observe
+// the package while the thumbnail generation or a watcher update changes
+// it.
 func thumbnailCount(a *App) int {
+	a.packageUpdateLock.Lock()
+	defer a.packageUpdateLock.Unlock()
+
 	count := 0
 	for _, fi := range a.currentPackage().FileList().AsSlice() {
 		if fi.IsThumbnail() {
