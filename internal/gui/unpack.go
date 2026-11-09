@@ -211,7 +211,7 @@ func (a *App) setPackContent(pkg *ddpackage.Package) {
 		lang.X("unpack.infoBtn.text", "Package Information"),
 		theme.DocumentIcon(),
 		func() {
-			dlg := NewPackJSONDialogPkg(a.pkg, false, nil, a.window)
+			dlg := NewPackJSONDialogPkg(a.currentPackage(), false, nil, a.window)
 			dlg.Show()
 		},
 	)
