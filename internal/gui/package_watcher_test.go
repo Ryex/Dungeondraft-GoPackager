@@ -607,3 +607,149 @@ func TestTagGenerationUpdatesTheTagsWithoutSpammingTheWatcher(t *testing.T) {
 	assert.Contains(t, string(data), "nature",
 		"the generated tags must be written to the tags file")
 }
+
+// TestWatcherDoesNotWatchSymlinksLeavingThePackage verifies that a symlink
+// in the package that points out of it is not watched, so that the changes
+// of the files in its target are not reported as changes of the package.
+func TestWatcherDoesNotWatchSymlinksLeavingThePackage(t *testing.T) {
+	a := newWatcherApp(t)
+	dir, _ := loadWatchedPackage(t, a)
+
+	waitForWatcherIdle(t, a)
+
+	// a folder outside of the package and a symlink in the package that
+	// points to it
+	outsideDir := t.TempDir()
+	symlinkPath := filepath.Join(dir, "outside-link")
+	if err := os.Symlink(outsideDir, symlinkPath); err != nil {
+		t.Skipf("symlinks can not be created on this system: %v", err)
+	}
+
+	// the creation of the link is reported by the watcher
+	waitForWatcherIdle(t, a)
+
+	assert.False(t, a.watcher().isWatched(symlinkPath),
+		"a symlink that leaves the package must not be watched")
+
+	// the file list of the package before the file outside of it is touched
+	before := 0
+	inspectPackage(t, a, func(pkg *ddpackage.Package) {
+		before = pkg.FileList().Size()
+	})
+
+	// a file in the target of the link
+	outsideFile := filepath.Join(outsideDir, "Outside.png")
+	writeTestTexture(t, outsideFile, color.NRGBA{R: 10, G: 20, B: 30, A: 255})
+
+	waitForWatcherIdle(t, a)
+
+	inspectPackage(t, a, func(pkg *ddpackage.Package) {
+		assert.Equal(t, before, pkg.FileList().Size(),
+			"the file outside of the package must not be indexed")
+	})
+}
+
+// TestWatcherWatchesAFolderAgainAfterItWasDeletedAndRecreated verifies that
+// a watched folder that is deleted and recreated before the debounced
+// cleanup runs is watched again.
+//
+// The watch of a folder dies with the folder itself, so the watch set
+// cache has to forget the folder when the deletion is noticed —
+// independent of the debounce and of a paused watcher — or the recreated
+// folder would be treated as watched and its changes would never be
+// reported.
+func TestWatcherWatchesAFolderAgainAfterItWasDeletedAndRecreated(t *testing.T) {
+	a := newWatcherApp(t)
+	dir, _ := loadWatchedPackage(t, a)
+
+	waitForWatcherIdle(t, a)
+
+	// a new folder in the package, watched after its creation event
+	folder := filepath.Join(dir, "textures", "objects", "stones")
+	require.NoError(t, os.MkdirAll(folder, 0o755))
+	waitForWatcherIdle(t, a)
+	require.True(t, a.watcher().isWatched(folder),
+		"the new folder must be watched")
+
+	// the folder is deleted and recreated while the watcher is paused, so
+	// that both happen before the debounced cleanup runs
+	a.pausePackageWatcher()
+	require.NoError(t, os.RemoveAll(folder))
+
+	// the deletion is noticed at once, even while the reporting is paused
+	assert.Eventually(t, func() bool {
+		return !a.watcher().isWatched(folder)
+	}, 10*time.Second, 20*time.Millisecond,
+		"the deleted folder must be dropped from the watch set")
+
+	require.NoError(t, os.MkdirAll(folder, 0o755))
+	require.Eventually(t, func() bool {
+		return a.watcher().isWatched(folder)
+	}, 10*time.Second, 20*time.Millisecond,
+		"the recreated folder must be watched again")
+
+	a.resumePackageWatcher()
+	count := waitForWatcherIdle(t, a)
+
+	// the changes in the recreated folder have to be reported
+	writeTestTexture(t, filepath.Join(folder, "Granite.png"), color.NRGBA{R: 10, G: 20, B: 30, A: 255})
+	waitForPackageUpdate(t, a, count)
+
+	inspectPackage(t, a, func(pkg *ddpackage.Package) {
+		_, err := pkg.GetResourceInfo("res://packs/testpack/textures/objects/stones/Granite.png")
+		assert.NoError(t, err,
+			"the texture in the recreated folder must be part of the package")
+	})
+}
+
+// TestPackageWatcherRescansWhenPackIDChanges verifies that a change of the
+// id in the pack.json forces a scan of the whole package, because the id is
+// part of the resource path of every resource of the package.
+func TestPackageWatcherRescansWhenPackIDChanges(t *testing.T) {
+	a := newWatcherApp(t)
+
+	// The hook is set before the package is loaded, so that the watcher
+	// does not read it while the test writes it: the change of the id is
+	// the update it reports, so every update it shows must be a scan of
+	// the whole package.
+	a.packageUpdateHook = func(dlg *packageUpdateDialog) {
+		assert.True(t, dlg.progress,
+			"a change of the id of the pack must rescan the whole package")
+	}
+
+	dir, _ := loadWatchedPackage(t, a)
+
+	count := waitForWatcherIdle(t, a)
+
+	packJSONPath := filepath.Join(dir, "pack.json")
+	data, err := os.ReadFile(packJSONPath)
+	require.NoError(t, err)
+	updated := strings.Replace(string(data), `"id": "testpack"`, `"id": "testpack2"`, 1)
+	require.NotEqual(t, string(data), updated, "the id of the pack must be changed")
+	require.NoError(t, os.WriteFile(packJSONPath, []byte(updated), 0o644))
+
+	waitForPackageUpdate(t, a, count)
+
+	inspectPackage(t, a, func(pkg *ddpackage.Package) {
+		assert.Equal(t, "testpack2", pkg.ID(), "the package must know the new id")
+
+		prefix := "res://packs/testpack2/"
+		packJSONResPath := "res://packs/testpack2.json"
+		_, err := pkg.GetResourceInfo(packJSONResPath)
+		require.NoError(t, err, "the info of the pack.json must use the new id")
+
+		files := pkg.FileList().AsSlice()
+		require.NotEmpty(t, files, "the package must know its resources")
+		for _, fi := range files {
+			if fi.ResPath == packJSONResPath {
+				continue
+			}
+			assert.True(t, strings.HasPrefix(fi.ResPath, prefix),
+				"the resource %s must live under %s", fi.ResPath, prefix)
+		}
+
+		_, err = pkg.GetResourceInfo("res://packs/testpack/textures/objects/Rock.png")
+		assert.ErrorIs(t, err, ddpackage.ErrResourceNotFound,
+			"the resources under the old id must be gone")
+	})
+}
