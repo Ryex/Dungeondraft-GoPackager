@@ -115,11 +115,6 @@ func (pw *packageWatcher) watch() {
 			if !ok {
 				return
 			}
-			// the mode of a file is not a change of its content, but the
-			// watcher reports it for every file it sees
-			if event.Has(fsnotify.Chmod) {
-				continue
-			}
 			// The watch of a path dies with the path itself: the OS
 			// drops it when the directory is deleted or moved and
 			// fsnotify drops its internal entry when it dispatches the
@@ -127,8 +122,22 @@ func (pw *packageWatcher) watch() {
 			// first seen — independent of the debounce and of a paused
 			// watcher — so that a folder that is created again at the
 			// same place is watched again.
-			if event.Has(fsnotify.Remove) || event.Has(fsnotify.Rename) {
+			//
+			// This runs before the skip of the mode changes below: on
+			// kqueue (macOS) a deletion can arrive coalesced as
+			// Remove|Chmod, and the cache would otherwise stay stale for
+			// it.
+			removed := event.Has(fsnotify.Remove) || event.Has(fsnotify.Rename)
+			if removed {
 				pw.forgetWatched(event.Name)
+			}
+			// the mode of a file is not a change of its content, but the
+			// watcher reports it for every file it sees. Only a mode
+			// change on its own is skipped: an event that also reports
+			// the removal of the path is a change after all and has to
+			// be queued.
+			if event.Has(fsnotify.Chmod) && !removed {
+				continue
 			}
 			pw.enqueue(event.Name)
 		case err, ok := <-pw.watcher.Errors:

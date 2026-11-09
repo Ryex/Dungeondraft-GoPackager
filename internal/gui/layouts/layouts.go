@@ -102,8 +102,16 @@ func (l leadingCenterLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
 
 	leading := objects[0].MinSize()
 	min := fyne.NewSize(leading.Width, leading.Height)
-	for _, obj := range objects[1:] {
+	for i, obj := range objects[1:] {
 		objMin := obj.MinSize()
+		if i == 0 {
+			// Layout gives the leading child its minimum size plus the
+			// padding, so the padding sits between the leading and the
+			// trailing part of the row and counts towards the minimum
+			// size of the container — like the inter-child padding of
+			// the box layouts below.
+			min.Width += l.padding
+		}
 		min.Width += objMin.Width
 		min.Height = fyne.Max(min.Height, objMin.Height)
 	}
