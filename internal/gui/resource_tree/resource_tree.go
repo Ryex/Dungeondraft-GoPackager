@@ -772,6 +772,27 @@ func (t *ResourceTree) Unselect(uid widget.TreeNodeID) {
 	}
 }
 
+// UnselectIncludingAncestors unselects the given node when it is selected -
+// by its own id or through the resource it shows - and the first selected
+// ancestor of it otherwise.
+//
+// A node below a branch that is selected for roll-up is shown as selected
+// without being selected itself, and the selection can not hold "the branch
+// selected except this one child" - so the branch that holds it is
+// unselected instead.
+func (t *ResourceTree) UnselectIncludingAncestors(uid widget.TreeNodeID) {
+	if t.IsSelected(uid) || t.selectedIndexOfData(uid) != -1 {
+		t.Unselect(uid)
+		return
+	}
+	for _, parent := range t.AllParentsOf(uid) {
+		if t.IsSelected(parent) {
+			t.Unselect(parent)
+			return
+		}
+	}
+}
+
 func (t *ResourceTree) UnselectAll() {
 	if len(t.selected) == 0 {
 		return
@@ -1005,7 +1026,7 @@ func (n *ResourceTreeNode) MouseDown(e *desktop.MouseEvent) {
 func (n *ResourceTreeNode) contextMenuItems() []*fyne.MenuItem {
 	if n.tree.IsVisiblySelected(n.uid) {
 		return []*fyne.MenuItem{fyne.NewMenuItem(lang.X("tree.context.unselect", "Unselect"), func() {
-			n.tree.Unselect(n.uid)
+			n.tree.UnselectIncludingAncestors(n.uid)
 		})}
 	}
 	return []*fyne.MenuItem{fyne.NewMenuItem(lang.X("tree.context.select", "Select"), func() {
