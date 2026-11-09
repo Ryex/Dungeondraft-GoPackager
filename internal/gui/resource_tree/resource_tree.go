@@ -162,6 +162,10 @@ type ResourceTree struct {
 	// resource that is shown under more than one tag is shown as selected
 	// in every one of them, so this holds more nodes than selected.
 	visiblySelected []widget.TreeNodeID
+	// visibleSet holds the same nodes as visiblySelected, indexed for
+	// lookups: a node that is missing from it is not shown as selected.
+	// A nil map is safe here, it simply reports nothing as selected.
+	visibleSet map[widget.TreeNodeID]bool
 	// clickSelection holds the selection as it was before the current click
 	// sequence started. A double click restores it before it toggles the
 	// node, so that the double click only toggles the node it is on.
@@ -183,7 +187,11 @@ type ResourceTree struct {
 	suppressSelectionChanged bool
 	nodeTree                 map[widget.TreeNodeID][]widget.TreeNodeID
 	nodeMap                  map[widget.TreeNodeID]ResourceTreeNodeData
-	mode                     ResourceTreeMode
+	// parentOf indexes the parent of every node of the tree, so that
+	// ParentOf is a lookup instead of a scan over the whole tree. A node
+	// without an entry has no parent in the tree.
+	parentOf map[widget.TreeNodeID]widget.TreeNodeID
+	mode     ResourceTreeMode
 
 	editable bool
 	filter   filter.ResourceFilter
@@ -448,6 +456,18 @@ func (t *ResourceTree) RebuildTree() {
 
 	logrus.Debugf("Tree Rebuilt")
 
+	// the nodes of the tree are complete, so the parents can be indexed
+	// for a direct lookup; a node that is listed under more than one
+	// parent keeps the one that was found first
+	t.parentOf = make(map[widget.TreeNodeID]widget.TreeNodeID)
+	for parent, children := range t.nodeTree {
+		for _, child := range children {
+			if _, ok := t.parentOf[child]; !ok {
+				t.parentOf[child] = parent
+			}
+		}
+	}
+
 	// the nodes of the tree changed, so the nodes that are shown as
 	// selected have to be looked up again
 	t.updateVisibleSelection()
@@ -463,11 +483,11 @@ func (t *ResourceTree) IsBranch(uid widget.TreeNodeID) bool {
 	return false
 }
 
+// ParentOf returns the parent of the node in the tree, or nil when the node
+// has no parent. It reads the parent index that RebuildTree builds.
 func (t *ResourceTree) ParentOf(uid widget.TreeNodeID) *widget.TreeNodeID {
-	for parent, nodes := range t.nodeTree {
-		if slices.Contains(nodes, uid) {
-			return &parent
-		}
+	if parent, ok := t.parentOf[uid]; ok {
+		return &parent
 	}
 	return nil
 }
@@ -492,9 +512,10 @@ func (t *ResourceTree) IsSelected(uid widget.TreeNodeID) bool {
 
 // IsVisiblySelected reports whether the node is shown as selected. Every
 // node of a selected resource is shown as selected, so this holds for more
-// nodes than IsSelected does.
+// nodes than IsSelected does. It reads the index that updateVisibleSelection
+// builds; a node that is not in it is not shown as selected.
 func (t *ResourceTree) IsVisiblySelected(uid widget.TreeNodeID) bool {
-	return slices.Contains(t.visiblySelected, uid)
+	return t.visibleSet[uid]
 }
 
 func (t *ResourceTree) IsParentSelected(uid widget.TreeNodeID) bool {
@@ -600,6 +621,7 @@ func (t *ResourceTree) updateVisibleSelection() {
 	// keep the order of the visible selection stable
 	slices.Sort(visible)
 	t.visiblySelected = visible
+	t.visibleSet = visibleSet
 }
 
 // syncTreeSelection keeps the selection of the Fyne tree in step with our
@@ -656,17 +678,6 @@ func (t *ResourceTree) cancelPendingClick() {
 	t.clickMu.Lock()
 	defer t.clickMu.Unlock()
 	t.cancelPendingClickLocked()
-}
-
-// startClickSequence remembers the selection as it was before a click
-// sequence starts, so that a double click can restore it.
-func (t *ResourceTree) startClickSequence(uid widget.TreeNodeID) {
-	t.clickMu.Lock()
-	defer t.clickMu.Unlock()
-	t.cancelPendingClickLocked()
-	t.clickSelection = slices.Clone(t.selected)
-	t.lastClickUID = uid
-	t.lastClickTime = time.Now()
 }
 
 // endClickSequence ends the current click sequence, so that the next click

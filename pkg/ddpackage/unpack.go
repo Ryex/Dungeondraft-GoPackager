@@ -59,6 +59,24 @@ func (p *Package) MapResourcePaths() {
 	}
 }
 
+// joinUnderBase joins the resource relative path rel to base and guarantees
+// the result stays under base. It returns ErrPathEscape when rel is empty,
+// rooted (absolute, with a volume name or starting with a path separator) or
+// when the cleaned result would resolve outside of base.
+func joinUnderBase(base, rel string) (string, error) {
+	// the separator check also catches rooted paths like "/abs" on windows,
+	// where filepath.IsAbs reports false because there is no volume name
+	if rel == "" || os.IsPathSeparator(rel[0]) ||
+		filepath.IsAbs(rel) || filepath.VolumeName(rel) != "" {
+		return "", ErrPathEscape
+	}
+	joined := filepath.Join(base, rel)
+	if ok, _ := utils.PathIsSub(base, joined); !ok {
+		return "", ErrPathEscape
+	}
+	return joined, nil
+}
+
 // extractFileList takes a slice of FileInfo and extracts the files from the package at the reader
 func (p *Package) extractFileList(outDir string, progressCallback func(p float64)) (err error) {
 	outDirPath, err := filepath.Abs(outDir)
@@ -119,7 +137,15 @@ func (p *Package) extractFileList(outDir string, progressCallback func(p float64
 			continue
 		}
 
-		path := filepath.Join(outDirPath, filepath.Dir(fi.Path))
+		path, err := joinUnderBase(outDirPath, filepath.Dir(fi.Path))
+		if err != nil {
+			p.log.
+				WithField("resPath", fi.ResPath).
+				WithField("path", filepath.Join(outDirPath, filepath.Dir(fi.Path))).
+				WithError(err).
+				Error("resource path escapes the target directory")
+			return dderrors.CausedBy(ErrPathEscape, err)
+		}
 		p.log.WithField("mappedPath", fi.Path).Debugf("%s -> %s", fi.ResPath, path)
 
 		fileNameFull := filepath.Base(fi.ResPath)
@@ -179,7 +205,13 @@ func (p *Package) ExtractFile(info *structures.FileInfo, outPath string) (string
 		}
 	}
 
-	filePath := filepath.Join(outPath, fileNameFull)
+	filePath, err := joinUnderBase(outPath, fileNameFull)
+	if err != nil {
+		l.WithField("unpackedFile", filepath.Join(outPath, fileNameFull)).
+			WithError(err).
+			Error("resource path escapes the target directory")
+		return "", dderrors.CausedBy(ErrPathEscape, err)
+	}
 	l = l.WithField("unpackedFile", filePath)
 
 	fileExists := utils.FileExists(filePath)
@@ -213,16 +245,52 @@ func (p *Package) ExtractFile(info *structures.FileInfo, outPath string) (string
 	return filePath, nil
 }
 
+// checkPackedReadBounds reports whether a read of size bytes starting at
+// offset fits into a file of fileSize bytes. A hostile pack header can claim
+// an offset or size that would make the reader allocate past the end of the
+// pack, so the bounds are checked before the buffer is allocated.
+func checkPackedReadBounds(offset, size, fileSize int64) error {
+	if offset < 0 {
+		return fmt.Errorf("negative read offset %d", offset)
+	}
+	if size < 0 {
+		return fmt.Errorf("negative read size %d", size)
+	}
+	if offset > fileSize {
+		return fmt.Errorf("read offset %d beyond file size %d", offset, fileSize)
+	}
+	// offset <= fileSize here, so the subtraction can not underflow
+	if size > fileSize-offset {
+		return fmt.Errorf("read of %d bytes at offset %d exceeds file size %d", size, offset, fileSize)
+	}
+	return nil
+}
+
 func (p *Package) readPackedFileFromPackage(r io.ReadSeeker, info *structures.FileInfo) ([]byte, error) {
 	l := p.log.
 		WithField("packedPath", info.ResPath).
 		WithField("offset", info.Offset)
 
-	_, err := r.Seek(info.Offset, io.SeekStart)
+	end, err := r.Seek(0, io.SeekEnd)
+	if err != nil {
+		l.WithError(err).
+			Error("can not seek to end of package")
+		return nil, err
+	}
+
+	_, err = r.Seek(info.Offset, io.SeekStart)
 	if err != nil {
 		l.WithError(err).
 			Error("can not seek to offset for file data")
 		return nil, err
+	}
+
+	if err := checkPackedReadBounds(info.Offset, info.Size, end); err != nil {
+		l.WithError(err).
+			WithField("size", info.Size).
+			WithField("fileSize", end).
+			Error("packed file read out of bounds")
+		return nil, dderrors.CausedBy(ErrReadPacked, err)
 	}
 
 	fileData := make([]byte, info.Size)
@@ -495,6 +563,24 @@ func (p *Package) updatePackedFileInfoAfter() {
 	}
 }
 
+// maxResPathBytes bounds the resource path length read from a packed file
+// header. Without it a hostile pack could claim an arbitrarily large path
+// length and make the reader allocate it before the read fails.
+const maxResPathBytes int32 = 4096
+
+// checkResPathLength reports whether a resource path length read from a
+// packed file header is usable. It returns an error instead of letting the
+// caller allocate a buffer of a hostile length.
+func checkResPathLength(n int32) error {
+	if n <= 0 {
+		return fmt.Errorf("invalid resource path length %d", n)
+	}
+	if n > maxResPathBytes {
+		return fmt.Errorf("resource path length %d exceeds the maximum of %d bytes", n, maxResPathBytes)
+	}
+	return nil
+}
+
 func (p *Package) getFileList(r io.ReadSeeker, progressCallback func(p float64, curRes string, max int64)) (err error) {
 	headers, err := p.readPackageHeaders(r)
 	if err != nil {
@@ -512,6 +598,14 @@ func (p *Package) getFileList(r io.ReadSeeker, progressCallback func(p float64, 
 			p.log.WithError(err).
 				WithField("FileNum", fileNum).Error("could not read file path length")
 			return
+		}
+
+		if err := checkResPathLength(filePathLength); err != nil {
+			p.log.WithError(err).
+				WithField("FileNum", fileNum).
+				WithField("filePathLength", filePathLength).
+				Error("file path length out of bounds")
+			return dderrors.CausedBy(ErrInvalidPackage, err)
 		}
 
 		var infoBytes structures.FileInfoBytes
