@@ -37,6 +37,13 @@ import (
 // change of the file the generation wrote is discarded before the watcher is
 // resumed, because it is already applied.
 func (a *App) generateTags(generator *ddpackage.GenerateTags, progressCallback func(p float64)) {
+	// the generation writes the tags of the package and the tags file, so it
+	// runs as an update of the package: it holds packageUpdateLock for its
+	// whole run, which excludes the updates of the watcher and makes
+	// replacePackage wait for it instead of closing the package under it
+	a.packageUpdateLock.Lock()
+	defer a.packageUpdateLock.Unlock()
+
 	pkg := a.currentPackage()
 	if pkg == nil {
 		return

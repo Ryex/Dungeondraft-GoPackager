@@ -23,14 +23,21 @@ func updateDialogOverlay(a *App) fyne.CanvasObject {
 	return a.window.Canvas().Overlays().Top()
 }
 
-// waitForUpdateDialogHidden waits until no dialog is open over the window
-// anymore.
+// waitForUpdateDialogHidden waits until the dialog of the update is hidden.
+//
+// The update holds packageUpdateLock while it runs and hides the dialog
+// before it releases the lock, so acquiring the lock is a deterministic
+// signal that the hide path has run. The overlay stack is read once
+// afterwards: polling it while the update removes the dialog would race
+// inside Fyne's OverlayStack (see TestGenThumbnailsWithoutPackageHidesProgressDialog).
 func waitForUpdateDialogHidden(t *testing.T, a *App) {
 	t.Helper()
 
-	require.Eventually(t, func() bool {
-		return updateDialogOverlay(a) == nil
-	}, 10*time.Second, 20*time.Millisecond,
+	require.Eventually(t, a.packageUpdateLock.TryLock, 10*time.Second, 20*time.Millisecond,
+		"the update must finish")
+	defer a.packageUpdateLock.Unlock()
+
+	require.Nil(t, updateDialogOverlay(a),
 		"the dialog of the update must be hidden when the update is done")
 }
 

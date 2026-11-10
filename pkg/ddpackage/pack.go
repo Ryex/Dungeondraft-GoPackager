@@ -423,6 +423,15 @@ func (p *Package) makeResPath(l logrus.FieldLogger, path string) (string, error)
 }
 
 func (p *Package) writePackage(l logrus.FieldLogger, out io.WriteSeeker, progressCallback func(p float64)) (err error) {
+	// FileInfoList.Write stores the size, the offset, the header offset and
+	// the md5 of every FileInfo, which computeMd5 writes under flLock as
+	// well, so the whole write runs under it. The file count is taken under
+	// the same lock, or it could disagree with the list that is written.
+	// The lock covers the progress callback, which therefore must not
+	// synchronously call another Package method that takes flLock.
+	p.flLock.Lock()
+	defer p.flLock.Unlock()
+
 	headers := structures.DefaultPackageHeader()
 	headers.FileCount = uint32(p.fileList.Size())
 

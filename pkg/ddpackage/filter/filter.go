@@ -35,8 +35,11 @@ func (rf ResourceFilterEmpty) Matches(fi *structures.FileInfo, tags *structures.
 }
 
 func (rf ResourceFilterEmpty) Eq(f ResourceFilter) bool {
-	_, ok := f.(ResourceFilterEmpty)
-	return ok
+	switch f.(type) {
+	case ResourceFilterEmpty, *ResourceFilterEmpty:
+		return true
+	}
+	return false
 }
 
 type FilterMatchType int
@@ -217,7 +220,7 @@ func (rf ResourceFilterNot) Matches(fi *structures.FileInfo, tags *structures.Pa
 func (rf ResourceFilterNot) Eq(f ResourceFilter) bool {
 	other, ok := f.(ResourceFilterNot)
 	if ok {
-		return rf.Filter.Eq(other)
+		return rf.Filter.Eq(other.Filter)
 	}
 	return ok
 }

@@ -544,16 +544,22 @@ func (p *Package) NewFileInfo(options NewFileInfoOptions) (*structures.FileInfo,
 func (p *Package) GetOrUpdateResourceMd5(fi *structures.FileInfo, callback func(string, error)) {
 	key := fi.ResPath
 
+	// flLock guards fi.Md5, which the pack write stores as well, so the read
+	// of it takes flLock; md5Mu guards the single-flight. Both are taken in
+	// the order computeMd5 publishes, flLock -> md5Mu.
+	p.flLock.RLock()
 	p.md5Mu.Lock()
 	if fi.Md5.IsValid() {
 		hash := fi.Md5.String()
 		p.md5Mu.Unlock()
+		p.flLock.RUnlock()
 		callback(hash, nil)
 		return
 	}
 	if inflight, ok := p.md5Inflight[key]; ok {
 		p.md5Inflight[key] = append(inflight, callback)
 		p.md5Mu.Unlock()
+		p.flLock.RUnlock()
 		return
 	}
 	if p.md5Inflight == nil {
@@ -561,6 +567,7 @@ func (p *Package) GetOrUpdateResourceMd5(fi *structures.FileInfo, callback func(
 	}
 	p.md5Inflight[key] = []func(string, error){callback}
 	p.md5Mu.Unlock()
+	p.flLock.RUnlock()
 
 	go p.computeMd5(fi, key)
 }

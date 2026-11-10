@@ -68,6 +68,87 @@ func TestPackWritesMd5ThatLoadReadsBack(t *testing.T) {
 	assert.Error(t, err, "a mismatching md5 must fail the verification")
 }
 
+// TestPackConcurrentWithMd5Computations packs a fixture while the md5 of its
+// resources is computed. Both store the hash of a FileInfo (the pack also
+// stores its size and offsets), so they must be serialized by flLock; the
+// overlap is for the -race run of this test.
+//
+// The computation of a resource is started as the pack moves past the file
+// before it. Without the lock the two would touch the same FileInfo at the
+// same time, which is what this test pins down.
+func TestPackConcurrentWithMd5Computations(t *testing.T) {
+	fixture := testutil.DefaultFixture()
+	// more resources mean more chances for the detector to see the overlap
+	for i := range 40 {
+		fixture.Objects = append(fixture.Objects, fmt.Sprintf("Extra%d", i))
+	}
+	unpackedDir := fixture.Write(t)
+
+	log := logrus.New()
+	log.SetLevel(logrus.ErrorLevel)
+
+	src := NewPackage(log.WithField("test", t.Name()))
+	require.NoError(t, src.LoadUnpackedFromFolder(unpackedDir))
+	require.Empty(t, src.BuildFileList())
+
+	packDir := t.TempDir()
+	const rounds = 4
+	for round := 0; round < rounds; round++ {
+		files := src.FileList().AsSlice()
+
+		// the pack writes a valid hash for every file, so they are blanked
+		// again for every round, to make the computations run
+		src.flLock.Lock()
+		for _, fi := range files {
+			fi.Md5 = structures.Md5Hash{}
+		}
+		src.flLock.Unlock()
+
+		var (
+			wg   sync.WaitGroup
+			mu   sync.Mutex
+			errs []error
+		)
+		request := func(fi *structures.FileInfo) {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				done := make(chan struct{})
+				src.GetOrUpdateResourceMd5(fi, func(_ string, err error) {
+					if err != nil {
+						mu.Lock()
+						errs = append(errs, err)
+						mu.Unlock()
+					}
+					close(done)
+				})
+				<-done
+			}()
+		}
+
+		request(files[0])
+		next := 0
+		progress := func(float64) {
+			next++
+			if next < len(files) {
+				request(files[next])
+			}
+		}
+
+		// the pack and the computations run at the same time
+		require.NoError(t, src.PackPackageProgress(packDir, PackOptions{Overwrite: true}, progress))
+		wg.Wait()
+
+		mu.Lock()
+		gotErrs := errs
+		mu.Unlock()
+		require.Empty(t, gotErrs, "the md5 computation must not fail while the package is packed")
+		for _, fi := range files {
+			require.True(t, fi.Md5.IsValid(), "every resource must have a hash after the pack")
+		}
+	}
+}
+
 // writeDistinctPNG overwrites the texture at path with a 4x4 PNG whose bytes
 // depend on the seed.
 //

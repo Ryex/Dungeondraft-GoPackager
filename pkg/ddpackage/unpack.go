@@ -98,7 +98,12 @@ func (p *Package) extractFileList(outDir string, progressCallback func(p float64
 	}
 
 	var valid bool
+	// the packed file is shared with the preview and the md5 computation,
+	// which hold pkgFileMu for their reads; the seek+read of the check must
+	// not interleave with them (the calls at load time are not shared yet)
+	p.pkgFileMu.Lock()
 	valid, err = p.isValidPackage(p.pkgFile)
+	p.pkgFileMu.Unlock()
 	if err != nil {
 		return err
 	}
@@ -276,7 +281,16 @@ func checkPackedReadBounds(offset, size, fileSize int64) error {
 // bytes. The lock is taken here, so no caller can forget it; no caller
 // holds it already (it is not reentrant), and no other lock of the package
 // is acquired while it is held.
+//
+// The expected hash is copied under flLock before the read, because
+// computeMd5 publishes it under flLock while this function only holds
+// pkgFileMu: reading info.Md5 after the bytes were read could observe a
+// hash that was published after the read and fail a valid resource.
 func (p *Package) readPackedFileFromPackage(r io.ReadSeeker, info *structures.FileInfo) ([]byte, error) {
+	p.flLock.RLock()
+	expectedMd5 := info.Md5
+	p.flLock.RUnlock()
+
 	p.pkgFileMu.Lock()
 	defer p.pkgFileMu.Unlock()
 
@@ -314,14 +328,14 @@ func (p *Package) readPackedFileFromPackage(r io.ReadSeeker, info *structures.Fi
 	}
 
 	// if the md5 isn't blank verify
-	if info.Md5.IsValid() {
+	if expectedMd5.IsValid() {
 		hash := md5.Sum(fileData)
 		md5Hash := strings.ToLower(hex.EncodeToString(hash[:]))
-		if info.Md5.Md5 != hash {
+		if expectedMd5.Md5 != hash {
 			err = errors.New("md5 hash mismatch")
 			l.WithError(err).
 				WithField("packedDataMd5", md5Hash).
-				WithField("expectedMd5", info.Md5).
+				WithField("expectedMd5", expectedMd5).
 				Error("hash verification failed")
 			return nil, err
 		}
